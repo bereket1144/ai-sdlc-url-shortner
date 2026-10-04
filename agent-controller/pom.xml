@@ -31,6 +31,7 @@
         <spring-ai.version>2.0.1</spring-ai.version>
         <langgraph4j.version>1.8.27</langgraph4j.version>
         <jacoco.version>0.8.14</jacoco.version>
+        <springdoc.version>3.1.1</springdoc.version>
     </properties>
     <dependencies>
         <dependency>
@@ -58,6 +59,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <dependency>
+            <!-- API document only (/v3/api-docs); the -ui starter would add the browsable page (SWAG-3). -->
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
