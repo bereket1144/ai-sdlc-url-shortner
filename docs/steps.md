@@ -22,3 +22,23 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 17. Use Lombok for Run boilerplate while retaining its validating constructor. Result: Boot-managed Lombok generates getters and the protected JPA constructor; explicit annotation processing configured and Lombok excluded from the application archive. Clean verify passes all 20 existing tests; 14/14 measured lines and 4/4 branches covered, with generated Lombok methods filtered by JaCoCo. (direct)
 - [x] 18. Create RunRepository for saving and loading runs. Result: PostgreSQL round-trip test now uses the repository with a cleared persistence context; verify passes all 20 tests, 14/14 measured lines and 4/4 branches covered. (direct)
 - [x] 19. Move RunPersistenceTest into the run test package with a public shared container configuration. Result: clean verify discovers the moved test once; all 20 tests pass, 14/14 measured lines and 4/4 branches covered. (direct)
+- [x] 20. Change AGENTS.md so a step is one user story that carries its own stage lines.
+  Done when: AGENTS.md describes user stories with an ID, acceptance criteria and a dated line per stage (requirement, code, qa, review); a step points to its story and is ticked only when the story is done all the way through; the "written after the code" rule is gone; the review row points to one `reports/review/index.md`.
+  Result: `AGENTS.md` now has a "User stories" section (ID, criteria, one dated line per stage, definition of done), a steps log where a step points to its story, and a review row that points to one `reports/review/index.md`; the "written after the code" rule is removed; no design lines were touched (checked with `git diff`). (Claude Code, direct)
+- [x] 21. Write the requirements file for the run API.
+  Done when: `docs/platform/requirements/run-api.md` exists with stories RUN-1 to RUN-7 (the two for existing behaviour first, then versioning, error format, input limits, run state, and read-back with Location), each with an ID, status, story, numbered acceptance criteria and a log, and nothing else is changed.
+  Result: `docs/platform/requirements/run-api.md` has 7 stories and 34 acceptance criteria; RUN-1 and RUN-2 (existing behaviour) are "in progress" with requirement and code lines, RUN-3 to RUN-7 are "open"; the file has none of the banned words. (Claude Code, direct)
+- [x] 22. RUN-3 Version the API.
+  Done when: story RUN-3 in docs/platform/requirements/run-api.md is done.
+  Result: RUN-3 is done: all four criteria pass, QA and review lines are in the story, `./mvnw clean verify` passes with 40 tests, and the review row has every finding resolved or deferred with a reason. (development-agent, qa-agent, code-review-agent; fixes direct)
+- [x] 23. RUN-4 Return one error format.
+  Done when: story RUN-4 in docs/platform/requirements/run-api.md is done.
+  Result: RUN-4 is done: all six criteria pass, QA and review lines are in the story, `./mvnw clean verify` passes with 79 tests and 100% line and branch coverage, and the review row has every finding resolved or deferred with a reason (R4-4, the `type` scheme, is left for the user). (development-agent, qa-agent, code-review-agent; one test direct)
+- [ ] 24. RUN-5 Bound the size of a requirement.
+  Done when: story RUN-5 in docs/platform/requirements/run-api.md is done.
+- [x] 25. Remove the 256 KB request body limit.
+  Done when: `RequestSizeLimitFilter` and its tests are deleted, AC-RUN-5.3 is removed from the requirements file with the user's approval, the 20,000-character limit stays, and `./mvnw clean verify` passes.
+  Result: filter, its three test classes and AC-RUN-5.3 removed; `./mvnw clean verify` passes with 85 tests, line 40/40, branch 12/12. (Claude Code, direct)
+- [x] 26. Change the agents so QA and code review run together, once per feature, only when the user asks.
+  Done when: `development-agent`, `qa-agent` and `code-review-agent` definitions say they never trigger each other, QA and review report back without writing files other than the review index, and the dev agent fixes what they report.
+  Result: the three agent definitions were rewritten: development-agent writes code and tests and fixes reported findings, qa-agent and code-review-agent run together once per feature on request, report back, and write nothing except the review index row. `AGENTS.md` still describes the old per-story stage lines and agent table; it was not touched. (Claude Code, direct)
