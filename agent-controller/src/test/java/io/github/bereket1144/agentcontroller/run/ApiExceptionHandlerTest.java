@@ -32,19 +32,6 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
-    @DisplayName("a ProblemDetail body gets the stable type for its status")
-    void problemBodyGetsTypeForItsStatus() {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
-
-        ResponseEntity<Object> response = handler.handleExceptionInternal(new RuntimeException("x"),
-                problem, new HttpHeaders(), HttpStatus.CONFLICT, request);
-
-        assertThat(response.getBody()).isInstanceOf(ProblemDetail.class);
-        assertThat(((ProblemDetail) response.getBody()).getType().toString())
-                .isEqualTo(ApiExceptionHandler.TYPE_PREFIX + 409);
-    }
-
-    @Test
     @DisplayName("a ProblemDetail whose type is explicitly about:blank gets the stable type for its status")
     void explicitBlankTypeIsReplaced() {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);

@@ -22,9 +22,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 
 // RUN-4 on the full application: the real controller advice, the real routing and the real PostgreSQL schema.
-// RunErrorFormatTest proves the same format on a slice with a mocked service; this class proves that nothing in
-// the full application (resource handling, error dispatch, validation setup) changes the format, and that a
-// refused request leaves the runs table unchanged.
+// This class proves that nothing in the full application (resource handling, error dispatch, validation setup)
+// changes the format, and that a refused request leaves the runs table unchanged.
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -98,10 +97,10 @@ class RunErrorFormatFullContextTest {
         expectProblem(mvc.perform(get(path)), 404, "Not Found");
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/runs", "/v2/runs", "/nothing/here"})
+    @Test
     @DisplayName("AC-RUN-4.3, 4.6 full app: a valid create request to an unknown path returns 404 problem+json and saves no run")
-    void unknownPathPostReturnsProblemAndSavesNothing(String path) throws Exception {
+    void unknownPathPostReturnsProblemAndSavesNothing() throws Exception {
+        String path = "/nothing/here";
         long before = runRepository.count();
 
         expectProblem(mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY)),

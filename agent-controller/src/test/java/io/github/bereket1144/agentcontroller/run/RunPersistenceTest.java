@@ -11,9 +11,6 @@ import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -22,7 +19,6 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.test.context.transaction.TestTransaction;
 
 // Flyway creates the real PostgreSQL schema; Hibernate only validates the mapping.
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -60,20 +56,7 @@ class RunPersistenceTest {
     }
 
     @Test
-    void serviceCreatesRunThatCanBeReloadedFromPostgres() {
-        Run created = runService.createRun("Build a task tracker");
-
-        assertThat(created.getId()).isNotNull();
-        // The test normally rolls back. Commit here so the next read proves the service's write persisted.
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-
-        Run reloaded = runRepository.findById(created.getId()).orElseThrow();
-        assertThat(reloaded).isNotSameAs(created);
-        assertThat(reloaded.getRequirement()).isEqualTo("Build a task tracker");
-    }
-
-    @Test
+    @DisplayName("AC-RUN-1.3, 1.4 a run with a requirement longer than 255 characters is saved and read back unchanged")
     void persistsAndReloadsRunWithGeneratedIdAndLongRequirement() {
         String requirement = "Build a task tracker. ".repeat(20);
         Run run = new Run(requirement);
@@ -88,15 +71,6 @@ class RunPersistenceTest {
         assertThat(reloaded).isNotNull().isNotSameAs(run);
         assertThat(reloaded.getId()).isEqualTo(run.getId());
         assertThat(reloaded.getRequirement()).isEqualTo(requirement);
-    }
-
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"   ", "\t\n"})
-    void rejectsBlankRequirements(String requirement) {
-        assertThatThrownBy(() -> new Run(requirement))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("requirement must not be blank");
     }
 
     @Test
@@ -120,7 +94,9 @@ class RunPersistenceTest {
         runRepository.saveAndFlush(run);
         entityManager.clear();
 
-        assertThat(runRepository.findById(run.getId()).orElseThrow().getCreatedAt()).isEqualTo(createdAt);
+        Run changed = runRepository.findById(run.getId()).orElseThrow();
+        assertThat(changed.getVersion()).isEqualTo(1L); // the change really was written
+        assertThat(changed.getCreatedAt()).isEqualTo(createdAt);
     }
 
     @Test

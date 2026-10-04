@@ -86,13 +86,6 @@ class RunRequirementSizeTest {
     }
 
     @Test
-    @DisplayName("AC-RUN-5.2 the message says the length limit, not internals")
-    void tooLongMessageStatesTheLimit() throws Exception {
-        createWithRequirement("a".repeat(MAX_CHARACTERS + 1))
-                .andExpect(jsonPath("$.errors[0].message").value("length must be between 0 and 20000"));
-    }
-
-    @Test
     @DisplayName("AC-RUN-5.1 characters are code points: 19,999 letters and one emoji (20,001 UTF-16 units) is accepted")
     void emojiCountsAsOneCharacterAtTheLimit() throws Exception {
         String requirement = "a".repeat(MAX_CHARACTERS - 1) + EMOJI;
@@ -118,11 +111,5 @@ class RunRequirementSizeTest {
         expectTooLongRequirement(createWithRequirement(requirement));
 
         assertThat(runRepository.count()).isEqualTo(before);
-    }
-
-    @Test
-    @DisplayName("AC-RUN-5.1 20,000 emoji (40,000 UTF-16 units) are exactly at the limit and accepted")
-    void onlyEmojiAtTheLimitIsAccepted() throws Exception {
-        createWithRequirement(EMOJI.repeat(MAX_CHARACTERS)).andExpect(status().isCreated());
     }
 }

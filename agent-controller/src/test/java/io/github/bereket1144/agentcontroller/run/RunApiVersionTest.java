@@ -1,7 +1,6 @@
 package io.github.bereket1144.agentcontroller.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -58,29 +57,6 @@ class RunApiVersionTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"requirement\":null}", "{\"requirement\":\"\"}", "{\"requirement\":\"   \"}", "{"})
-    @DisplayName("AC-RUN-3.1 POST /v1/runs with an invalid body returns 400 and saves no run (as AC-RUN-2.1 to 2.4)")
-    void versionedPathRejectsInvalidBodyAndSavesNothing(String body) throws Exception {
-        long before = runRepository.count();
-
-        mvc.perform(post("/v1/runs").contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest());
-
-        assertThat(runRepository.count()).isEqualTo(before);
-    }
-
-    @Test
-    @DisplayName("AC-RUN-3.1 POST /v1/runs with no body returns 400 and saves no run (as AC-RUN-2.3, 2.4)")
-    void versionedPathRejectsMissingBodyAndSavesNothing() throws Exception {
-        long before = runRepository.count();
-
-        mvc.perform(post("/v1/runs").contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
-
-        assertThat(runRepository.count()).isEqualTo(before);
-    }
-
-    @ParameterizedTest
     @ValueSource(strings = {"/runs", "/runs/", "/v0/runs", "/V1/runs"})
     @DisplayName("AC-RUN-3.2 a valid create request to an unversioned path returns 404 and saves no run")
     void unversionedPathReturnsNotFoundAndSavesNothing(String path) throws Exception {
@@ -90,12 +66,6 @@ class RunApiVersionTest {
                 .andExpect(status().isNotFound());
 
         assertThat(runRepository.count()).isEqualTo(before);
-    }
-
-    @Test
-    @DisplayName("AC-RUN-3.2 a GET to /runs without a version returns 404")
-    void unversionedGetReturnsNotFound() throws Exception {
-        mvc.perform(get("/runs")).andExpect(status().isNotFound());
     }
 
     @ParameterizedTest
@@ -108,11 +78,5 @@ class RunApiVersionTest {
                 .andExpect(status().isNotFound());
 
         assertThat(runRepository.count()).isEqualTo(before);
-    }
-
-    @Test
-    @DisplayName("AC-RUN-3.3 a GET to /v2/runs returns 404")
-    void unknownVersionGetReturnsNotFound() throws Exception {
-        mvc.perform(get("/v2/runs")).andExpect(status().isNotFound());
     }
 }

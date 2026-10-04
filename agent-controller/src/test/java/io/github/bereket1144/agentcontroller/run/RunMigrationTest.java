@@ -1,10 +1,12 @@
 package io.github.bereket1144.agentcontroller.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 
@@ -14,12 +16,14 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
+
 class RunMigrationTest {
 
     @Test
-    @DisplayName("AC-RUN-6.6 a run stored before the state columns existed gets status CREATED, both times and version 0")
+    @DisplayName("AC-RUN-6.6, 6.7 a run stored before the state columns existed gets status CREATED, both times and version 0, and the defaults are gone afterwards")
     void runStoredBeforeTheChangeIsFilledInByTheMigration() throws Exception {
-        try (PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:latest"))) {
+        try (PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse(TestcontainersConfiguration.POSTGRES_IMAGE))) {
             postgres.start();
             UUID id = UUID.randomUUID();
 
@@ -39,6 +43,14 @@ class RunMigrationTest {
                 assertThat(row.getTimestamp("created_at")).isNotNull();
                 assertThat(row.getTimestamp("updated_at")).isNotNull();
                 assertThat(row.getLong("version")).isZero();
+            }
+
+            // The migration's defaults were dropped again: a new row must supply its own state.
+            try (Connection connection = connect(postgres); Statement statement = connection.createStatement()) {
+                assertThatThrownBy(() -> statement.executeUpdate(
+                        "insert into runs (id, requirement) values ('" + UUID.randomUUID() + "', 'no state')"))
+                        .isInstanceOf(SQLException.class)
+                        .hasMessageContaining("null value in column");
             }
         }
     }
