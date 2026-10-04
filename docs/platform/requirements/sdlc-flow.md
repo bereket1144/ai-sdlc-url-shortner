@@ -13,13 +13,13 @@ Replace the single-node workflow with a connected graph of the platform's SDLC r
 - **Run kind is stored, not yet chosen by the caller.** Each run stores a kind, `GREENFIELD` or `BROWNFIELD`. Every run stored before this story becomes `GREENFIELD`. `POST /v1/runs` does not change in this story: it takes no kind, so every run created through the API is `GREENFIELD`, and the API document stays as it is. Tests create `BROWNFIELD` runs through the service. **Limitation:** an API caller cannot start a brownfield run yet. Letting the caller choose the kind is a later story and will change `POST /v1/runs` and its API document.
 - **This story supersedes the single-node topology.** The graph in this story is the active workflow. It replaces the one-node graph that AC-EXEC-1.1 in `run-execution.md` describes. EXEC-1 stays as a historical milestone and its criterion is not rewritten; the same fact (the active graph receives the run ID and requirement) is now proved by AC-FLOW-1.1 and AC-FLOW-1.3.
 - **Relation to ADR 0001.** The `planner -> executor -> reporter` graph in `docs/adr/0001-run-the-task-scheduler-inside-one-node.md` showed that the number of tasks can change at run time. It is not the stage topology. The SDLC graph here is. The future task scheduler from that ADR belongs inside the Development node.
-- **State keys.** Inputs: `runId`, `requirement`, `kind`. Each executed node adds one value under its own role key: `requirements`, `impactAnalysis`, `design`, `planning`, `development`, `qa`, `review` (the code review node), `documentation`. The value is the role name followed by `:done` (for example `qa:done`).
+- **State keys.** Inputs: `runId`, `requirement`, `kind`. Each executed node adds one value under its own role key: `requirements`, `impactAnalysis`, `design`, `planning`, `development`, `qa`, `review` (the code review node), `documentation`. The value is the role name followed by `:done` (for example `qa:done`). Two helper values are not role keys: `receipt` (set by the initialize node; it contains the requirement and must never be logged) and `joined` (set by the collect node).
 
 ## User stories and acceptance criteria
 
 ### FLOW-1 Traverse the SDLC nodes with dummy state
 
-Status: coded
+Status: done
 
 As the platform, I want a run to move through the named SDLC nodes while each node adds a visible dummy contribution to shared graph state, so that the complete route and state handoff are proven before the agents do real work.
 
@@ -32,7 +32,7 @@ As the platform, I want a run to move through the named SDLC nodes while each no
 
 ### FLOW-2 Show dummy node progress in logs
 
-Status: open
+Status: done
 
 As an operator, I want to see each dummy node's output in the run logs, so that I can follow the route and confirm which state markers reached the join.
 
