@@ -86,7 +86,7 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 - **No folders or abstractions ahead of need.** Create a package when the code that needs it is written.
 - **Tests with every change.** Write the tests alongside the code, not afterwards. Coverage is measured on every build and the target is 100%; any gap is named with its reason.
 - **Never push.** The human pushes. `.claude/settings.json` denies `git push` for Claude Code, and the same rule applies to every other tool.
-- **Commit each working piece.** Small commits that say what changed and why, start with the area such as `feat(controller):` or `docs:`, and are made only when the user says so.
+- **Commit each working piece.** Small commits that say what changed and why, start with the area such as `feat(controller):` or `docs:`, and are made only when the user says so. End the subject line with the name of the agent that did the work in brackets, such as `feat(controller): serve a browsable Swagger UI page for the run API (SWAG-3) [development-agent]`. Use `[main agent]` when the main session did the work directly.
 - **Never commit `PLAN.md`** or copy text from it into committed files. If it exists locally it is a private long-form plan; read it for the destination, and build only what the current step needs.
 - **No employer, client, or recruiter names** anywhere in the repository.
 - **When a real decision is made,** record it as a short decision record under `docs/adr/`.
