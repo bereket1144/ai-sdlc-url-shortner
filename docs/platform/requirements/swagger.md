@@ -27,7 +27,7 @@ As an API client, I want the controller to serve an OpenAPI document of its run 
 
 ### SWAG-2 Document the responses and errors
 
-Status: open
+Status: coded
 
 As an API client, I want each endpoint's responses and errors documented, so that I know what to expect, including on failure.
 

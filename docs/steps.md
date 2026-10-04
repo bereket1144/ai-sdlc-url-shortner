@@ -75,3 +75,6 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 37. SWAG-1 Publish the API document.
   Done when: story SWAG-1 in docs/platform/requirements/swagger.md is coded: every acceptance criterion has a passing test.
   Result: springdoc-openapi 3.1.1 (`springdoc-openapi-starter-webmvc-api`, API document only, no UI) serves `/v3/api-docs` with only the two run endpoints and their request and success schemas; AC-SWAG-1.1 to 1.4 each have a test in `ApiDocumentTest`; `./mvnw clean verify` passes with 67 tests, line 56/56, branch 12/12. (development-agent)
+- [x] 38. SWAG-2 Document the responses and errors.
+  Done when: story SWAG-2 in docs/platform/requirements/swagger.md is coded: every acceptance criterion has a passing test.
+  Result: `@Operation` and `@ApiResponse` annotations on `RunController` document 201 (with the `Location` header), 400 and 415 for create and 200, 400 and 404 for read; every error uses `application/problem+json` with the `ProblemDetail` schema (type, title, status, detail); AC-SWAG-2.1 to 2.3 each have a test in `ApiDocumentTest`; `./mvnw clean verify` passes with 70 tests, line 56/56, branch 12/12. (development-agent)
