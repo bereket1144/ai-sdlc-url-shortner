@@ -2,13 +2,13 @@
 
 ## Request
 
-A saved run needs to start a workflow and report when that workflow finishes successfully. The stories establish the graph path, connect a pending run to it, and record successful completion.
+A saved run needs to start a workflow and report when that workflow finishes successfully. The stories establish the graph path, connect a pending run to it, record successful completion, and start pending work automatically.
 
 ## Ambiguities and assumptions
 
 - A claimed run has status `RUNNING` and already has an ID and a saved requirement.
 - The first node is deterministic so its inputs and execution can be checked without a model call.
-- A dispatch attempt is invoked explicitly. Scheduled polling is a separate story.
+- EXEC-2 invokes a dispatch attempt explicitly; EXEC-4 starts dispatch attempts through scheduled polling.
 - `SUCCEEDED` means the workflow reached its final successful outcome. Pausing for approval does not count as success.
 
 ## User stories and acceptance criteria
@@ -40,7 +40,16 @@ As the platform, I want a run to record successful workflow completion, so that 
 - AC-EXEC-3.1 Given a `RUNNING` run whose workflow finishes successfully, a later read of that run reports status `SUCCEEDED`.
 - AC-EXEC-3.2 Given a workflow that fails before successful completion, the run is not reported as `SUCCEEDED`.
 
+### EXEC-4 Start pending runs automatically
+
+Status: coded
+
+As a user, I want submitted runs to start automatically, so that I do not need to trigger dispatch manually.
+
+- AC-EXEC-4.1 Given a `CREATED` run already saved when the application starts, scheduled polling starts its workflow without a manual dispatch call.
+- AC-EXEC-4.2 Given a new `CREATED` run while the application is running, scheduled polling starts its workflow without a manual dispatch call.
+- AC-EXEC-4.3 Repeated polling does not start a run again after it has left `CREATED`.
+
 ## Out of scope
 
-- Scheduled polling for pending runs.
 - Model calls, additional workflow stages, approval gates, and failure-state transitions.

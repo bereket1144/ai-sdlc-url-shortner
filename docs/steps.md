@@ -118,3 +118,11 @@ The record of the work done in this repository, one entry per step, in the order
   Done when: story EXEC-3 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
   Criterion update: AC-SWAG-1.4 now lists `SUCCEEDED` because `RunResponse` exposes the new run status. (main agent, direct)
   Result: `RunDispatcher` calls `RunService.succeedRun` after the workflow returns, so the run is stored as `SUCCEEDED`, and a workflow that throws leaves it `RUNNING`; AC-EXEC-3.1 and 3.2 each have a passing test (`RunTest`, `RunSuccessPersistenceTest`, `RunDispatcherCompletionTest`); `./mvnw clean verify` passes with 86 tests, line 115/116, branch 20/20. (main agent, direct)
+- [x] 52. Define the scheduled run polling story.
+  Done when: docs/platform/requirements/run-execution.md contains an open EXEC-4 story with testable criteria for starting CREATED runs without a manual dispatch call.
+  Result: EXEC-4 is open with criteria for runs saved before startup, runs submitted while running, and no repeated execution after a run leaves CREATED. (main agent, direct)
+- [x] 53. EXEC-4 Start pending runs automatically.
+  Done when: story EXEC-4 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
+  Result: `RunScheduler` polls on a fixed delay and now drains every waiting run in one poll; AC-EXEC-4.1 (run saved before startup, `RunSchedulerStartupTest`), 4.2 and 4.3 (`RunSchedulerTest`) each have a passing test, plus `RunSchedulerDrainTest` for R-2; `./mvnw clean verify` passes with 89 tests, line 120/121, branch 22/22. (Claude Code, development-agent)
+- [ ] 54. QA and review of run execution.
+  Done when: QA and code review of docs/platform/requirements/run-execution.md are done and reported, their findings are fixed or answered, and every story in the file is marked done.
