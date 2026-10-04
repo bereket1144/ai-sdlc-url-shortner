@@ -1,6 +1,7 @@
 package io.github.bereket1144.agentcontroller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
@@ -28,9 +29,9 @@ import org.bsc.langgraph4j.StateGraph;
 import org.junit.jupiter.api.Test;
 
 /**
- * Runs the real LangGraph4j engine with two fake tasks (no model calls) and checks the two
- * properties the controller will rely on: parallel branches overlap, and the stage after them
- * waits until both have finished.
+ * Runs the real LangGraph4j engine with two fake tasks (no model calls) and checks the
+ * properties the controller will rely on: parallel branches overlap, the stage after them waits
+ * until both have finished, and a branch that crashes fails the run instead of counting as a pass.
  *
  * <p>LangGraph4j only runs fan-out branches on separate threads when the run supplies an executor
  * for the node that fans out ({@code addParallelNodeExecutor}). Without one the branches run one
@@ -89,18 +90,60 @@ class ParallelBranchesJoinTest {
         }
     }
 
+    @Test
+    void aTaskThatCrashesFailsTheRunAndTheJoinNeverRuns() throws Exception {
+        CompiledGraph<AgentState> graph = buildGraph(
+                "passing-task", task("passing-task", null, fastTaskFinished),
+                "failing-task", failingTask("failing-task", "failing-task crashed"));
+        ExecutorService branchThreads = Executors.newFixedThreadPool(2);
+        try {
+            RunnableConfig config = RunnableConfig.builder()
+                    .addParallelNodeExecutor("plan", branchThreads)
+                    .build();
+
+            // The run fails, and says why, instead of returning a state as if every branch had passed.
+            assertThatThrownBy(() -> graph.invoke(Map.of(), config))
+                    .hasRootCauseInstanceOf(IllegalStateException.class)
+                    .hasRootCauseMessage("failing-task crashed");
+
+            // It really was one branch passing next to one crashing, not a branch that never ran.
+            assertThat(fastTaskFinished.await(PATIENCE.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("the other task passed")
+                    .isTrue();
+            assertThat(events).contains("passing-task:finish", "failing-task:crash");
+
+            // The next stage never ran, not even after the passing branch finished.
+            // The grace wait can only let a broken join slip through, never fail a correct one.
+            assertThat(joinStarted.await(GRACE.toMillis(), TimeUnit.MILLISECONDS))
+                    .as("the join started although a branch crashed")
+                    .isFalse();
+            assertThat(events).doesNotContain("join:start");
+        } finally {
+            branchThreads.shutdownNow();
+        }
+    }
+
     private CompiledGraph<AgentState> buildGraph() throws GraphStateException {
+        return buildGraph(
+                "fast-task", task("fast-task", null, fastTaskFinished),
+                "slow-task", task("slow-task", slowTaskMayFinish, null));
+    }
+
+    /** {@code plan} fans out to the two named tasks, and {@code join} runs after both. */
+    private CompiledGraph<AgentState> buildGraph(
+            String firstName, NodeAction<AgentState> first, String secondName, NodeAction<AgentState> second)
+            throws GraphStateException {
         Map<String, Channel<?>> channels = Map.of("results", Channels.appender(ArrayList::new));
         return new StateGraph<>(channels, AgentState::new)
                 .addNode("plan", node_async(state -> Map.of()))
-                .addNode("fast-task", node_async(task("fast-task", null, fastTaskFinished)))
-                .addNode("slow-task", node_async(task("slow-task", slowTaskMayFinish, null)))
+                .addNode(firstName, node_async(first))
+                .addNode(secondName, node_async(second))
                 .addNode("join", node_async(this::join))
                 .addEdge(START, "plan")
-                .addEdge("plan", "fast-task")
-                .addEdge("plan", "slow-task")
-                .addEdge("fast-task", "join")
-                .addEdge("slow-task", "join")
+                .addEdge("plan", firstName)
+                .addEdge("plan", secondName)
+                .addEdge(firstName, "join")
+                .addEdge(secondName, "join")
                 .addEdge("join", END)
                 .compile();
     }
@@ -125,6 +168,19 @@ class ParallelBranchesJoinTest {
                 onFinish.countDown();
             }
             return Map.of("results", name);
+        };
+    }
+
+    /** A fake task that is running alongside the other one when it crashes. */
+    private NodeAction<AgentState> failingTask(String name, String message) {
+        return state -> {
+            events.add(name + ":start");
+            bothStarted.countDown();
+            if (!bothStarted.await(PATIENCE.toMillis(), TimeUnit.MILLISECONDS)) {
+                throw new IllegalStateException(name + " never saw the other task start: not parallel");
+            }
+            events.add(name + ":crash");
+            throw new IllegalStateException(message);
         };
     }
 
