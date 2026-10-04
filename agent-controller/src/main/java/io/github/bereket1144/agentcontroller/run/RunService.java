@@ -1,5 +1,6 @@
 package io.github.bereket1144.agentcontroller.run;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -35,5 +36,18 @@ public class RunService {
             log.warn("event=run_not_found status=404 runId={}", id);
             return new ResponseStatusException(HttpStatus.NOT_FOUND, "Run not found.");
         });
+    }
+
+    @Transactional
+    public Optional<UUID> claimNextRun() {
+        Optional<Run> run = runRepository.findFirstByStatusOrderByCreatedAtAscIdAsc(RunStatus.CREATED);
+        if (run.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Run claimed = run.get();
+        claimed.start();
+        log.info("event=run_claim_selected runId={}", claimed.getId());
+        return Optional.of(claimed.getId());
     }
 }

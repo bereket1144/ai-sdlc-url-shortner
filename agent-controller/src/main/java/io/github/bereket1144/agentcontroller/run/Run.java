@@ -61,4 +61,12 @@ public class Run {
         this.status = RunStatus.CREATED;
     }
 
+    public void start() {
+        if (status != RunStatus.CREATED) {
+            throw new IllegalStateException(
+                    "Only a CREATED run can be started");
+        }
+        this.status = RunStatus.RUNNING;
+    }
+
 }

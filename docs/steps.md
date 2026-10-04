@@ -72,3 +72,6 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 36. QA and review of the run API.
   Done when: QA and code review of docs/platform/requirements/run-api.md are done and reported, their findings are fixed or answered, and every story in the file is marked done.
   Result: QA and review ran together on the whole feature (no blocking finding; 31 of 32 criteria covered, the other is shown by an unchanged V1). The dev agent applied the chosen fixes: duplicate tests deleted (98 to 63 tests), one full-stack read-back test added, a fixed message for a bad id, a pinned PostgreSQL image and `open-in-view=false`. `./mvnw clean verify` passes with 63 tests, line 56/56, branch 12/12. The memory limit became BUG-1 (open, for later); declined or deferred findings are answered in `reports/review/index.md`. RUN-1 to RUN-7 are marked done. (qa-agent, code-review-agent, development-agent)
+- [x] 37. Claim the next pending run.
+  Done when: a CREATED run can be claimed in a short transaction, its RUNNING status persists, an empty queue returns no ID, and a persistence test passes.
+  Result: added the lookup index, guarded status transition, locked JPA query, claim service method and persistence test. The user reports the tests passing. (direct)

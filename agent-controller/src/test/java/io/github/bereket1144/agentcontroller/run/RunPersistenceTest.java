@@ -18,6 +18,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 // Flyway creates the real PostgreSQL schema; Hibernate only validates the mapping.
@@ -172,5 +174,19 @@ class RunPersistenceTest {
         assertThatThrownBy(() -> runService.getRun(UUID.randomUUID()))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode().value()).isEqualTo(404));
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("A claimed run is committed as RUNNING and cannot be claimed again")
+    void claimNextRunPersistsStatus() {
+        Run created = runService.createRun("Build a task tracker");
+        try {
+            assertThat(runService.claimNextRun()).contains(created.getId());
+            assertThat(runService.getRun(created.getId()).getStatus()).isEqualTo(RunStatus.RUNNING);
+            assertThat(runService.claimNextRun()).isEmpty();
+        } finally {
+            runRepository.deleteById(created.getId());
+        }
     }
 }
