@@ -5,6 +5,20 @@ Instructions for AI coding assistants working in this repository. This file is t
 Note on naming: "agents" in this file means the coding assistants helping to build the platform. The SDLC agents that the platform itself runs are described under "What this project is".
 
 
+# One step at a time (this rule comes before everything else)
+
+- **Do exactly one thing per turn:** the next step, and nothing after it.
+- **Then stop.** Say what was done in a few lines, name the single next step, and wait for the user.
+- **Never give the user more than one thing** to do, decide, review, or approve. If several things need a decision, ask about the first one only. Ask about the next after the answer.
+- **Never chain steps.** Do not continue to the next step because it seems obvious, small, or related.
+- **If a step turns out to hold more than one thing,** do the first, stop, and say what remains.
+- **This holds for direct work and for subagents alike.** One subagent per turn, given one step. When it returns, stop and report. If you are a subagent, do the one step you were given and return; do not start another.
+
+A step is one logical piece of work that fits in one short sentence without "and": build one class, write one test, fix one failure, change one setting, write one document.
+
+In the steps log (see "Steps log" and "User stories"), a step is one user story, or one QA and review of a feature, and it takes many such pieces of work. Each turn does one piece.
+
+---
 
 # Timeless constraints (not a checklist)
 
@@ -71,12 +85,11 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 - **Small steps.** One change per step, explained WHY before WHAT.
 - **No folders or abstractions ahead of need.** Create a package when the code that needs it is written.
 - **Tests with every change.** Write the tests alongside the code, not afterwards. Coverage is measured on every build and the target is 100%; any gap is named with its reason.
-- **Never push.** The human pushes.
-- **One step, one commit.** Each commit says what changed and why, starts with its area such as `feat(controller):` or `docs:`, and is made only after the user approves the step.
+- **Never push.** The human pushes. `.claude/settings.json` denies `git push` for Claude Code, and the same rule applies to every other tool.
+- **Commit each working piece.** Small commits that say what changed and why, start with the area such as `feat(controller):` or `docs:`, and are made only when the user says so.
 - **Never commit `PLAN.md`** or copy text from it into committed files. If it exists locally it is a private long-form plan; read it for the destination, and build only what the current step needs.
 - **No employer, client, or recruiter names** anywhere in the repository.
 - **When a real decision is made,** record it as a short decision record under `docs/adr/`.
-- **After each working session,** add a few lines to `docs/ai-usage-log.md`: which tool and agents, what was asked, what was accepted, what was rejected and why.
 
 # Role contracts
 
@@ -99,41 +112,88 @@ The same five roles exist at two levels: as the coding agents in `.claude/agents
 
 | Agent | Use it to produce |
 | --- | --- |
-| `requirements-agent` | `docs/platform/requirements/<name>.md`: user stories and acceptance criteria |
+| `requirements-agent` | `docs/platform/requirements/<area>.md`: user stories and acceptance criteria, one file per area |
 | `design-agent` | `docs/platform/design/<name>.md` with diagrams, and `docs/adr/` for real decisions |
-| `development-agent` | Code with error handling, logging, and auditing, and commits once the user approves |
-| `qa-agent` | Tests, `reports/coverage/unit-coverage.md`, `reports/coverage/functional-coverage.md`, `reports/coverage/jacoco.csv` |
-| `code-review-agent` | `reports/review/<name>.md` and a row in `reports/review/index.md` |
+| `development-agent` | Code and its tests, fixes for the QA and review findings the user chooses, and commits once the user approves |
+| `qa-agent` | A report in chat: JaCoCo totals, criteria without a proving test, and proposed bug stories. It writes no files |
+| `code-review-agent` | A report in chat, and one row per feature in `reports/review/index.md` (each finding and how it was resolved) |
 
 For every step that changes code, build files, or configuration:
 
 1. Write the change together with its tests.
 2. Run `./mvnw verify` from `agent-controller/`. The build decides whether the step passes; do not call the `qa-agent` for this.
 3. If it fails, fix it. If it passes, show the user what changed and the coverage numbers, then stop.
-4. When the user approves, commit that step and tick it in `docs/steps.md`. One step, one commit. Never commit before approval.
+4. When the user approves, commit it and tick it in `docs/steps.md`. Never commit before approval.
 
-The `qa-agent` and the `code-review-agent` are run when the user asks: usually when a feature is finished, and before submission.
-
-- A document written after the code describes the code as it is. Do not present it as having been written first.
+- **QA and review run together, as one call, once per feature, and only when the user asks.** They report back; the user chooses which findings the development agent fixes. No agent starts another.
+- **Unit coverage is the JaCoCo report** that `./mvnw verify` writes; it is not copied into a hand-written file. **Functional coverage** is a table of acceptance criteria against the tests that prove them, generated from the requirements file and the test results once, at final packaging.
 - Before submission, every file in the repository must be covered by a review, and the coverage reports must be current.
+
+# User stories
+
+A feature has one requirements file, such as `docs/platform/requirements/run-api.md`. A new feature gets a new file; a new story for an existing feature goes in that feature's file. The requirements agent drafts the stories, and the user and the assistant talk them through before any code. A story is a small tracked item, like a ticket.
+
+Each story has:
+
+- **An ID and a title,** such as `RUN-3 Bound the size of a requirement`.
+- **A status:** open, coded, or done.
+- **The story:** "As a ..., I want ..., so that ...".
+- **Numbered acceptance criteria,** each one checkable by a test.
+
+Statuses:
+
+- **Open:** not started.
+- **Coded:** the code is written and every acceptance criterion has a passing test.
+- **Done:** QA has verified and code review has reviewed the entire feature (the whole requirements file), the review findings are fixed or answered in `reports/review/index.md`, and then every story in the file is marked done.
+
+Rules:
+
+- **The criteria are fixed once the story's step starts.** They change only with the user's approval, and the change is noted in the steps log.
+- **Who codes it** is decided with the user for each story: the user, or the assistant. Tests are written with the code.
+- **Bug stories.** QA may propose a bug story when shipped behaviour is wrong. It is added to the feature's file as `BUG-<n>`, in the same format as any story, only after the user agrees. A missing test is not a bug; the development agent adds it under the story it belongs to.
 
 # Steps log
 
-`docs/steps.md` is the record of the work done in this repository. Keep it up to date on every step.
+`docs/steps.md` is the record of the work done in this repository, and the log of the AI-assisted work; there is no separate usage log. Keep it up to date on every step.
 
-- **What counts as a step:** real work, such as building something, writing or running a test, fixing a failure, changing configuration, writing a document, or running an agent.
+A step is one user story, or one QA and review of a feature. The steps log points to the story or the feature; it does not repeat what the requirements file already says.
+
+- **What counts as a step:** a user story being worked, or real work that has no story, such as changing configuration or this file.
 - **What does not count:** questions, clarifications, explanations, and discussion. Never log these.
-- **Before starting a step,** add it as the next numbered line, unticked.
-- **When it is finished,** tick it and add its result in a few words, and who did it: `direct` or the agent's name.
+- **Before starting a step,** add it as the next numbered line, unticked, with a `Done when:` line under it. For a story, the `Done when:` line names the story ID and its requirements file, and says it is coded. For a QA and review step, it names the feature file and says every story in it is marked done. For other work, it says in one or two sentences what must be true and checkable. Write it before any code. Do not change it afterwards to fit what was built; if it turns out to be wrong, say so and ask the user.
+- **When it is finished,** tick it and add a `Result:` line under it: one line measured against the `Done when:` line, and who did it (the tool, and `direct` or the agent's name). For a story, the `Result:` says what was coded and tested. For a QA and review step, it says what was found and fixed, and that the stories are marked done.
+- **Tick a story's step when the story is coded.** Tick a QA and review step when the feature's stories are marked done (see "User stories").
 - **Log only the step you are doing.** Never write future steps.
-- **Never delete or rewrite earlier entries.**
+- **Never delete or rewrite earlier entries.** Entries written before this format keep their old shape.
 
 Format:
 
 ```
-- [x] 1. Add the JaCoCo plugin to measure coverage. Result: verify passes, report generated. (direct)
-- [ ] 2. Pin the PostgreSQL test image to a version.
+- [x] 21. RUN-6 Record the state of a run.
+  Done when: story RUN-6 in docs/platform/requirements/run-api.md is coded: every criterion has a passing test.
+  Result: status, created and updated times and version are stored and read back; `./mvnw verify` passes. (Claude Code, direct)
+- [ ] 22. QA and review of the run API.
+  Done when: QA and code review of docs/platform/requirements/run-api.md are done, their findings are fixed or answered, and every story in the file is marked done.
 ```
+
+# Design notes
+
+`docs/design-notes.md` is the place for learnings and for things to come back to. It is rough on purpose, it is local, and it is not committed. Read it at the start of a session if it exists.
+
+Add a short entry when one of these comes up during a step:
+
+- **A learning:** something a test or a failure taught us about a library, a tool, or our own code.
+- **Something to revisit:** a choice that works for now but should be looked at again, with the reason.
+- **An open question:** a decision that has not been made yet.
+- **A shortcut taken:** what was skipped or simplified, and what the proper version would be.
+- **Something the AI got wrong,** and the rule, test, or hook that was changed because of it.
+
+How to use it:
+
+- Write the entry in one or two sentences, in the section it fits, as part of the step where it came up. Adding a note is not a step of its own.
+- Do not put steps there (they go in `docs/steps.md`) or decisions already made (they go in `docs/adr/`).
+- Do not delete an entry when it is dealt with. Mark it resolved and say how.
+- Do not act on an entry just because you read it. It is a reminder for the user, not a task.
 
 # Commands
 

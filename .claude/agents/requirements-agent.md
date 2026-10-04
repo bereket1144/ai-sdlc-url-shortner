@@ -25,6 +25,7 @@ Save the result to `docs/platform/requirements/<short-name>.md` with these secti
 
 Rules:
 
+- Describe behaviour a user or a test can observe. Never prescribe a mechanism: no clocks, config classes, libraries, annotations, or patterns. If a criterion seems to need a mechanism to be testable, reword the criterion (for example, "the time is between just before and just after the save") instead of naming the mechanism.
 - Keep IDs stable. Never renumber an existing story or criterion; add new ones at the end.
 - Keep it to the smallest set of stories that covers the request. Every criterion costs a test, so write only the ones the step needs. For a step that adds no new behaviour, write one story with one criterion per "done when" condition and nothing more.
 - Keep the assumptions section short: list only assumptions that would change what gets built.

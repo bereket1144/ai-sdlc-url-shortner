@@ -29,4 +29,5 @@ Rules:
 
 - Design only what the criteria need. No extension points for imagined future needs.
 - Check a library's documentation before relying on one of its features; say so when you could not confirm it.
+- For transactional service methods, identify checked exceptions that can escape after a write. Spring rolls back on unchecked exceptions and errors by default; specify `rollbackFor` for a particular checked exception only when it must also roll back. A rollback rule does not catch exceptions.
 - Reply with the file paths and the one decision the user most needs to confirm.
