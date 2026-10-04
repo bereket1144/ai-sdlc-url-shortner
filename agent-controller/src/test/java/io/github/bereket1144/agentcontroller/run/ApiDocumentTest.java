@@ -65,7 +65,7 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.4 the success bodies list their fields, and status is limited to CREATED")
+    @DisplayName("AC-SWAG-1.4 the success bodies list their fields, and status is limited to CREATED and RUNNING")
     void successBodiesAreDescribed() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/v1/runs'].post.responses['201'].content['application/json'].schema.$ref")
@@ -77,7 +77,7 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
                         "id", "requirement", "status", "createdAt", "updatedAt", "version")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
-                        containsInAnyOrder("CREATED")));
+                        containsInAnyOrder("CREATED", "RUNNING")));
     }
 
     @Test

@@ -90,3 +90,6 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 42. Claim the next pending run.
   Done when: a CREATED run can be claimed in a short transaction, its RUNNING status persists, an empty queue returns no ID, and a persistence test passes.
   Result: added the lookup index, guarded status transition, locked JPA query, claim service method and persistence test. The user reports the tests passing. (direct)
+- [x] 45. Fix the failing AC-SWAG-1.4 test.
+  Done when: AC-SWAG-1.4 and its test allow the status values `CREATED` and `RUNNING` (criterion changed with the user's approval, because step 42 added `RUNNING`), and `./mvnw clean verify` passes.
+  Result: AC-SWAG-1.4 and `ApiDocumentTest` now allow `CREATED` and `RUNNING`; two unit tests in `RunTest` cover `Run.start()` (CREATED becomes RUNNING, a second start throws `IllegalStateException`), which closed the branch gap that failed the 95% check; `./mvnw clean verify` passes with 77 tests, line 84/85, branch 16/16. (direct)
