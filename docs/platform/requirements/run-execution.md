@@ -16,7 +16,7 @@ A saved run needs to start a workflow and report whether it finishes successfull
 
 ### EXEC-1 Run one workflow node
 
-Status: coded
+Status: done
 
 As the platform, I want a claimed run to execute one workflow node, so that a saved run can begin graph execution.
 
@@ -24,7 +24,7 @@ As the platform, I want a claimed run to execute one workflow node, so that a sa
 
 ### EXEC-2 Dispatch one pending run
 
-Status: coded
+Status: done
 
 As the platform, I want one dispatch attempt to start a pending run's workflow, so that a submitted requirement begins execution.
 
@@ -34,7 +34,7 @@ As the platform, I want one dispatch attempt to start a pending run's workflow, 
 
 ### EXEC-3 Record successful workflow completion
 
-Status: coded
+Status: done
 
 As the platform, I want a run to record successful workflow completion, so that clients can distinguish finished work from work still running.
 
@@ -43,7 +43,7 @@ As the platform, I want a run to record successful workflow completion, so that 
 
 ### EXEC-4 Start pending runs automatically
 
-Status: coded
+Status: done
 
 As a user, I want submitted runs to start automatically, so that I do not need to trigger dispatch manually.
 
@@ -53,7 +53,7 @@ As a user, I want submitted runs to start automatically, so that I do not need t
 
 ### EXEC-5 Record a workflow failure
 
-Status: coded
+Status: done
 
 As a user, I want a workflow that throws to be reported as failed, so that I can tell it stopped instead of waiting on a run that appears to be active.
 

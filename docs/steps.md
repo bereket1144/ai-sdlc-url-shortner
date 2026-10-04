@@ -124,8 +124,9 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 53. EXEC-4 Start pending runs automatically.
   Done when: story EXEC-4 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
   Result: `RunScheduler` polls on a fixed delay and now drains every waiting run in one poll; AC-EXEC-4.1 (run saved before startup, `RunSchedulerStartupTest`), 4.2 and 4.3 (`RunSchedulerTest`) each have a passing test, plus `RunSchedulerDrainTest` for R-2; `./mvnw clean verify` passes with 89 tests, line 120/121, branch 22/22. (Claude Code, development-agent)
-- [ ] 54. QA and review of run execution.
+- [x] 54. QA and review of run execution.
   Done when: QA and code review of docs/platform/requirements/run-execution.md are done and reported, their findings are fixed or answered, and every story in the file is marked done.
+  Result: two QA and review passes found no blocking issue; first pass: 2 should-fix and 7 notes, second pass: 3 should-fix and 3 notes. All are fixed or answered in `reports/review/index.md` (R-3 recovery of a crashed run and R-8 `SKIP LOCKED` are deferred by decision, and the unreachable "no state" lambda is named as a coverage gap). `./mvnw clean verify` passes with 104 tests, line 145/146, branch 24/24. EXEC-1 to EXEC-5 are marked done. (qa-agent, code-review-agent, development-agent)
 - [x] 55. Define the workflow failure story.
   Done when: docs/platform/requirements/run-execution.md contains an open EXEC-5 story with testable criteria for reporting a workflow exception as FAILED, without promising resume.
   Result: EXEC-5 is open with criteria for a persisted FAILED status, propagation of the original exception, and a RUNNING-only failure transition; retry and resume remain out of scope. (main agent, direct)

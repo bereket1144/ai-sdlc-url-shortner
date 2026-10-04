@@ -34,7 +34,7 @@ public class RunDispatcher {
         log.info("event=run_dispatch_started runId={}", runId);
         try {
             workflowRunner.run(runId, run.getRequirement());
-        } catch (RuntimeException workflowFailure) {
+        } catch (RuntimeException | Error workflowFailure) {
             try {
                 runService.failRun(runId);
             } catch (RuntimeException recordingFailure) {
@@ -46,7 +46,14 @@ public class RunDispatcher {
                     runId, workflowFailure.getClass().getName());
             throw workflowFailure;
         }
-        runService.succeedRun(runId);
+        try {
+            runService.succeedRun(runId);
+        } catch (RuntimeException recordingFailure) {
+            // The workflow finished, so the run is not marked FAILED; this line says which run is stuck RUNNING.
+            log.error("event=run_success_recording_failed runId={} errorType={}",
+                    runId, recordingFailure.getClass().getName());
+            throw recordingFailure;
+        }
         log.info("event=run_dispatch_succeeded runId={}", runId);
         return true;
     }

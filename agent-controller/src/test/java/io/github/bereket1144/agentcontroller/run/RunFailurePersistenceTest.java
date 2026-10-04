@@ -67,4 +67,30 @@ class RunFailurePersistenceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Run not found while recording failure");
     }
+
+    @Test
+    @DisplayName("AC-EXEC-5.3 recording failure for a stored CREATED run is rejected and the row is unchanged")
+    void rejectsFailingCreatedRun() {
+        createdId = runService.createRun("Build a task tracker").getId();
+
+        assertThatThrownBy(() -> runService.failRun(createdId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only a RUNNING run can fail");
+
+        assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.CREATED);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-5.3 recording failure for a stored SUCCEEDED run is rejected and the row is unchanged")
+    void rejectsFailingSucceededRun() {
+        createdId = runService.createRun("Build a task tracker").getId();
+        runService.claimNextRun().orElseThrow();
+        runService.succeedRun(createdId);
+
+        assertThatThrownBy(() -> runService.failRun(createdId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only a RUNNING run can fail");
+
+        assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.SUCCEEDED);
+    }
 }
