@@ -43,4 +43,33 @@ class RunTest {
                 .hasMessage("Only a CREATED run can be started");
         assertThat(run.getStatus()).isEqualTo(RunStatus.RUNNING);
     }
+
+    @Test
+    @DisplayName("AC-EXEC-3.1 a RUNNING run can become SUCCEEDED")
+    void succeedMovesRunningToSucceeded() {
+        Run run = new Run("Build a task tracker");
+        run.start();
+
+        run.succeed();
+
+        assertThat(run.getStatus()).isEqualTo(RunStatus.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-3.1 only a RUNNING run can become SUCCEEDED")
+    void succeedRejectsOtherStatuses() {
+        Run created = new Run("Build a task tracker");
+        assertThatThrownBy(created::succeed)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only a RUNNING run can succeed");
+        assertThat(created.getStatus()).isEqualTo(RunStatus.CREATED);
+
+        Run succeeded = new Run("Build a task tracker");
+        succeeded.start();
+        succeeded.succeed();
+        assertThatThrownBy(succeeded::succeed)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only a RUNNING run can succeed");
+        assertThat(succeeded.getStatus()).isEqualTo(RunStatus.SUCCEEDED);
+    }
 }

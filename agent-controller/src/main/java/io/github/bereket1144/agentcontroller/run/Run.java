@@ -69,4 +69,12 @@ public class Run {
         this.status = RunStatus.RUNNING;
     }
 
+    public void succeed() {
+        if (status != RunStatus.RUNNING) {
+            throw new IllegalStateException(
+                    "Only a RUNNING run can succeed");
+        }
+        this.status = RunStatus.SUCCEEDED;
+    }
+
 }

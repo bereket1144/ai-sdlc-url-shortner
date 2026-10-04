@@ -111,3 +111,9 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 49. Avoid rereading a claimed run.
   Done when: `claimNextRun` returns the loaded run, the dispatcher uses it without another lookup, and `./mvnw verify` passes.
   Result: the dispatcher uses the claimed `Run` directly; `./mvnw verify` passes with 80 tests, 103/104 lines and 18/18 branches covered. (main agent, direct)
+- [x] 50. Define the successful run completion story.
+  Done when: docs/platform/requirements/run-execution.md contains an open EXEC-3 story with testable criteria for recording success without reporting a failed run as successful.
+  Result: added open EXEC-3 with criteria for persisted `SUCCEEDED` status and no false success after workflow failure. (main agent, direct)
+- [ ] 51. EXEC-3 Record successful workflow completion.
+  Done when: story EXEC-3 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
+  Criterion update: AC-SWAG-1.4 now lists `SUCCEEDED` because `RunResponse` exposes the new run status. (main agent, direct)
