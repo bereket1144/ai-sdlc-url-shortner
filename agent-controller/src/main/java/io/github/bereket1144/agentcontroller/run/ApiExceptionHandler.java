@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -49,6 +50,21 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setProperty("errors", errors);
         log.warn("event=request_rejected status=400 reason=validation fields={}",
                 errors.stream().map(FieldProblem::field).toList());
+        return handleExceptionInternal(ex, problem, headers, status, request);
+    }
+
+    /**
+     * A path or query value of the wrong type (for example an id that is not a UUID). The framework's own detail
+     * repeats the caller's value; this one names only the parameter, which the server defines, so nothing the
+     * caller sent is echoed back.
+     */
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(TypeMismatchException ex, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        String parameter = ex.getPropertyName();
+        ProblemDetail problem = createProblemDetail(ex, status, "Invalid value for '" + parameter + "'.", null, null,
+                request);
+        log.warn("event=request_rejected status=400 reason=type_mismatch parameter={}", parameter);
         return handleExceptionInternal(ex, problem, headers, status, request);
     }
 

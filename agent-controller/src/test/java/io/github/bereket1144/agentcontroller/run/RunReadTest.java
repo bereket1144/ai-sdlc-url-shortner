@@ -1,5 +1,7 @@
 package io.github.bereket1144.agentcontroller.run;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -88,15 +90,18 @@ class RunReadTest {
     }
 
     @Test
-    @DisplayName("AC-RUN-7.5 reading an id that is not a UUID returns 400 problem+json and does not call the service")
+    @DisplayName("AC-RUN-7.5 reading an id that is not a UUID returns 400 problem+json, does not call the service and does not echo the value")
     void nonUuidIdReturnsProblem400() throws Exception {
-        mvc.perform(get("/v1/runs/not-a-uuid"))
+        String sent = "x\"y'z-" + "a".repeat(200);
+
+        mvc.perform(get("/v1/runs/{id}", sent))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
                 .andExpect(jsonPath("$.type").value(ApiExceptionHandler.TYPE_PREFIX + 400))
                 .andExpect(jsonPath("$.title").value("Bad Request"))
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.detail").isString());
+                .andExpect(jsonPath("$.detail").value("Invalid value for 'id'."))
+                .andExpect(content().string(not(containsString(sent))));
 
         verifyNoInteractions(runService);
     }
