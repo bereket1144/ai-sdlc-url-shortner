@@ -17,7 +17,7 @@ The controller needs an HTTP API through which a requester starts a run from a w
 
 ### RUN-1 Create a run
 
-Status: coded
+Status: done
 
 As a requester, I want to submit a written requirement and receive a run ID, so that the platform can start work on it.
 
@@ -28,7 +28,7 @@ As a requester, I want to submit a written requirement and receive a run ID, so 
 
 ### RUN-2 Reject an invalid create request
 
-Status: coded
+Status: done
 
 As a requester, I want a bad create request refused clearly, so that I never start a run that has no usable requirement.
 
@@ -40,7 +40,7 @@ As a requester, I want a bad create request refused clearly, so that I never sta
 
 ### RUN-3 Version the API
 
-Status: coded
+Status: done
 
 As an API client, I want the run endpoints under a version, so that the contract can change later without breaking me.
 
@@ -51,7 +51,7 @@ As an API client, I want the run endpoints under a version, so that the contract
 
 ### RUN-4 Return one error format
 
-Status: coded
+Status: done
 
 As an API client, I want every error in the same structure, so that I can handle failures in one place.
 
@@ -64,7 +64,7 @@ As an API client, I want every error in the same structure, so that I can handle
 
 ### RUN-5 Bound the size of a requirement
 
-Status: coded
+Status: done
 
 As the platform owner, I want input size limited, so that one request cannot exhaust memory, storage, or model budget.
 
@@ -73,7 +73,7 @@ As the platform owner, I want input size limited, so that one request cannot exh
 
 ### RUN-6 Record the state of a run
 
-Status: coded
+Status: done
 
 As the platform, I want each run to record its status, when it was created, when it last changed, and its version, so that its progress can be told and two writers cannot overwrite each other unnoticed.
 
@@ -87,7 +87,7 @@ As the platform, I want each run to record its status, when it was created, when
 
 ### RUN-7 Read a run back
 
-Status: coded
+Status: done
 
 As a requester, I want to read a run after creating it and be told where it lives, so that I can check on it without remembering anything but its ID.
 
@@ -97,6 +97,14 @@ Depends on RUN-3 (the path) and RUN-6 (the fields).
 - AC-RUN-7.2 `GET /v1/runs/<id>` for an existing run returns 200 with `id`, `requirement`, `status`, `createdAt`, `updatedAt` and `version`.
 - AC-RUN-7.4 `GET /v1/runs/<id>` for an ID that does not exist returns 404 in the RUN-4 format.
 - AC-RUN-7.5 `GET /v1/runs/<id>` where `<id>` is not a UUID returns 400 in the RUN-4 format.
+
+### BUG-1 A very large request body is read in full before the length limit applies
+
+Status: open
+
+As the platform owner, I want an oversized text refused before the whole of it is held in memory, so that one request cannot exhaust memory (RUN-5 only checks the length after the body is read). To be picked up much later; the exact maximum is decided then.
+
+- AC-BUG-1.1 A request whose text field is far larger than the limit (several megabytes) is refused with 400 in the RUN-4 format, and the server does not read the whole text first.
 
 ## Out of scope
 
