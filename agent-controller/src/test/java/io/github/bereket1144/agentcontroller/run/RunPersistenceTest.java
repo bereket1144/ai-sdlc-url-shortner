@@ -13,18 +13,36 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.transaction.TestTransaction;
 
 // Flyway creates the real PostgreSQL schema; Hibernate only validates the mapping.
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, RunService.class})
 class RunPersistenceTest {
+
+    @Autowired
+    private RunService runService;
 
     @Autowired
     private RunRepository runRepository;
 
     @Autowired
     private EntityManager entityManager;
+
+    @Test
+    void serviceCreatesRunThatCanBeReloadedFromPostgres() {
+        Run created = runService.createRun("Build a task tracker");
+
+        assertThat(created.getId()).isNotNull();
+        // The test normally rolls back. Commit here so the next read proves the service's write persisted.
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        Run reloaded = runRepository.findById(created.getId()).orElseThrow();
+        assertThat(reloaded).isNotSameAs(created);
+        assertThat(reloaded.getRequirement()).isEqualTo("Build a task tracker");
+    }
 
     @Test
     void persistsAndReloadsRunWithGeneratedIdAndLongRequirement() {
