@@ -1,6 +1,7 @@
 package io.github.bereket1144.agentcontroller.workflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import java.util.UUID;
 
@@ -21,5 +22,26 @@ class WorkflowRunnerTest {
 
         assertThat(result.<String>value("receipt"))
                 .contains(runId + ":" + requirement);
+    }
+
+    @Test
+    @DisplayName("R-9 a missing run ID is rejected with a clear message")
+    void rejectsNullRunId() throws GraphStateException {
+        WorkflowRunner runner = new WorkflowRunner();
+
+        assertThatNullPointerException()
+                .isThrownBy(() -> runner.run(null, "Build a task tracker"))
+                .withMessage("runId must not be null");
+    }
+
+    @Test
+    @DisplayName("R-9 a missing requirement is rejected with a clear message")
+    void rejectsNullRequirement() throws GraphStateException {
+        WorkflowRunner runner = new WorkflowRunner();
+        UUID runId = UUID.randomUUID();
+
+        assertThatNullPointerException()
+                .isThrownBy(() -> runner.run(runId, null))
+                .withMessage("requirement must not be null");
     }
 }

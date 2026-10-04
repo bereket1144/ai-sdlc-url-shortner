@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.UUID;
 
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
@@ -17,7 +18,6 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -50,11 +50,6 @@ class RunPersistenceTest {
         Run run = runRepository.saveAndFlush(new Run(requirement));
         entityManager.clear();
         return runRepository.findById(run.getId()).orElseThrow();
-    }
-
-    /** Changes a loaded run the only way available today: there is no real way to change a run yet. */
-    private void change(Run run, String requirement) {
-        ReflectionTestUtils.setField(run, "requirement", requirement);
     }
 
     @Test
@@ -92,7 +87,7 @@ class RunPersistenceTest {
         assertThat(run.getCreatedAt()).isBetween(before, after);
 
         Instant createdAt = run.getCreatedAt();
-        change(run, "Build a better task tracker");
+        run.start();
         runRepository.saveAndFlush(run);
         entityManager.clear();
 
@@ -110,7 +105,7 @@ class RunPersistenceTest {
         assertThat(run.getUpdatedAt()).isBetween(beforeSave, afterSave).isAfterOrEqualTo(run.getCreatedAt());
 
         Instant beforeChange = now();
-        change(run, "Build a better task tracker");
+        run.start();
         runRepository.saveAndFlush(run);
         Instant afterChange = now();
         entityManager.clear();
@@ -125,9 +120,9 @@ class RunPersistenceTest {
         Run run = savedAndReloaded("Build a task tracker");
         assertThat(run.getVersion()).isZero();
 
-        change(run, "first change");
+        run.start();
         runRepository.saveAndFlush(run);
-        change(run, "second change");
+        run.succeed();
         runRepository.saveAndFlush(run);
         entityManager.clear();
 
@@ -143,17 +138,21 @@ class RunPersistenceTest {
         Run stale = runRepository.findById(first.getId()).orElseThrow();
         entityManager.clear();
 
-        change(first, "first writer");
+        first.start();
         runRepository.saveAndFlush(first);
         entityManager.clear();
+        Map<String, Object> storedBefore = storedRow(first.getId());
 
-        change(stale, "stale writer");
+        stale.start();
         assertThatThrownBy(() -> runRepository.saveAndFlush(stale))
                 .isInstanceOf(OptimisticLockingFailureException.class);
 
-        String stored = jdbcTemplate.queryForObject("select requirement from runs where id = ?", String.class,
-                first.getId());
-        assertThat(stored).isEqualTo("first writer");
+        assertThat(storedRow(first.getId())).isEqualTo(storedBefore);
+        assertThat(storedBefore).containsEntry("version", 1L);
+    }
+
+    private Map<String, Object> storedRow(UUID id) {
+        return jdbcTemplate.queryForMap("select status, version, updated_at from runs where id = ?", id);
     }
 
     @Test

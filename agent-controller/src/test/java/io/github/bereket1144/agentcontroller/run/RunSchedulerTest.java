@@ -7,8 +7,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
@@ -19,10 +22,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @Import(TestcontainersConfiguration.class)
+// The 25 ms poll must stop when this class ends, or it keeps polling in Spring's test cache.
+@DirtiesContext
 @SpringBootTest(properties = {
         "run.dispatch.polling-enabled=true",
         "run.dispatch.poll-delay-ms=25"
@@ -41,13 +47,21 @@ class RunSchedulerTest {
     @MockitoBean
     private WorkflowRunner workflowRunner;
 
-    private UUID createdId;
+    private final List<UUID> createdIds = new ArrayList<>();
+
+    private final CountDownLatch releaseWorkflow = new CountDownLatch(1);
 
     @AfterEach
-    void deleteCreatedRun() {
-        if (createdId != null) {
-            runRepository.deleteById(createdId);
-        }
+    void deleteCreatedRuns() {
+        // Never leave a blocked workflow behind; it would hold the scheduler thread.
+        releaseWorkflow.countDown();
+        createdIds.forEach(runRepository::deleteById);
+    }
+
+    private UUID createRun(String requirement) {
+        UUID id = runService.createRun(requirement).getId();
+        createdIds.add(id);
+        return id;
     }
 
     @Test
@@ -56,7 +70,7 @@ class RunSchedulerTest {
         String requirement = "Build a task tracker";
         when(workflowRunner.run(any(UUID.class), eq(requirement)))
                 .thenReturn(new AgentState(Map.<String, Object>of("receipt", "completed")));
-        createdId = runService.createRun(requirement).getId();
+        UUID createdId = createRun(requirement);
 
         awaitStatus(createdId, RunStatus.SUCCEEDED);
 
@@ -64,6 +78,49 @@ class RunSchedulerTest {
         runScheduler.poll();
         runScheduler.poll();
         verify(workflowRunner, times(1)).run(createdId, requirement);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-4.3 a poll while a run is RUNNING does not start it again")
+    void pollDuringRunningWorkflowDoesNotStartRunAgain() throws InterruptedException {
+        String requirement = "Build a task tracker";
+        CountDownLatch workflowEntered = new CountDownLatch(1);
+        when(workflowRunner.run(any(UUID.class), eq(requirement))).thenAnswer(invocation -> {
+            workflowEntered.countDown();
+            releaseWorkflow.await(5, TimeUnit.SECONDS);
+            return new AgentState(Map.<String, Object>of("receipt", "completed"));
+        });
+        UUID runId = createRun(requirement);
+        assertThat(workflowEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(runService.getRun(runId).getStatus()).isEqualTo(RunStatus.RUNNING);
+
+        // The scheduler thread is held by the workflow, so poll from the test thread: it must find nothing.
+        runScheduler.poll();
+        runScheduler.poll();
+        verify(workflowRunner, times(1)).run(runId, requirement);
+
+        releaseWorkflow.countDown();
+        awaitStatus(runId, RunStatus.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-5.1, 4.3 a failing poll does not stop the next poll and its failed run is not started again")
+    void failingPollDoesNotStopNextPoll() throws InterruptedException {
+        String failingRequirement = "Build a failing tracker";
+        String laterRequirement = "Build a later tracker";
+        when(workflowRunner.run(any(UUID.class), eq(failingRequirement)))
+                .thenThrow(new IllegalStateException("workflow broke"));
+        when(workflowRunner.run(any(UUID.class), eq(laterRequirement)))
+                .thenReturn(new AgentState(Map.<String, Object>of("receipt", "completed")));
+        UUID failedId = createRun(failingRequirement);
+        awaitStatus(failedId, RunStatus.FAILED);
+
+        // The exception escaped the poll that ran the first run; a run created afterwards still gets started.
+        UUID laterId = createRun(laterRequirement);
+        awaitStatus(laterId, RunStatus.SUCCEEDED);
+
+        verify(workflowRunner, times(1)).run(failedId, failingRequirement);
+        assertThat(runService.getRun(failedId).getStatus()).isEqualTo(RunStatus.FAILED);
     }
 
     private void awaitStatus(UUID runId, RunStatus expected) throws InterruptedException {

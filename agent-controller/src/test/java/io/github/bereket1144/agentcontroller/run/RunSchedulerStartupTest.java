@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -33,6 +34,8 @@ import org.testcontainers.utility.DockerImageName;
  * against that same database with polling on. No timing is involved in "saved before startup".
  */
 @Testcontainers
+// Stop the 25 ms poll when this class ends.
+@DirtiesContext
 @SpringBootTest(properties = {
         "run.dispatch.polling-enabled=true",
         "run.dispatch.poll-delay-ms=25"

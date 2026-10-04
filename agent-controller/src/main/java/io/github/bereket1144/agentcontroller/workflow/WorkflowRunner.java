@@ -5,6 +5,7 @@ import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.bsc.langgraph4j.CompiledGraph;
@@ -32,6 +33,9 @@ public class WorkflowRunner {
     }
 
     public AgentState run(UUID runId, String requirement) {
+        // Fail fast with a clear message; Map.of would fail with a bare NullPointerException.
+        Objects.requireNonNull(runId, "runId must not be null");
+        Objects.requireNonNull(requirement, "requirement must not be null");
         Map<String, Object> input = Map.of(
                 "runId", runId,
                 "requirement", requirement);

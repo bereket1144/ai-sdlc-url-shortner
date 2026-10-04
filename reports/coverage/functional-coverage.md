@@ -21,6 +21,15 @@ Sources: the three files in `docs/platform/requirements/`, and the tests in `age
 
 AC-EXEC-1.1 now has a passing test (`WorkflowRunnerTest`), but story EXEC-1 is still marked open in `run-execution.md` and its code is not committed, so it is counted as proved but not as done.
 
+## Unit coverage gaps (JaCoCo, with reasons)
+
+Figures from `./mvnw clean verify` after the run-execution review fixes: line 140/141, branch 24/24, method 42/44. The build gate is 95%; these are the places short of 100%.
+
+| Where | Reason it is not covered |
+| --- | --- |
+| `workflow/WorkflowRunner.java`, the lambda `() -> new IllegalStateException("Workflow returned no state")` | The one-node graph always returns its final state, so the branch cannot be reached through the public API. Reaching it would need a way to supply the graph from a test, which is a production design change. Recorded in `reports/review/index.md` (QA gap 5) and left as is; revisit when the graph gets more nodes. |
+| `run/ProblemBody.java`, the record constructor | The record exists only to describe the error body in the API document. It is never created at run time. Recorded as a known gap under SWAG-2. |
+
 ## Weak spots in criteria that pass
 
 | Criterion | Weakness |
