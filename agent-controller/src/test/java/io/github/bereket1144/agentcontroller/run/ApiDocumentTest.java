@@ -4,7 +4,6 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -73,7 +72,7 @@ class ApiDocumentTest {
                         .value("#/components/schemas/RunCreatedResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunCreatedResponse.properties.keys()",
                         containsInAnyOrder("id")))
-                .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['200'].content['*/*'].schema.$ref")
+                .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['200'].content['application/json'].schema.$ref")
                         .value("#/components/schemas/RunResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
                         "id", "requirement", "status", "createdAt", "updatedAt", "version")))
@@ -95,7 +94,7 @@ class ApiDocumentTest {
     @Test
     @DisplayName("AC-SWAG-2.2 every error response is application/problem+json with type, title, status and detail")
     void errorsAreProblemJson() throws Exception {
-        String problem = "#/components/schemas/ProblemDetail";
+        String problem = "#/components/schemas/Problem";
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/v1/runs'].post.responses['400'].content.keys()",
                         containsInAnyOrder("application/problem+json")))
@@ -107,8 +106,13 @@ class ApiDocumentTest {
                         + "['application/problem+json'].schema.$ref").value(problem))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['404'].content"
                         + "['application/problem+json'].schema.$ref").value(problem))
-                .andExpect(jsonPath("$.components.schemas.ProblemDetail.properties.keys()",
-                        hasItems("type", "title", "status", "detail")));
+                .andExpect(jsonPath("$.components.schemas.Problem.properties.keys()",
+                        containsInAnyOrder("type", "title", "status", "detail", "errors")))
+                .andExpect(jsonPath("$.components.schemas.Problem.properties.errors.type").value("array"))
+                .andExpect(jsonPath("$.components.schemas.Problem.properties.errors.items.$ref")
+                        .value("#/components/schemas/FieldProblem"))
+                .andExpect(jsonPath("$.components.schemas.FieldProblem.properties.keys()",
+                        containsInAnyOrder("field", "message")));
     }
 
     @Test

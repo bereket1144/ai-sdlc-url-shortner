@@ -16,7 +16,7 @@ The controller's existing HTTP API (`POST /v1/runs` and `GET /v1/runs/{id}`, see
 
 ### SWAG-1 Publish the API document
 
-Status: coded
+Status: done
 
 As an API client, I want the controller to serve an OpenAPI document of its run endpoints, so that I can learn the contract without reading the code.
 
@@ -27,7 +27,7 @@ As an API client, I want the controller to serve an OpenAPI document of its run 
 
 ### SWAG-2 Document the responses and errors
 
-Status: coded
+Status: done
 
 As an API client, I want each endpoint's responses and errors documented, so that I know what to expect, including on failure.
 
@@ -37,7 +37,7 @@ As an API client, I want each endpoint's responses and errors documented, so tha
 
 ### SWAG-3 Browse the API in a page
 
-Status: coded
+Status: done
 
 As an API client, I want a page in the browser that shows the API and lets me call it, so that I can try the endpoints without writing a client.
 

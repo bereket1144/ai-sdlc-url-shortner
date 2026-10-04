@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,9 +42,9 @@ public class RunController {
     @ApiResponse(responseCode = "400",
             description = "The body is missing, is not valid JSON, or fails validation (the problem lists the "
                     + "offending fields in 'errors').",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @ApiResponse(responseCode = "415", description = "The request content type is not application/json.",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @PostMapping
     public ResponseEntity<RunCreatedResponse> createRun(@Valid @RequestBody RunRequest request) {
         Run run = runService.createRun(request.requirement());
@@ -54,11 +53,12 @@ public class RunController {
     }
 
     @Operation(summary = "Read a run", description = "Returns the stored run with the given id.")
-    @ApiResponse(responseCode = "200", description = "The run.")
+    @ApiResponse(responseCode = "200", description = "The run.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = RunResponse.class)))
     @ApiResponse(responseCode = "400", description = "The id is not a UUID.",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @ApiResponse(responseCode = "404", description = "No run has this id.",
-            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @GetMapping("/{id}")
     public RunResponse getRun(@PathVariable UUID id) {
         return RunResponse.from(runService.getRun(id));

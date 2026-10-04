@@ -1,5 +1,6 @@
 package io.github.bereket1144.agentcontroller.run;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -33,8 +34,11 @@ class SwaggerUiTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-3.2 the page's configuration points at /v3/api-docs")
+    @DisplayName("AC-SWAG-3.2 the page loads its configuration, and that configuration points at /v3/api-docs")
     void pageLoadsTheApiDocument() throws Exception {
+        mvc.perform(get("/swagger-ui/swagger-initializer.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("swagger-config")));
         mvc.perform(get("/v3/api-docs/swagger-config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.url").value("/v3/api-docs"));
