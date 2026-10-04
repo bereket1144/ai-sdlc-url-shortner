@@ -52,4 +52,15 @@ public class RunService {
         log.info("event=run_claim_selected runId={}", claimed.getId());
         return Optional.of(claimed);
     }
+
+    /** The claimed Run is detached after its transaction, so load it again for this state change. */
+    @Transactional
+    public void succeedRun(UUID runId) {
+        Run run = runRepository.findById(runId).orElseThrow(() -> {
+            log.warn("event=run_success_target_missing runId={}", runId);
+            return new IllegalStateException("Run not found while recording success");
+        });
+        run.succeed();
+        log.info("event=run_success_transition_requested runId={}", runId);
+    }
 }

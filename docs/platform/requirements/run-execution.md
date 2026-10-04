@@ -33,7 +33,7 @@ As the platform, I want one dispatch attempt to start a pending run's workflow, 
 
 ### EXEC-3 Record successful workflow completion
 
-Status: open
+Status: coded
 
 As the platform, I want a run to record successful workflow completion, so that clients can distinguish finished work from work still running.
 

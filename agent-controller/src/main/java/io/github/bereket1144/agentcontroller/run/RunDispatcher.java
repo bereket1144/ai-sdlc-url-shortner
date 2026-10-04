@@ -34,11 +34,12 @@ public class RunDispatcher {
         log.info("event=run_dispatch_started runId={}", runId);
         try {
             workflowRunner.run(runId, run.getRequirement());
+            runService.succeedRun(runId);
         } catch (RuntimeException exception) {
             log.error("event=run_dispatch_failed runId={} errorType={}", runId, exception.getClass().getName());
             throw exception;
         }
-        log.info("event=run_dispatch_returned runId={}", runId);
+        log.info("event=run_dispatch_succeeded runId={}", runId);
         return true;
     }
 }

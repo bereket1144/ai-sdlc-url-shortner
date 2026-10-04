@@ -114,6 +114,7 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 50. Define the successful run completion story.
   Done when: docs/platform/requirements/run-execution.md contains an open EXEC-3 story with testable criteria for recording success without reporting a failed run as successful.
   Result: added open EXEC-3 with criteria for persisted `SUCCEEDED` status and no false success after workflow failure. (main agent, direct)
-- [ ] 51. EXEC-3 Record successful workflow completion.
+- [x] 51. EXEC-3 Record successful workflow completion.
   Done when: story EXEC-3 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
   Criterion update: AC-SWAG-1.4 now lists `SUCCEEDED` because `RunResponse` exposes the new run status. (main agent, direct)
+  Result: `RunDispatcher` calls `RunService.succeedRun` after the workflow returns, so the run is stored as `SUCCEEDED`, and a workflow that throws leaves it `RUNNING`; AC-EXEC-3.1 and 3.2 each have a passing test (`RunTest`, `RunSuccessPersistenceTest`, `RunDispatcherCompletionTest`); `./mvnw clean verify` passes with 86 tests, line 115/116, branch 20/20. (main agent, direct)
