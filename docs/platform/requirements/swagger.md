@@ -37,7 +37,7 @@ As an API client, I want each endpoint's responses and errors documented, so tha
 
 ### SWAG-3 Browse the API in a page
 
-Status: open
+Status: coded
 
 As an API client, I want a page in the browser that shows the API and lets me call it, so that I can try the endpoints without writing a client.
 
