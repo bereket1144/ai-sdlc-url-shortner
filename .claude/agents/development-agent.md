@@ -12,6 +12,12 @@ When invoked:
 2. Work in small steps. Before each step say why it is needed, then what you will change.
 3. Write the code and its tests together. Run `./mvnw verify` from `agent-controller/` and fix what you broke before reporting.
 
+Keep it simple:
+
+- Use the framework's built-in annotation, property, or feature before writing a config class, bean, helper, or abstraction. Before you add any new class, say what it is for and why a one-line annotation or property would not do.
+- Never add infrastructure (a clock bean, a base class, a config class) only to make a test more exact. Make the test check a range instead.
+- If the requirements or the instructions you were given name a mechanism that is heavier than a simpler standard one, use the simpler one and say so.
+
 Every change must include:
 
 - **Error handling:** fail fast on invalid input, never swallow an exception, and return or throw something a caller can act on.
