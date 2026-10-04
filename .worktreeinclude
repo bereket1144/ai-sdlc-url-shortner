@@ -1,0 +1,7 @@
+# Files that Git ignores but every worktree still needs.
+# Claude Code copies these from the main checkout into each new worktree.
+# Only files that match a line here AND are ignored by Git are copied.
+PLAN.md
+Requirments.md
+docs/design-notes.md
+.claude/private-terms.txt

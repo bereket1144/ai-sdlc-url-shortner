@@ -15,7 +15,25 @@ import os
 import re
 import sys
 
+import subprocess
+
 PROJECT = os.path.realpath(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
+
+
+def checkout_root(start_dir):
+    """The root of the checkout that holds start_dir. Inside a worktree this is the worktree,
+    not the main checkout, so protected paths are recognised there too."""
+    directory = start_dir
+    while directory and not os.path.isdir(directory):
+        directory = os.path.dirname(directory)
+    try:
+        found = subprocess.run(["git", "-C", directory or PROJECT, "rev-parse", "--show-toplevel"],
+                               capture_output=True, text=True, timeout=5)
+        if found.returncode == 0 and found.stdout.strip():
+            return os.path.realpath(found.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return PROJECT
 
 # "git", then any global options, then the subcommand. Anchoring on the subcommand keeps a
 # commit message that merely mentions a word like "push" from being blocked.
@@ -51,9 +69,9 @@ def ask(reason):
     sys.exit(0)
 
 
-def relative_path(file_path):
-    absolute = os.path.realpath(file_path if os.path.isabs(file_path) else os.path.join(PROJECT, file_path))
-    return os.path.relpath(absolute, PROJECT).replace(os.sep, "/")
+def relative_path(file_path, cwd):
+    absolute = os.path.realpath(file_path if os.path.isabs(file_path) else os.path.join(cwd, file_path))
+    return os.path.relpath(absolute, checkout_root(os.path.dirname(absolute))).replace(os.sep, "/")
 
 
 def check_command(command):
@@ -65,8 +83,8 @@ def check_command(command):
             ask(reason)
 
 
-def check_file(file_path):
-    path = relative_path(file_path)
+def check_file(file_path, cwd):
+    path = relative_path(file_path, cwd)
     name = os.path.basename(path)
     if path in PROTECTED_FILES or path.startswith(PROTECTED_DIRS):
         block(f"{path} is protected: only the user changes it.")
@@ -85,7 +103,7 @@ def main():
     elif tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
         if file_path:
-            check_file(file_path)
+            check_file(file_path, event.get("cwd") or PROJECT)
     sys.exit(0)
 
 

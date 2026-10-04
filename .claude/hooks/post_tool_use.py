@@ -31,20 +31,36 @@ SECRET_PATTERNS = [
 CONFIG_PASSWORD = re.compile(r"(?im)^\s*[\w.\-]*password[\w.\-]*\s*[=:]\s*(?!\$\{)\S+")
 
 
-def is_ignored(path):
+def checkout_root(start_dir):
+    """The root of the checkout that holds start_dir. Inside a worktree this is the worktree,
+    not the main checkout, so the file is judged by its own checkout's ignore rules."""
     try:
-        return subprocess.run(["git", "-C", PROJECT, "check-ignore", "-q", path],
+        found = subprocess.run(["git", "-C", start_dir, "rev-parse", "--show-toplevel"],
+                               capture_output=True, text=True, timeout=5)
+        if found.returncode == 0 and found.stdout.strip():
+            return os.path.realpath(found.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return PROJECT
+
+
+def is_ignored(root, path):
+    try:
+        return subprocess.run(["git", "-C", root, "check-ignore", "-q", path],
                               capture_output=True, timeout=5).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
 
-def private_terms():
-    try:
-        with open(os.path.join(PROJECT, ".claude", "private-terms.txt"), encoding="utf-8") as f:
-            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
-    except OSError:
-        return []
+def private_terms(root):
+    """The list is local and uncommitted. A worktree gets its own copy; fall back to the main checkout."""
+    for base in (root, PROJECT):
+        try:
+            with open(os.path.join(base, ".claude", "private-terms.txt"), encoding="utf-8") as f:
+                return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        except OSError:
+            continue
+    return []
 
 
 def main():
@@ -52,10 +68,14 @@ def main():
     file_path = (event.get("tool_input") or {}).get("file_path")
     if not file_path:
         sys.exit(0)
-    absolute = os.path.realpath(file_path if os.path.isabs(file_path) else os.path.join(PROJECT, file_path))
-    if not absolute.startswith(PROJECT + os.sep) or not os.path.isfile(absolute):
+    cwd = event.get("cwd") or PROJECT
+    absolute = os.path.realpath(file_path if os.path.isabs(file_path) else os.path.join(cwd, file_path))
+    if not os.path.isfile(absolute):
         sys.exit(0)
-    if os.path.getsize(absolute) > MAX_BYTES or is_ignored(absolute):
+    root = checkout_root(os.path.dirname(absolute))
+    if not absolute.startswith(root + os.sep):
+        sys.exit(0)
+    if os.path.getsize(absolute) > MAX_BYTES or is_ignored(root, absolute):
         sys.exit(0)
     try:
         with open(absolute, encoding="utf-8") as f:
@@ -63,12 +83,12 @@ def main():
     except (OSError, UnicodeDecodeError):
         sys.exit(0)
 
-    shown = os.path.relpath(absolute, PROJECT)
+    shown = os.path.relpath(absolute, root)
     findings = [f"looks like {label}" for pattern, label in SECRET_PATTERNS if re.search(pattern, text)]
     if shown.endswith((".properties", ".yml", ".yaml")) and CONFIG_PASSWORD.search(text):
         findings.append("a literal password in a config file; read it from an environment variable instead")
     lowered = text.lower()
-    findings += [f"the private term '{term}'" for term in private_terms() if term.lower() in lowered]
+    findings += [f"the private term '{term}'" for term in private_terms(root) if term.lower() in lowered]
 
     if findings:
         print(f"{shown} must be fixed before continuing. It contains: " + "; ".join(findings) + ".", file=sys.stderr)
