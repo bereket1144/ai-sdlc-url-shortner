@@ -65,8 +65,8 @@ class RunDispatcherCompletionTest {
     }
 
     @Test
-    @DisplayName("AC-EXEC-3.2 a failed workflow does not mark the run SUCCEEDED")
-    void doesNotRecordSuccessAfterWorkflowFails() {
+    @DisplayName("AC-EXEC-3.2, 5.1, 5.2 a failed workflow is stored as FAILED and reaches the caller")
+    void recordsFailureAndRethrowsWorkflowException() {
         String requirement = "Build a task tracker";
         createdId = runService.createRun(requirement).getId();
         IllegalStateException failure = new IllegalStateException("Workflow failed");
@@ -74,6 +74,6 @@ class RunDispatcherCompletionTest {
 
         assertThatThrownBy(runDispatcher::dispatchNext).isSameAs(failure);
 
-        assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.RUNNING);
+        assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.FAILED);
     }
 }

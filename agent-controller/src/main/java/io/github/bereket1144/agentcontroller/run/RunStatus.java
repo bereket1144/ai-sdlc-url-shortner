@@ -4,5 +4,6 @@ package io.github.bereket1144.agentcontroller.run;
 public enum RunStatus {
     CREATED,
     RUNNING,
-    SUCCEEDED
+    SUCCEEDED,
+    FAILED
 }

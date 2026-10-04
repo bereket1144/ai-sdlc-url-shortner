@@ -3,6 +3,8 @@ package io.github.bereket1144.agentcontroller.run;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -71,5 +73,36 @@ class RunTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Only a RUNNING run can succeed");
         assertThat(succeeded.getStatus()).isEqualTo(RunStatus.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-5.1 domain transition allows a RUNNING run to become FAILED")
+    void failMovesRunningToFailed() {
+        Run run = new Run("Build a task tracker");
+        run.start();
+
+        run.fail();
+
+        assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-5.3 only a RUNNING run can become FAILED")
+    void failRejectsOtherStatuses() {
+        Run created = new Run("Build a task tracker");
+        Run succeeded = new Run("Build a task tracker");
+        succeeded.start();
+        succeeded.succeed();
+        Run failed = new Run("Build a task tracker");
+        failed.start();
+        failed.fail();
+
+        for (Run run : List.of(created, succeeded, failed)) {
+            RunStatus originalStatus = run.getStatus();
+            assertThatThrownBy(run::fail)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("Only a RUNNING run can fail");
+            assertThat(run.getStatus()).isEqualTo(originalStatus);
+        }
     }
 }

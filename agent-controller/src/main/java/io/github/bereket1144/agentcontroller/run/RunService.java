@@ -63,4 +63,15 @@ public class RunService {
         run.succeed();
         log.info("event=run_success_transition_requested runId={}", runId);
     }
+
+    /** Commit FAILED independently so a caller can rethrow the workflow error without rolling this back. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void failRun(UUID runId) {
+        Run run = runRepository.findById(runId).orElseThrow(() -> {
+            log.warn("event=run_failure_target_missing runId={}", runId);
+            return new IllegalStateException("Run not found while recording failure");
+        });
+        run.fail();
+        log.info("event=run_failure_transition_requested runId={}", runId);
+    }
 }

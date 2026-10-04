@@ -34,11 +34,19 @@ public class RunDispatcher {
         log.info("event=run_dispatch_started runId={}", runId);
         try {
             workflowRunner.run(runId, run.getRequirement());
-            runService.succeedRun(runId);
-        } catch (RuntimeException exception) {
-            log.error("event=run_dispatch_failed runId={} errorType={}", runId, exception.getClass().getName());
-            throw exception;
+        } catch (RuntimeException workflowFailure) {
+            try {
+                runService.failRun(runId);
+            } catch (RuntimeException recordingFailure) {
+                workflowFailure.addSuppressed(recordingFailure);
+                log.error("event=run_failure_recording_failed runId={} errorType={}",
+                        runId, recordingFailure.getClass().getName());
+            }
+            log.error("event=run_dispatch_failed runId={} errorType={}",
+                    runId, workflowFailure.getClass().getName());
+            throw workflowFailure;
         }
+        runService.succeedRun(runId);
         log.info("event=run_dispatch_succeeded runId={}", runId);
         return true;
     }

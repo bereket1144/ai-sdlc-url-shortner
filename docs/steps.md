@@ -126,3 +126,13 @@ The record of the work done in this repository, one entry per step, in the order
   Result: `RunScheduler` polls on a fixed delay and now drains every waiting run in one poll; AC-EXEC-4.1 (run saved before startup, `RunSchedulerStartupTest`), 4.2 and 4.3 (`RunSchedulerTest`) each have a passing test, plus `RunSchedulerDrainTest` for R-2; `./mvnw clean verify` passes with 89 tests, line 120/121, branch 22/22. (Claude Code, development-agent)
 - [ ] 54. QA and review of run execution.
   Done when: QA and code review of docs/platform/requirements/run-execution.md are done and reported, their findings are fixed or answered, and every story in the file is marked done.
+- [x] 55. Define the workflow failure story.
+  Done when: docs/platform/requirements/run-execution.md contains an open EXEC-5 story with testable criteria for reporting a workflow exception as FAILED, without promising resume.
+  Result: EXEC-5 is open with criteria for a persisted FAILED status, propagation of the original exception, and a RUNNING-only failure transition; retry and resume remain out of scope. (main agent, direct)
+- [x] 56. EXEC-5 Record a workflow failure.
+  Done when: story EXEC-5 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
+  Criterion update: AC-SWAG-1.4 now lists `FAILED` because the user-requested run status is exposed by `RunResponse`. (main agent, direct)
+  Result: `RunStatus.FAILED`, `Run.fail()` (RUNNING only) and `RunService.failRun` (own transaction) were added; `RunDispatcher` records FAILED when the workflow throws and rethrows the original exception, keeping it primary if recording also fails; AC-EXEC-5.1 to 5.3 each have a passing test (`RunTest`, `RunFailurePersistenceTest`, `RunDispatcherCompletionTest`); `./mvnw clean verify` passes with 95 tests, line 138/139, branch 24/24. (main agent, direct)
+- [x] 57. Widen a step from one piece of work to one logical step.
+  Done when: AGENTS.md says a step is one logical piece of work covering every layer it touches with its tests, and that "step by step" from the user brings back the smallest piece.
+  Result: the rule at the top of AGENTS.md is now "One logical step at a time", with a worked example and a "step by step" mode; the matching lines in "Timeless constraints" and "How to work in this repository" were aligned. (main agent, direct)

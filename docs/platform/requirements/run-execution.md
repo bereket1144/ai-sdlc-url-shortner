@@ -2,7 +2,7 @@
 
 ## Request
 
-A saved run needs to start a workflow and report when that workflow finishes successfully. The stories establish the graph path, connect a pending run to it, record successful completion, and start pending work automatically.
+A saved run needs to start a workflow and report whether it finishes successfully or fails. The stories establish the graph path, connect a pending run to it, record its outcome, and start pending work automatically.
 
 ## Ambiguities and assumptions
 
@@ -10,6 +10,7 @@ A saved run needs to start a workflow and report when that workflow finishes suc
 - The first node is deterministic so its inputs and execution can be checked without a model call.
 - EXEC-2 invokes a dispatch attempt explicitly; EXEC-4 starts dispatch attempts through scheduled polling.
 - `SUCCEEDED` means the workflow reached its final successful outcome. Pausing for approval does not count as success.
+- EXEC-5 covers a workflow exception that reaches the dispatcher. Process termination and recovery are separate work.
 
 ## User stories and acceptance criteria
 
@@ -50,6 +51,17 @@ As a user, I want submitted runs to start automatically, so that I do not need t
 - AC-EXEC-4.2 Given a new `CREATED` run while the application is running, scheduled polling starts its workflow without a manual dispatch call.
 - AC-EXEC-4.3 Repeated polling does not start a run again after it has left `CREATED`.
 
+### EXEC-5 Record a workflow failure
+
+Status: coded
+
+As a user, I want a workflow that throws to be reported as failed, so that I can tell it stopped instead of waiting on a run that appears to be active.
+
+- AC-EXEC-5.1 Given a `RUNNING` run whose workflow throws, a later read of that run reports status `FAILED`.
+- AC-EXEC-5.2 The original workflow exception still reaches the dispatcher caller after the failure is recorded.
+- AC-EXEC-5.3 A run that is not `RUNNING` cannot be marked `FAILED`.
+
 ## Out of scope
 
-- Model calls, additional workflow stages, approval gates, and failure-state transitions.
+- Model calls, additional workflow stages, and approval gates.
+- Automatic retry, checkpoint resume, and recovery after process termination.

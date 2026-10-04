@@ -77,4 +77,12 @@ public class Run {
         this.status = RunStatus.SUCCEEDED;
     }
 
+    public void fail() {
+        if (status != RunStatus.RUNNING) {
+            throw new IllegalStateException(
+                    "Only a RUNNING run can fail");
+        }
+        this.status = RunStatus.FAILED;
+    }
+
 }

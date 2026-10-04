@@ -77,7 +77,7 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
                         "id", "requirement", "status", "createdAt", "updatedAt", "version")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
-                        containsInAnyOrder("CREATED", "RUNNING", "SUCCEEDED")));
+                        containsInAnyOrder("CREATED", "RUNNING", "SUCCEEDED", "FAILED")));
     }
 
     @Test

@@ -5,24 +5,23 @@ Instructions for AI coding assistants working in this repository. This file is t
 Note on naming: "agents" in this file means the coding assistants helping to build the platform. The SDLC agents that the platform itself runs are described under "What this project is".
 
 
-# One step at a time (this rule comes before everything else)
+# One logical step at a time (this rule comes before everything else)
 
-- **Do exactly one thing per turn:** the next step, and nothing after it.
+- **Do one logical step per turn:** one coherent piece of work that delivers one working behaviour, with everything it needs to work. That includes every layer it touches (state, service, repository, API) and its tests. Example: adding a failed state to a run, with the service change, the repository query, the API exposure, and their tests, is one step.
 - **Then stop.** Say what was done in a few lines, name the single next step, and wait for the user.
-- **Never give the user more than one thing** to do, decide, review, or approve. If several things need a decision, ask about the first one only. Ask about the next after the answer.
-- **Never chain steps.** Do not continue to the next step because it seems obvious, small, or related.
-- **If a step turns out to hold more than one thing,** do the first, stop, and say what remains.
-- **This holds for direct work and for subagents alike.** One subagent per turn, given one step. When it returns, stop and report. If you are a subagent, do the one step you were given and return; do not start another.
+- **Never give the user more than one thing** to decide, review, or approve. If several things need a decision, ask about the first one only. Ask about the next after the answer.
+- **Never chain steps.** Do not continue to the next logical step because it seems obvious or related.
+- **Keep a step reviewable.** If the work holds two independent behaviours, or cannot be described as one outcome in a short paragraph, do the first, stop, and say what remains.
+- **When the user says "step by step"** (or asks for smaller steps), go back to the smallest piece: one class, one test, one fix, one setting, or one document per turn. This stays in force until the user says otherwise.
+- **This holds for direct work and for subagents alike.** One subagent per turn, given one logical step. When it returns, stop and report. If you are a subagent, do the one step you were given and return; do not start another.
 
-A step is one logical piece of work that fits in one short sentence without "and": build one class, write one test, fix one failure, change one setting, write one document.
-
-In the steps log (see "Steps log" and "User stories"), a step is one user story, or one QA and review of a feature, and it takes many such pieces of work. Each turn does one piece.
+In the steps log (see "Steps log" and "User stories"), a step is one user story, or one QA and review of a feature, and it takes many such logical steps. Each turn does one.
 
 ---
 
 # Timeless constraints (not a checklist)
 
-**How to work with the user (comes before everything below):** Find the simplest solution the user can fully understand and grow it one small step at a time; never jump to the final design. Change one thing per step and always say WHY (the problem it solves) before WHAT, in plain words.
+**How to work with the user (comes before everything below):** Find the simplest solution the user can fully understand and grow it one logical step at a time; never jump to the final design. Change one logical thing per step and always say WHY (the problem it solves) before WHAT, in plain words.
 
 When two principles collide, pick the one that cuts future cost in THIS codebase.
 
@@ -82,7 +81,7 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 
 # How to work in this repository
 
-- **Small steps.** One change per step, explained WHY before WHAT.
+- **Logical steps.** One logical change per step (all the layers it needs, with its tests), explained WHY before WHAT. Smaller only when the user says "step by step".
 - **No folders or abstractions ahead of need.** Create a package when the code that needs it is written.
 - **Tests with every change.** Write the tests alongside the code, not afterwards. Coverage is measured on every build and the target is 100%; any gap is named with its reason.
 - **Never push.** The human pushes. `.claude/settings.json` denies `git push` for Claude Code, and the same rule applies to every other tool.
