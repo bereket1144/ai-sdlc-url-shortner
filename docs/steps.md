@@ -90,6 +90,12 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 42. Claim the next pending run.
   Done when: a CREATED run can be claimed in a short transaction, its RUNNING status persists, an empty queue returns no ID, and a persistence test passes.
   Result: added the lookup index, guarded status transition, locked JPA query, claim service method and persistence test. The user reports the tests passing. (direct)
+- [x] 43. Define the first run execution story.
+  Done when: docs/platform/requirements/run-execution.md contains the open EXEC-1 story and a testable criterion for one workflow node receiving a claimed run's ID and requirement.
+  Result: the new requirements file defines EXEC-1 and AC-EXEC-1.1; the story remains open for implementation. (direct)
+- [x] 44. EXEC-1 Run one workflow node.
+  Done when: story EXEC-1 in docs/platform/requirements/run-execution.md is coded: AC-EXEC-1.1 has a passing test.
+  Result: `WorkflowRunner` executes one deterministic node with the run ID and requirement; `WorkflowRunnerTest` passes. The user-run suite reports 77 tests, line 84/85, branch 16/16. (main agent, direct)
 - [x] 45. Fix the failing AC-SWAG-1.4 test.
   Done when: AC-SWAG-1.4 and its test allow the status values `CREATED` and `RUNNING` (criterion changed with the user's approval, because step 42 added `RUNNING`), and `./mvnw clean verify` passes.
   Result: AC-SWAG-1.4 and `ApiDocumentTest` now allow `CREATED` and `RUNNING`; two unit tests in `RunTest` cover `Run.start()` (CREATED becomes RUNNING, a second start throws `IllegalStateException`), which closed the branch gap that failed the 95% check; `./mvnw clean verify` passes with 77 tests, line 84/85, branch 16/16. (direct)
