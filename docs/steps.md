@@ -102,3 +102,12 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 46. Name the agent in commit messages.
   Done when: AGENTS.md tells agents to end each commit subject with their name in brackets (`[main agent]` for the main session), and no longer asks for the name in replies.
   Result: the commit bullet in "How to work in this repository" now carries the rule, and the "Say who you are" bullet is removed from "Working mode". (direct)
+- [x] 47. Define the next run execution story.
+  Done when: docs/platform/requirements/run-execution.md contains an open, testable story for dispatching one pending run into its workflow.
+  Result: added open story EXEC-2 with criteria for workflow input, persisted RUNNING status, and an empty queue. (main agent, direct)
+- [x] 48. EXEC-2 Dispatch one pending run.
+  Done when: story EXEC-2 in docs/platform/requirements/run-execution.md is coded: every criterion has a passing test.
+  Result: `RunDispatcher` starts the claimed run's workflow after its status commits, and does nothing for an empty queue; PostgreSQL integration tests pass with 80 tests, 103/104 lines and 18/18 branches covered. (main agent, direct)
+- [x] 49. Avoid rereading a claimed run.
+  Done when: `claimNextRun` returns the loaded run, the dispatcher uses it without another lookup, and `./mvnw verify` passes.
+  Result: the dispatcher uses the claimed `Run` directly; `./mvnw verify` passes with 80 tests, 103/104 lines and 18/18 branches covered. (main agent, direct)

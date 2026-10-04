@@ -182,7 +182,10 @@ class RunPersistenceTest {
     void claimNextRunPersistsStatus() {
         Run created = runService.createRun("Build a task tracker");
         try {
-            assertThat(runService.claimNextRun()).contains(created.getId());
+            Run claimed = runService.claimNextRun().orElseThrow();
+            assertThat(claimed.getId()).isEqualTo(created.getId());
+            assertThat(claimed.getRequirement()).isEqualTo(created.getRequirement());
+            assertThat(claimed.getStatus()).isEqualTo(RunStatus.RUNNING);
             assertThat(runService.getRun(created.getId()).getStatus()).isEqualTo(RunStatus.RUNNING);
             assertThat(runService.claimNextRun()).isEmpty();
         } finally {

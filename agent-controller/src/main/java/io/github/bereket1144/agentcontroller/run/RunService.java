@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -38,8 +39,9 @@ public class RunService {
         });
     }
 
-    @Transactional
-    public Optional<UUID> claimNextRun() {
+    /** Returns the loaded run so dispatch can use its inputs after this transaction commits. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<Run> claimNextRun() {
         Optional<Run> run = runRepository.findFirstByStatusOrderByCreatedAtAscIdAsc(RunStatus.CREATED);
         if (run.isEmpty()) {
             return Optional.empty();
@@ -48,6 +50,6 @@ public class RunService {
         Run claimed = run.get();
         claimed.start();
         log.info("event=run_claim_selected runId={}", claimed.getId());
-        return Optional.of(claimed.getId());
+        return Optional.of(claimed);
     }
 }
