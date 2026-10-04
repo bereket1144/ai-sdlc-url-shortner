@@ -1,6 +1,7 @@
 package io.github.bereket1144.agentcontroller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
@@ -27,7 +28,8 @@ import org.junit.jupiter.api.Test;
  * Shows that the number of parallel tasks can be decided while the workflow runs, with fake tasks
  * and no model calls. The graph is fixed: {@code planner -> executor -> reporter}. A fake planner
  * decides how many tasks there are, the {@code executor} node runs all of them side by side, and
- * the {@code reporter} stage gets every result.
+ * the {@code reporter} stage gets every result. A task that crashes fails the run and the
+ * reporter never runs.
  *
  * <p>The fan-out is plain Java inside one node because LangGraph4j 1.8.27 cannot do it with graph
  * edges: parallel branches are separate {@code addEdge} calls made before the graph is compiled, a
@@ -40,6 +42,7 @@ class RuntimeFanOutTest {
 
     private final List<String> events = Collections.synchronizedList(new ArrayList<>());
     private volatile CountDownLatch allStarted;
+    private volatile String crashingTask; // the planned task that throws, or null for none
 
     @Test
     void oneFixedGraphRunsAsManyTasksAsThePlannerDecidesAndJoinsTheirResults() throws Exception {
@@ -68,6 +71,25 @@ class RuntimeFanOutTest {
             assertThat(events.stream().filter("reporter:start"::equals)).hasSize(1);
             assertThat(indexOf("reporter:start")).isGreaterThan(lastFinish);
         }
+    }
+
+    @Test
+    void aTaskThatCrashesInsideTheSchedulerFailsTheRunAndTheReporterNeverRuns() throws Exception {
+        CompiledGraph<AgentState> graph = buildGraph();
+        allStarted = new CountDownLatch(3);
+        crashingTask = "task-2";
+
+        // The run fails, and says why, instead of returning the results of the tasks that did finish.
+        assertThatThrownBy(() -> graph.invoke(Map.of("taskCount", 3)))
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("task-2 crashed");
+
+        // All three were running side by side; two finished and one crashed.
+        assertThat(events).contains("task-1:finish", "task-2:crash", "task-3:finish");
+        assertThat(events).doesNotContain("task-2:finish");
+
+        // The next stage never ran.
+        assertThat(events).doesNotContain("reporter:start");
     }
 
     private CompiledGraph<AgentState> buildGraph() throws GraphStateException {
@@ -119,6 +141,10 @@ class RuntimeFanOutTest {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(task + " was interrupted", e);
+        }
+        if (task.equals(crashingTask)) {
+            events.add(task + ":crash");
+            throw new IllegalStateException(task + " crashed");
         }
         events.add(task + ":finish");
         return task + ":done";
