@@ -20,3 +20,7 @@ The graph stays fixed (`planner -> executor -> reporter`). The executor node is 
 - Individual tasks are not graph nodes, so LangGraph4j does not checkpoint them. Their state has to be saved by the scheduler itself, in PostgreSQL.
 - Failure handling for tasks is the scheduler's job: a crashed task must fail the node, never count as a pass.
 - Parallel branches whose number is fixed (for example, documentation next to testing) can still be real graph branches.
+
+## Update: relation to the SDLC stage graph
+
+The `planner -> executor -> reporter` graph above showed that the number of tasks can change at run time without changing the graph. It is not the platform's stage topology. The active stage topology is the SDLC graph in `docs/platform/requirements/sdlc-flow.md`. The decision still holds: the task scheduler described here belongs inside the Development node of that graph, which runs the planned tasks and returns only when all have finished.

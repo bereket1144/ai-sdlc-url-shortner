@@ -33,7 +33,7 @@ public class RunDispatcher {
         // The claim has its own transaction, so its RUNNING state is committed before the graph starts.
         log.info("event=run_dispatch_started runId={}", runId);
         try {
-            workflowRunner.run(runId, run.getRequirement());
+            workflowRunner.run(runId, run.getRequirement(), run.getKind());
         } catch (RuntimeException | Error workflowFailure) {
             try {
                 runService.failRun(runId);

@@ -55,12 +55,12 @@ class RunDispatcherCompletionTest {
     void recordsSuccessAfterWorkflowReturns() {
         String requirement = "Build a task tracker";
         createdId = runService.createRun(requirement).getId();
-        when(workflowRunner.run(createdId, requirement))
+        when(workflowRunner.run(createdId, requirement, RunKind.GREENFIELD))
                 .thenReturn(new AgentState(Map.<String, Object>of("receipt", "completed")));
 
         assertThat(runDispatcher.dispatchNext()).isTrue();
 
-        verify(workflowRunner).run(createdId, requirement);
+        verify(workflowRunner).run(createdId, requirement, RunKind.GREENFIELD);
         assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.SUCCEEDED);
     }
 
@@ -70,7 +70,7 @@ class RunDispatcherCompletionTest {
         String requirement = "Build a task tracker";
         createdId = runService.createRun(requirement).getId();
         IllegalStateException failure = new IllegalStateException("Workflow failed");
-        doThrow(failure).when(workflowRunner).run(createdId, requirement);
+        doThrow(failure).when(workflowRunner).run(createdId, requirement, RunKind.GREENFIELD);
 
         assertThatThrownBy(runDispatcher::dispatchNext).isSameAs(failure);
 

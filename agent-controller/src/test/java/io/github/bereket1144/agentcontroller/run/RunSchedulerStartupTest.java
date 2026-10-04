@@ -69,8 +69,8 @@ class RunSchedulerStartupTest {
         try (Connection connection = DriverManager.getConnection(
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 PreparedStatement insert = connection.prepareStatement(
-                        "INSERT INTO runs (id, requirement, status, created_at, updated_at, version)"
-                                + " VALUES (?, ?, 'CREATED', now(), now(), 0)")) {
+                        "INSERT INTO runs (id, requirement, kind, status, created_at, updated_at, version)"
+                                + " VALUES (?, ?, 'GREENFIELD', 'CREATED', now(), now(), 0)")) {
             insert.setObject(1, SAVED_ID);
             insert.setString(2, REQUIREMENT);
             insert.executeUpdate();
@@ -87,7 +87,7 @@ class RunSchedulerStartupTest {
     void scheduledPollingStartsRunSavedBeforeStartup() throws InterruptedException {
         awaitStatus(SAVED_ID, RunStatus.SUCCEEDED);
 
-        verify(workflowRunner, times(1)).run(SAVED_ID, REQUIREMENT);
+        verify(workflowRunner, times(1)).run(SAVED_ID, REQUIREMENT, RunKind.GREENFIELD);
     }
 
     private void awaitStatus(UUID runId, RunStatus expected) throws InterruptedException {

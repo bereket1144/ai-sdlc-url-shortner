@@ -21,7 +21,7 @@ import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 class RunMigrationTest {
 
     @Test
-    @DisplayName("AC-RUN-6.6, 6.7 a run stored before the state columns existed gets status CREATED, both times and version 0, and the defaults are gone afterwards")
+    @DisplayName("AC-RUN-6.6, 6.7, AC-FLOW-1.6 an older run gets CREATED state and GREENFIELD kind")
     void runStoredBeforeTheChangeIsFilledInByTheMigration() throws Exception {
         try (PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse(TestcontainersConfiguration.POSTGRES_IMAGE))) {
             postgres.start();
@@ -36,9 +36,10 @@ class RunMigrationTest {
             try (Connection connection = connect(postgres);
                     Statement statement = connection.createStatement();
                     ResultSet row = statement.executeQuery(
-                            "select requirement, status, created_at, updated_at, version from runs where id = '" + id + "'")) {
+                            "select requirement, kind, status, created_at, updated_at, version from runs where id = '" + id + "'")) {
                 assertThat(row.next()).isTrue();
                 assertThat(row.getString("requirement")).isEqualTo("old run");
+                assertThat(row.getString("kind")).isEqualTo("GREENFIELD");
                 assertThat(row.getString("status")).isEqualTo("CREATED");
                 assertThat(row.getTimestamp("created_at")).isNotNull();
                 assertThat(row.getTimestamp("updated_at")).isNotNull();

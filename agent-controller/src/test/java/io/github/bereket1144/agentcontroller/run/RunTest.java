@@ -25,6 +25,20 @@ class RunTest {
     }
 
     @Test
+    @DisplayName("AC-FLOW-1.6 run creation without a kind defaults to GREENFIELD")
+    void defaultsToGreenfield() {
+        assertThat(new Run("Build a task tracker").getKind()).isEqualTo(RunKind.GREENFIELD);
+    }
+
+    @Test
+    @DisplayName("AC-FLOW-1.6 a run cannot be created without a kind")
+    void rejectsMissingKind() {
+        assertThatThrownBy(() -> new Run("Build a task tracker", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("kind must not be null");
+    }
+
+    @Test
     @DisplayName("a CREATED run can be started and becomes RUNNING")
     void startMovesCreatedToRunning() {
         Run run = new Run("Build a task tracker");

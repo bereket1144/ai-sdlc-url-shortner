@@ -27,6 +27,11 @@ public class RunService {
         return runRepository.save(new Run(requirement));
     }
 
+    @Transactional
+    public Run createRun(String requirement, RunKind kind) {
+        return runRepository.save(new Run(requirement, kind));
+    }
+
     /**
      * Reads a run, or fails with a 404 that ApiExceptionHandler renders as problem+json.
      * The detail is fixed text: it does not repeat the id or say anything about storage.

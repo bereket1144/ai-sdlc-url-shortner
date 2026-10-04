@@ -32,8 +32,9 @@ class RunDispatcherFailureTest {
         AssertionError workflowError = new AssertionError("Workflow broke");
         when(run.getId()).thenReturn(runId);
         when(run.getRequirement()).thenReturn(requirement);
+        when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
-        doThrow(workflowError).when(workflowRunner).run(runId, requirement);
+        doThrow(workflowError).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD);
 
         assertThatThrownBy(() -> new RunDispatcher(runService, workflowRunner).dispatchNext())
                 .isSameAs(workflowError);
@@ -52,8 +53,9 @@ class RunDispatcherFailureTest {
         IllegalStateException recordingFailure = new IllegalStateException("Could not record failure");
         when(run.getId()).thenReturn(runId);
         when(run.getRequirement()).thenReturn(requirement);
+        when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
-        doThrow(workflowFailure).when(workflowRunner).run(runId, requirement);
+        doThrow(workflowFailure).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD);
         doThrow(recordingFailure).when(runService).failRun(runId);
 
         assertThatThrownBy(() -> new RunDispatcher(runService, workflowRunner).dispatchNext())
@@ -72,6 +74,7 @@ class RunDispatcherFailureTest {
         IllegalStateException recordingFailure = new IllegalStateException("Could not record success");
         when(run.getId()).thenReturn(runId);
         when(run.getRequirement()).thenReturn(requirement);
+        when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
         doThrow(recordingFailure).when(runService).succeedRun(runId);
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -78,11 +79,11 @@ class RunDispatcherTest {
                     "select status from runs where id = ?", String.class, runId));
             assertThat(storedStatus).isEqualTo("RUNNING");
             return null;
-        }).when(workflowRunner).run(any(UUID.class), anyString());
+        }).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD));
 
         Boolean dispatched = callerTransaction.execute(status -> runDispatcher.dispatchNext());
         assertThat(dispatched).isTrue();
-        verify(workflowRunner).run(createdId, requirement);
+        verify(workflowRunner).run(createdId, requirement, RunKind.GREENFIELD);
     }
 
     @Test
@@ -100,8 +101,20 @@ class RunDispatcherTest {
     void propagatesWorkflowFailure() {
         createdId = runService.createRun("Build a task tracker").getId();
         IllegalStateException failure = new IllegalStateException("Workflow failed");
-        doThrow(failure).when(workflowRunner).run(any(UUID.class), anyString());
+        doThrow(failure).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD));
 
         assertThatThrownBy(runDispatcher::dispatchNext).isSameAs(failure);
+    }
+
+    @Test
+    @DisplayName("AC-FLOW-1.6 dispatch passes a saved brownfield kind to the graph")
+    void dispatchesSavedBrownfieldKind() {
+        String requirement = "Add a task deadline";
+        createdId = runService.createRun(requirement, RunKind.BROWNFIELD).getId();
+
+        assertThat(runDispatcher.dispatchNext()).isTrue();
+
+        verify(workflowRunner).run(createdId, requirement, RunKind.BROWNFIELD);
+        assertThat(runService.getRun(createdId).getKind()).isEqualTo(RunKind.BROWNFIELD);
     }
 }

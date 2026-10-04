@@ -71,6 +71,17 @@ class RunPersistenceTest {
     }
 
     @Test
+    @DisplayName("AC-FLOW-1.6 a BROWNFIELD run is stored and read back as BROWNFIELD, and a default run as GREENFIELD")
+    void runKindIsStoredAndReadBack() {
+        Run brownfield = runRepository.saveAndFlush(new Run("Add a task deadline", RunKind.BROWNFIELD));
+        Run greenfield = runRepository.saveAndFlush(new Run("Build a task tracker"));
+        entityManager.clear();
+
+        assertThat(runRepository.findById(brownfield.getId()).orElseThrow().getKind()).isEqualTo(RunKind.BROWNFIELD);
+        assertThat(runRepository.findById(greenfield.getId()).orElseThrow().getKind()).isEqualTo(RunKind.GREENFIELD);
+    }
+
+    @Test
     @DisplayName("AC-RUN-6.1 a new run has status CREATED")
     void newRunHasStatusCreated() {
         Run reloaded = savedAndReloaded("Build a task tracker");

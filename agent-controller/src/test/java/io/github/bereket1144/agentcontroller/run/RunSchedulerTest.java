@@ -68,7 +68,7 @@ class RunSchedulerTest {
     @DisplayName("AC-EXEC-4.2, 4.3 polling starts a newly submitted run once")
     void scheduledPollingStartsNewRunOnlyOnce() throws InterruptedException {
         String requirement = "Build a task tracker";
-        when(workflowRunner.run(any(UUID.class), eq(requirement)))
+        when(workflowRunner.run(any(UUID.class), eq(requirement), eq(RunKind.GREENFIELD)))
                 .thenReturn(new AgentState(Map.<String, Object>of("receipt", "completed")));
         UUID createdId = createRun(requirement);
 
@@ -77,7 +77,7 @@ class RunSchedulerTest {
         // Trigger two later polls explicitly so the duplicate check does not depend on timing.
         runScheduler.poll();
         runScheduler.poll();
-        verify(workflowRunner, times(1)).run(createdId, requirement);
+        verify(workflowRunner, times(1)).run(createdId, requirement, RunKind.GREENFIELD);
     }
 
     @Test
@@ -85,7 +85,7 @@ class RunSchedulerTest {
     void pollDuringRunningWorkflowDoesNotStartRunAgain() throws InterruptedException {
         String requirement = "Build a task tracker";
         CountDownLatch workflowEntered = new CountDownLatch(1);
-        when(workflowRunner.run(any(UUID.class), eq(requirement))).thenAnswer(invocation -> {
+        when(workflowRunner.run(any(UUID.class), eq(requirement), eq(RunKind.GREENFIELD))).thenAnswer(invocation -> {
             workflowEntered.countDown();
             releaseWorkflow.await(5, TimeUnit.SECONDS);
             return new AgentState(Map.<String, Object>of("receipt", "completed"));
@@ -97,7 +97,7 @@ class RunSchedulerTest {
         // The scheduler thread is held by the workflow, so poll from the test thread: it must find nothing.
         runScheduler.poll();
         runScheduler.poll();
-        verify(workflowRunner, times(1)).run(runId, requirement);
+        verify(workflowRunner, times(1)).run(runId, requirement, RunKind.GREENFIELD);
 
         releaseWorkflow.countDown();
         awaitStatus(runId, RunStatus.SUCCEEDED);
@@ -108,9 +108,9 @@ class RunSchedulerTest {
     void failingPollDoesNotStopNextPoll() throws InterruptedException {
         String failingRequirement = "Build a failing tracker";
         String laterRequirement = "Build a later tracker";
-        when(workflowRunner.run(any(UUID.class), eq(failingRequirement)))
+        when(workflowRunner.run(any(UUID.class), eq(failingRequirement), eq(RunKind.GREENFIELD)))
                 .thenThrow(new IllegalStateException("workflow broke"));
-        when(workflowRunner.run(any(UUID.class), eq(laterRequirement)))
+        when(workflowRunner.run(any(UUID.class), eq(laterRequirement), eq(RunKind.GREENFIELD)))
                 .thenReturn(new AgentState(Map.<String, Object>of("receipt", "completed")));
         UUID failedId = createRun(failingRequirement);
         awaitStatus(failedId, RunStatus.FAILED);
@@ -119,7 +119,7 @@ class RunSchedulerTest {
         UUID laterId = createRun(laterRequirement);
         awaitStatus(laterId, RunStatus.SUCCEEDED);
 
-        verify(workflowRunner, times(1)).run(failedId, failingRequirement);
+        verify(workflowRunner, times(1)).run(failedId, failingRequirement, RunKind.GREENFIELD);
         assertThat(runService.getRun(failedId).getStatus()).isEqualTo(RunStatus.FAILED);
     }
 

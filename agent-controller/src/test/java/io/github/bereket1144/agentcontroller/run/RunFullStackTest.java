@@ -49,7 +49,7 @@ class RunFullStackTest {
     }
 
     @Test
-    @DisplayName("AC-RUN-1.2, 7.1, 7.2 a run created over HTTP ignores a client id, is located at /v1/runs/<id> and reads back with its state")
+    @DisplayName("AC-RUN-1.2, 7.1, 7.2, AC-FLOW-1.6 a run created over HTTP ignores a client id, is located at /v1/runs/<id> and reads back with its state")
     void createdRunIsLocatedAndReadBack() throws Exception {
         UUID supplied = UUID.randomUUID();
         Instant before = Instant.now().minusSeconds(5);
@@ -70,7 +70,9 @@ class RunFullStackTest {
                 .andExpect(jsonPath("$.requirement").value("Build a task tracker"))
                 .andExpect(jsonPath("$.status").value("CREATED"))
                 .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.kind").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
+        assertThat(runRepository.findById(createdId).orElseThrow().getKind()).isEqualTo(RunKind.GREENFIELD);
         Instant createdAt = Instant.parse(JsonPath.read(json, "$.createdAt"));
         Instant updatedAt = Instant.parse(JsonPath.read(json, "$.updatedAt"));
         assertThat(createdAt).isAfter(before).isBeforeOrEqualTo(updatedAt);

@@ -22,6 +22,8 @@ As the platform, I want a claimed run to execute one workflow node, so that a sa
 
 - AC-EXEC-1.1 Given a `RUNNING` run, the workflow executes one deterministic node using that run's ID and requirement.
 
+Note: the active workflow is now the SDLC graph of FLOW-1 (`sdlc-flow.md`), which supersedes this single-node topology. This story stays as a historical milestone and its criterion is not changed.
+
 ### EXEC-2 Dispatch one pending run
 
 Status: done

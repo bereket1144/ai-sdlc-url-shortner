@@ -34,6 +34,10 @@ public class Run {
     private String requirement;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private RunKind kind;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RunStatus status;
 
@@ -54,10 +58,18 @@ public class Run {
     private Long version;
 
     public Run(String requirement) {
+        this(requirement, RunKind.GREENFIELD);
+    }
+
+    public Run(String requirement, RunKind kind) {
         if (requirement == null || requirement.isBlank()) {
             throw new IllegalArgumentException("requirement must not be blank");
         }
+        if (kind == null) {
+            throw new IllegalArgumentException("kind must not be null");
+        }
         this.requirement = requirement;
+        this.kind = kind;
         this.status = RunStatus.CREATED;
     }
 
