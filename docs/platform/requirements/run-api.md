@@ -2,7 +2,7 @@
 
 ## Request
 
-The controller needs an HTTP API through which a requester starts a run from a written requirement and reads it back. Two behaviours already exist in code (creating a run and rejecting a bad request). The rest makes the API fit for production use: a versioned path, one error format, bounded input, a recorded run state, and a way to read a run back.
+The controller needs an HTTP API through which a requester starts a run from a written requirement and reads it back. It creates a run, refuses a bad request, and is fit for production use: a versioned path, one error format, bounded input, a recorded run state, and a way to read a run back.
 
 ## Ambiguities and assumptions
 
@@ -12,13 +12,12 @@ The controller needs an HTTP API through which a requester starts a run from a w
 - **Input limit:** a requirement may be at most 20,000 characters. This number is an assumption; changing it needs the user's approval.
 - **Run status has one value for now, `CREATED`.** More values are added by the stories that need them.
 - **Times are UTC instants.** The current time comes from an injectable clock, so tests can fix it.
-- RUN-1 and RUN-2 describe behaviour that was built before this file existed (steps 13 to 19 and the changes in the working tree on 2026-10-04). They are worded to match what the code does today.
 
 ## User stories and acceptance criteria
 
 ### RUN-1 Create a run
 
-Status: in progress
+Status: coded
 
 As a requester, I want to submit a written requirement and receive a run ID, so that the platform can start work on it.
 
@@ -27,13 +26,9 @@ As a requester, I want to submit a written requirement and receive a run ID, so 
 - AC-RUN-1.3 The run is saved in PostgreSQL: reading it back by ID returns the same requirement text.
 - AC-RUN-1.4 A requirement longer than 255 characters is saved and read back unchanged.
 
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written from the behaviour that exists.
-- 2026-10-04 code (Claude Code, direct): built in steps 13 to 19, plus the uncommitted `RunService`, `RunCreatedResponse` and controller changes.
-
 ### RUN-2 Reject an invalid create request
 
-Status: in progress
+Status: coded
 
 As a requester, I want a bad create request refused clearly, so that I never start a run that has no usable requirement.
 
@@ -43,13 +38,9 @@ As a requester, I want a bad create request refused clearly, so that I never sta
 - AC-RUN-2.4 No run is saved for any request refused under AC-RUN-2.1 to AC-RUN-2.3.
 - AC-RUN-2.5 Creating a run directly with a null or blank requirement fails with `IllegalArgumentException` and the message `requirement must not be blank`.
 
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written from the behaviour that exists.
-- 2026-10-04 code (Claude Code, direct): built in steps 14 to 17.
-
 ### RUN-3 Version the API
 
-Status: done
+Status: coded
 
 As an API client, I want the run endpoints under a version, so that the contract can change later without breaking me.
 
@@ -58,16 +49,9 @@ As an API client, I want the run endpoints under a version, so that the contract
 - AC-RUN-3.3 A request to a version that does not exist, such as `/v2/runs`, returns 404 and saves no run.
 - AC-RUN-3.4 The health endpoint stays at `/actuator/health` and is not versioned.
 
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written.
-- 2026-10-04 code (development-agent): mapped `RunController` to `/v1/runs`, moved its tests to that path, and added 404 tests (`RunControllerTest`) and a full-context health test (`HealthEndpointTest`).
-- 2026-10-04 qa (qa-agent): 41 tests run, 0 failed; line 19/19 (100%), branch 4/4 (100%); AC-RUN-3.1 to 3.4 covered (added `RunApiVersionTest`), gaps: RUN-1/RUN-2 not QA-verified, RUN-4 to RUN-7 not built, no coverage gate in the build; see `reports/coverage/`.
-- 2026-10-04 review (code-review-agent): no blocking finding, 2 should-fix and 8 notes; see row RUN-3 in `reports/review/index.md`.
-- 2026-10-04 code (Claude Code, direct): fixed review findings R3-4 (deleted a vacuous test) and R3-5 (`RunApiVersionTest` rolls back its rows); `./mvnw clean verify` passes with 40 tests and line 19/19, branch 4/4; the other findings are resolved in the review row.
-
 ### RUN-4 Return one error format
 
-Status: done
+Status: coded
 
 As an API client, I want every error in the same structure, so that I can handle failures in one place.
 
@@ -78,27 +62,14 @@ As an API client, I want every error in the same structure, so that I can handle
 - AC-RUN-4.5 An unexpected failure returns 500 in the same structure, with a generic `detail` that contains no stack trace, exception class, or exception message.
 - AC-RUN-4.6 Every error response above has the content type `application/problem+json`.
 
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written.
-- 2026-10-04 code (development-agent): added `ApiExceptionHandler` (problem details for 400, 404, 415 and a generic logged 500, with field errors) and `RunErrorFormatTest` in the `run` package.
-- 2026-10-04 qa (qa-agent): 67 tests run, 0 failed; line 38/38 (100%), branch 6/6 (100%); AC-RUN-4.1 to 4.6 covered (added full-context tests), gaps: one branch is only reachable by a direct call, no coverage gate, no mutation check; see `reports/coverage/`.
-- 2026-10-04 review (code-review-agent): no blocking finding, 3 should-fix and 7 notes; see row RUN-4 in `reports/review/index.md`.
-- 2026-10-04 code (development-agent): fixed review findings R4-1 (keep a type set on purpose), R4-2 (status-survival tests and catch-all note), R4-3 (Accept-header tests) and R4-9; Claude Code added a test for an explicit about:blank type; `./mvnw clean verify` passes with 79 tests, line 40/40, branch 12/12; coverage reports refreshed.
-
 ### RUN-5 Bound the size of a requirement
 
-Status: in progress
+Status: coded
 
 As the platform owner, I want input size limited, so that one request cannot exhaust memory, storage, or model budget.
 
 - AC-RUN-5.1 A requirement of exactly 20,000 characters is accepted with 201.
 - AC-RUN-5.2 A requirement of 20,001 characters returns 400 in the RUN-4 format, naming the field `requirement`, and saves no run.
-
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written.
-- 2026-10-04 code (development-agent): added `@CodePointLength` on `RunRequest` and `RequestSizeLimitFilter` (413 for a body over 256 KB, Content-Length or chunked) with tests `RunRequirementSizeTest`, `RunBodyLimitHttpTest` and `RequestSizeLimitFilterTest`.
-- 2026-10-04 qa (qa-agent): 108 tests run, 0 failed, 1 skipped; line 77/77 (100%), branch 24/24 (100%); AC-RUN-5.1 and 5.2 covered, AC-RUN-5.3 partly covered because a percent-encoded path (`/%76%31/runs`) skips the body limit (defect, test disabled); see `reports/coverage/`.
-- 2026-10-04 code (Claude Code, direct): removed `RequestSizeLimitFilter` and its tests at the user's request; AC-RUN-5.3 (256 KB body limit) dropped with the user's approval; the 20,000-character limit stays.
 
 ### RUN-6 Record the state of a run
 
@@ -114,9 +85,6 @@ As the platform, I want each run to record its status, when it was created, when
 - AC-RUN-6.6 A run saved before this change is still readable afterwards, with status `CREATED` and both times filled in.
 - AC-RUN-6.7 The database schema change is a new migration; the existing migration is not edited.
 
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written.
-
 ### RUN-7 Read a run back
 
 Status: open
@@ -130,9 +98,6 @@ Depends on RUN-3 (the path) and RUN-6 (the fields).
 - AC-RUN-7.3 The `Location` value returned by a create request, when requested, returns that same run.
 - AC-RUN-7.4 `GET /v1/runs/<id>` for an ID that does not exist returns 404 in the RUN-4 format.
 - AC-RUN-7.5 `GET /v1/runs/<id>` where `<id>` is not a UUID returns 400 in the RUN-4 format.
-
-Log:
-- 2026-10-04 requirement (Claude Code, direct): written.
 
 ## Out of scope
 
