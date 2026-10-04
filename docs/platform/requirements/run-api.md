@@ -11,7 +11,7 @@ The controller needs an HTTP API through which a requester starts a run from a w
 - **The error format is RFC 9457 problem details**, served as `application/problem+json`.
 - **Input limit:** a requirement may be at most 20,000 characters. This number is an assumption; changing it needs the user's approval.
 - **Run status has one value for now, `CREATED`.** More values are added by the stories that need them.
-- **Times are UTC instants.** The current time comes from an injectable clock, so tests can fix it.
+- **Times are UTC instants,** set by Hibernate when a run is saved. Tests check that a time falls between just before and just after the save.
 
 ## User stories and acceptance criteria
 
@@ -73,13 +73,13 @@ As the platform owner, I want input size limited, so that one request cannot exh
 
 ### RUN-6 Record the state of a run
 
-Status: open
+Status: coded
 
 As the platform, I want each run to record its status, when it was created, when it last changed, and its version, so that its progress can be told and two writers cannot overwrite each other unnoticed.
 
 - AC-RUN-6.1 A new run has status `CREATED`.
-- AC-RUN-6.2 `createdAt` is set once, when the run is first saved, to the clock's current UTC time, and never changes afterwards.
-- AC-RUN-6.3 `updatedAt` equals `createdAt` when the run is first saved, and moves forward to the clock's current time each time the run is changed.
+- AC-RUN-6.2 `createdAt` is set once, when the run is first saved, to the current UTC time, and never changes afterwards.
+- AC-RUN-6.3 `updatedAt` is set when the run is first saved and is never earlier than `createdAt`, and is set to the current time each time the run is changed.
 - AC-RUN-6.4 `version` is 0 when the run is first saved and increases by 1 each time the run is changed.
 - AC-RUN-6.5 Saving a change to a run that was based on an outdated version is rejected, and the stored run is unchanged.
 - AC-RUN-6.6 A run saved before this change is still readable afterwards, with status `CREATED` and both times filled in.
