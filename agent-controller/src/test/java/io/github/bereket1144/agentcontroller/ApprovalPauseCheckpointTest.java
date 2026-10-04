@@ -2,8 +2,6 @@ package io.github.bereket1144.agentcontroller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.bsc.langgraph4j.StateGraph.END;
-import static org.bsc.langgraph4j.StateGraph.START;
-import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -16,14 +14,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import org.bsc.langgraph4j.CompileConfig;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.RunnableConfig;
-import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.checkpoint.PostgresSaver;
-import org.bsc.langgraph4j.serializer.std.ObjectStreamStateSerializer;
 import org.bsc.langgraph4j.state.AgentState;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
@@ -46,7 +41,7 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 class ApprovalPauseCheckpointTest {
 
-    private static final String GATE = "approval-gate";
+    private static final String GATE = ApprovalGraph.GATE;
 
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(DockerImageName.parse("postgres:17"));
@@ -101,42 +96,12 @@ class ApprovalPauseCheckpointTest {
     }
 
     private CompiledGraph<AgentState> buildGraph(PostgresSaver saver) throws GraphStateException {
-        return new StateGraph<>(AgentState::new)
-                .addNode("draft", node_async(state -> {
-                    executed.add("draft");
-                    return Map.of("draft", "draft-v1");
-                }))
-                .addNode(GATE, node_async(state -> {
-                    if (!state.<Boolean>value("approved").orElse(false)) {
-                        throw new IllegalStateException("run reached the gate without an approval");
-                    }
-                    executed.add(GATE);
-                    return Map.of();
-                }))
-                .addNode("publish", node_async(state -> {
-                    executed.add("publish");
-                    return Map.of();
-                }))
-                .addEdge(START, "draft")
-                .addEdge("draft", GATE)
-                .addEdge(GATE, "publish")
-                .addEdge("publish", END)
-                .compile(CompileConfig.builder()
-                        .checkpointSaver(saver)
-                        .interruptBefore(GATE)
-                        .build());
+        return ApprovalGraph.build(saver, executed::add);
     }
 
     private static PostgresSaver newSaver() throws SQLException {
-        return PostgresSaver.builder()
-                .host(POSTGRES.getHost())
-                .port(POSTGRES.getMappedPort(5432))
-                .database(POSTGRES.getDatabaseName())
-                .user(POSTGRES.getUsername())
-                .password(POSTGRES.getPassword())
-                .stateSerializer(new ObjectStreamStateSerializer<>(AgentState::new))
-                .createTables(true)
-                .build();
+        return ApprovalGraph.saver(POSTGRES.getHost(), POSTGRES.getMappedPort(5432),
+                POSTGRES.getDatabaseName(), POSTGRES.getUsername(), POSTGRES.getPassword());
     }
 
     /** Reads the checkpoint rows straight from the tables, newest first, without going through the saver. */
