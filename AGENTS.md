@@ -4,20 +4,7 @@ Instructions for AI coding assistants working in this repository. This file is t
 
 Note on naming: "agents" in this file means the coding assistants helping to build the platform. The SDLC agents that the platform itself runs are described under "What this project is".
 
----
 
-# One step at a time (this rule comes before everything else)
-
-- **Do exactly one thing per turn:** the next step, and nothing after it.
-- **Then stop.** Say what was done in a few lines, name the single next step, and wait for the user.
-- **Never give the user more than one thing** to do, decide, review, or approve. If several things need a decision, ask about the first one only. Ask about the next after the answer.
-- **Never chain steps.** Do not continue to the next step because it seems obvious, small, or related.
-- **If a step turns out to hold more than one thing,** do the first, stop, and say what remains.
-- **This holds for direct work and for subagents alike.** One subagent per turn, given one step. When it returns, stop and report. If you are a subagent, do the one step you were given and return; do not start another.
-
-A step is one logical piece of work that fits in one short sentence without "and": build one class, write one test, fix one failure, change one setting, write one document.
-
----
 
 # Timeless constraints (not a checklist)
 
@@ -85,7 +72,7 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 - **No folders or abstractions ahead of need.** Create a package when the code that needs it is written.
 - **Tests with every change.** Write the tests alongside the code, not afterwards. Coverage is measured on every build and the target is 100%; any gap is named with its reason.
 - **Never push.** The human pushes.
-- **Commit each working piece.** Small commits that say what changed and why, made when the user says so.
+- **One step, one commit.** Each commit says what changed and why, starts with its area such as `feat(controller):` or `docs:`, and is made only after the user approves the step.
 - **Never commit `PLAN.md`** or copy text from it into committed files. If it exists locally it is a private long-form plan; read it for the destination, and build only what the current step needs.
 - **No employer, client, or recruiter names** anywhere in the repository.
 - **When a real decision is made,** record it as a short decision record under `docs/adr/`.
@@ -106,6 +93,7 @@ The same five roles exist at two levels: as the coding agents in `.claude/agents
 # Working mode
 
 - **By default, do the step yourself** in the main session. Do not use a subagent unless the user says to.
+- **When you work directly on code, you are the development agent.** Follow every rule in `.claude/agents/development-agent.md`, including its rules for error handling, logging, auditing, and commits.
 - **If the user says "use subagents",** hand the step to the agent in `.claude/agents/` whose role fits it.
 - **If the user names an agent,** use that agent for the step.
 
@@ -116,6 +104,15 @@ The same five roles exist at two levels: as the coding agents in `.claude/agents
 | `development-agent` | Code with error handling, logging, and auditing, and commits once the user approves |
 | `qa-agent` | Tests, `reports/coverage/unit-coverage.md`, `reports/coverage/functional-coverage.md`, `reports/coverage/jacoco.csv` |
 | `code-review-agent` | `reports/review/<name>.md` and a row in `reports/review/index.md` |
+
+For every step that changes code, build files, or configuration:
+
+1. Write the change together with its tests.
+2. Run `./mvnw verify` from `agent-controller/`. The build decides whether the step passes; do not call the `qa-agent` for this.
+3. If it fails, fix it. If it passes, show the user what changed and the coverage numbers, then stop.
+4. When the user approves, commit that step and tick it in `docs/steps.md`. One step, one commit. Never commit before approval.
+
+The `qa-agent` and the `code-review-agent` are run when the user asks: usually when a feature is finished, and before submission.
 
 - A document written after the code describes the code as it is. Do not present it as having been written first.
 - Before submission, every file in the repository must be covered by a review, and the coverage reports must be current.
