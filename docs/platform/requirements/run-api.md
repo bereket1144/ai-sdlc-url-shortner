@@ -87,7 +87,7 @@ As the platform, I want each run to record its status, when it was created, when
 
 ### RUN-7 Read a run back
 
-Status: open
+Status: coded
 
 As a requester, I want to read a run after creating it and be told where it lives, so that I can check on it without remembering anything but its ID.
 
@@ -95,7 +95,6 @@ Depends on RUN-3 (the path) and RUN-6 (the fields).
 
 - AC-RUN-7.1 The 201 response to a create request has a `Location` header holding the path of the new run, `/v1/runs/<id>`.
 - AC-RUN-7.2 `GET /v1/runs/<id>` for an existing run returns 200 with `id`, `requirement`, `status`, `createdAt`, `updatedAt` and `version`.
-- AC-RUN-7.3 The `Location` value returned by a create request, when requested, returns that same run.
 - AC-RUN-7.4 `GET /v1/runs/<id>` for an ID that does not exist returns 404 in the RUN-4 format.
 - AC-RUN-7.5 `GET /v1/runs/<id>` where `<id>` is not a UUID returns 400 in the RUN-4 format.
 

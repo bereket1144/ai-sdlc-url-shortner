@@ -60,3 +60,12 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 32. Replace the Clock and JPA auditing config with Hibernate's @CreationTimestamp and @UpdateTimestamp.
   Done when: `ClockConfig`, `JpaAuditingConfig` and `MutableClock` are deleted, `Run` uses the Hibernate annotations, AC-RUN-6.2 and 6.3 are reworded without the clock (user-approved), their tests check the time falls between just before and just after the save, and `./mvnw clean verify` passes.
   Result: `ClockConfig`, `JpaAuditingConfig` and `MutableClock` deleted; `Run` uses `@CreationTimestamp` and `@UpdateTimestamp`; AC-RUN-6.2 and 6.3 reworded without the clock. The first test run showed Hibernate sets the two timestamps separately (5 microseconds apart), so AC-RUN-6.3 no longer says `updatedAt` equals `createdAt` on first save; it says it is set and never earlier. `./mvnw clean verify` passes with 92 tests, line 43/43, branch 12/12. (Claude Code, direct)
+- [x] 33. Tell the requirements and development agents to prefer the simplest standard mechanism.
+  Done when: `requirements-agent.md` says criteria describe observable behaviour and never prescribe a mechanism, and `development-agent.md` says to use a framework annotation or built-in feature before adding a config class, bean or abstraction.
+  Result: `requirements-agent.md` now says criteria describe observable behaviour and never prescribe a mechanism; `development-agent.md` now says to use a framework annotation or property before a config class, bean or abstraction, and never to add infrastructure only to make a test exact. Not committed. (Claude Code, direct)
+- [x] 34. Rename the branch `feat/jpa-persistence` to `feat/run-api`.
+  Done when: the current branch is `feat/run-api` with the same commits, and `feat/jpa-persistence` no longer exists locally.
+  Result: the branch is `feat/run-api` (same commits); `feat/jpa-persistence` is gone; no remote is configured, so nothing was pushed or renamed elsewhere. (Claude Code, direct)
+- [x] 35. RUN-7 Read a run back.
+  Done when: story RUN-7 in docs/platform/requirements/run-api.md is coded: every acceptance criterion has a passing test (AC-RUN-7.3 was dropped with the user's approval).
+  Result: `POST /v1/runs` returns a `Location` header; `GET /v1/runs/{id}` returns the run (`RunResponse`), 404 for an unknown id and 400 for a non-UUID, both as problem+json; AC-RUN-7.1, 7.2, 7.4 and 7.5 each have a test; `./mvnw clean verify` passes with 98 tests, line 52/52, branch 12/12. QA and review were not run. (development-agent)
