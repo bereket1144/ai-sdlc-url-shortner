@@ -1,19 +1,23 @@
 package io.github.bereket1144.agentcontroller.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
 
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 import io.github.bereket1144.agentcontroller.workflow.DummySdlcNodes;
+import io.github.bereket1144.agentcontroller.workflow.NodeFailures;
 import io.github.bereket1144.agentcontroller.workflow.WorkflowRunner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +36,9 @@ class RunSdlcFlowTest {
 
     @Autowired
     private RunRepository runRepository;
+
+    @MockitoSpyBean
+    private DummySdlcNodes nodes;
 
     private UUID createdId;
 
@@ -52,6 +59,7 @@ class RunSdlcFlowTest {
         Run saved = runService.getRun(createdId);
         assertThat(saved.getKind()).isEqualTo(RunKind.GREENFIELD);
         assertThat(saved.getStatus()).isEqualTo(RunStatus.SUCCEEDED);
+        assertThat(impactAnalysisRuns()).isZero();
     }
 
     @Test
@@ -64,5 +72,25 @@ class RunSdlcFlowTest {
         Run saved = runService.getRun(createdId);
         assertThat(saved.getKind()).isEqualTo(RunKind.BROWNFIELD);
         assertThat(saved.getStatus()).isEqualTo(RunStatus.SUCCEEDED);
+        assertThat(impactAnalysisRuns()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("AC-EXEC-5.1, 5.2, AC-FLOW-1.5 a node of the real graph that throws leaves the stored run FAILED and the original failure reaches the caller")
+    void failingGraphNodeStoresRunAsFailed() {
+        createdId = runService.createRun("Build a task tracker").getId();
+        IllegalStateException failure = new IllegalStateException("QA broke");
+        NodeFailures.qaThrows(nodes, failure);
+
+        assertThatThrownBy(() -> runDispatcher.dispatchNext()).rootCause().isSameAs(failure);
+
+        assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.FAILED);
+    }
+
+    // The node methods are package-private, so the spy's recorded calls are counted by method name.
+    private long impactAnalysisRuns() {
+        return Mockito.mockingDetails(nodes).getInvocations().stream()
+                .filter(call -> call.getMethod().getName().equals("impactAnalysis"))
+                .count();
     }
 }

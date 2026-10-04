@@ -7,6 +7,7 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,10 +59,6 @@ public class WorkflowRunner {
                 .compile();
     }
 
-    public AgentState run(UUID runId, String requirement) {
-        return run(runId, requirement, RunKind.GREENFIELD);
-    }
-
     public AgentState run(UUID runId, String requirement, RunKind kind) {
         // Fail fast with a clear message; Map.of would fail with a bare NullPointerException.
         Objects.requireNonNull(runId, "runId must not be null");
@@ -77,7 +74,19 @@ public class WorkflowRunner {
             RunnableConfig config = RunnableConfig.builder()
                     .addParallelNodeExecutor("development", branchExecutor)
                     .build();
-            AgentState result = graph.invoke(input, config)
+            Optional<AgentState> finalState;
+            try {
+                finalState = graph.invoke(input, config);
+            } catch (RuntimeException | Error failure) {
+                // LangGraph4j fails fast on a failed branch but leaves its siblings running, and closing the
+                // executor would wait for them. Interrupt them so the failure is reported without that wait.
+                // This only helps branches that honour interruption (see docs/design-notes.md).
+                branchExecutor.shutdownNow();
+                log.warn("event=workflow_failed runId={} kind={} errorType={}",
+                        runId, kind, failure.getClass().getName());
+                throw failure;
+            }
+            AgentState result = finalState
                     .orElseThrow(() -> new IllegalStateException("Workflow returned no state"));
             log.info("event=workflow_executed runId={} kind={}", runId, kind);
             return result;

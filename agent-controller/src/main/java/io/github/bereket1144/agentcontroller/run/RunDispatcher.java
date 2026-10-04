@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 public class RunDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(RunDispatcher.class);
+    private static final int MAX_CAUSE_DEPTH = 20; // stops a loop in a cause chain
 
     private final RunService runService;
     private final WorkflowRunner workflowRunner;
@@ -43,7 +44,7 @@ public class RunDispatcher {
                         runId, recordingFailure.getClass().getName());
             }
             log.error("event=run_dispatch_failed runId={} errorType={}",
-                    runId, workflowFailure.getClass().getName());
+                    runId, rootCause(workflowFailure).getClass().getName());
             throw workflowFailure;
         }
         try {
@@ -56,5 +57,14 @@ public class RunDispatcher {
         }
         log.info("event=run_dispatch_succeeded runId={}", runId);
         return true;
+    }
+
+    /** The graph library wraps a node failure, so the useful class name is at the end of the cause chain. */
+    private static Throwable rootCause(Throwable failure) {
+        Throwable root = failure;
+        for (int depth = 0; root.getCause() != null && depth < MAX_CAUSE_DEPTH; depth++) {
+            root = root.getCause();
+        }
+        return root;
     }
 }

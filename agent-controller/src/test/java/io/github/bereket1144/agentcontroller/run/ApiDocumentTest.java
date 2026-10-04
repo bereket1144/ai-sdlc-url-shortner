@@ -65,6 +65,14 @@ class ApiDocumentTest {
     }
 
     @Test
+    @DisplayName("AC-FLOW-1.6 the create request body still has only the requirement property, so a caller cannot choose a kind")
+    void createRequestBodyHasNoKind() throws Exception {
+        mvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.components.schemas.RunRequest.properties.keys()",
+                        containsInAnyOrder("requirement")));
+    }
+
+    @Test
     @DisplayName("AC-SWAG-1.4 the success bodies list their fields and supported run states")
     void successBodiesAreDescribed() throws Exception {
         mvc.perform(get(DOCS))

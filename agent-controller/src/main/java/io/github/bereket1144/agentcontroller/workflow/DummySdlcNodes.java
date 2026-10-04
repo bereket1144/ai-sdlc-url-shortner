@@ -84,11 +84,13 @@ public class DummySdlcNodes {
     private static Map<String, Object> output(AgentState state, String node, Map<String, Object> update) {
         UUID runId = required(state, "runId");
         Map<String, String> visibleMarkers = new LinkedHashMap<>();
-        // Show only fixed dummy markers. The requirement and receipt can contain private user text.
+        // Log a role only when its value is exactly the fixed marker. The requirement, the receipt and any
+        // other text or non-String value under a role key can hold private data and are never logged.
         for (String key : ROLE_KEYS) {
-            state.<String>value(key).ifPresent(value -> visibleMarkers.put(key, value));
-            if (update.containsKey(key)) {
-                visibleMarkers.put(key, (String) update.get(key));
+            String marker = key + ":done";
+            Object value = update.containsKey(key) ? update.get(key) : state.<Object>value(key).orElse(null);
+            if (marker.equals(value)) {
+                visibleMarkers.put(key, marker);
             }
         }
         log.info("event=workflow_node_output runId={} node={} addedKeys={} markers={}",

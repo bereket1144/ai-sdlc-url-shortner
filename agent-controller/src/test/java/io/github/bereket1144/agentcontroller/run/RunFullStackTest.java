@@ -80,6 +80,18 @@ class RunFullStackTest {
     }
 
     @Test
+    @DisplayName("AC-FLOW-1.6 a kind sent in the create request is ignored: the run is created and stored as GREENFIELD")
+    void kindInTheRequestBodyIsIgnored() throws Exception {
+        MvcResult created = mvc.perform(post("/v1/runs").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requirement\":\"Build a task tracker\",\"kind\":\"BROWNFIELD\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        createdId = UUID.fromString(JsonPath.read(created.getResponse().getContentAsString(), "$.id"));
+
+        assertThat(runRepository.findById(createdId).orElseThrow().getKind()).isEqualTo(RunKind.GREENFIELD);
+    }
+
+    @Test
     @DisplayName("AC-RUN-7.4 reading an id that does not exist returns 404 problem+json with the service's own detail")
     void unknownIdReturnsProblem404() throws Exception {
         mvc.perform(get("/v1/runs/" + UUID.randomUUID()))
