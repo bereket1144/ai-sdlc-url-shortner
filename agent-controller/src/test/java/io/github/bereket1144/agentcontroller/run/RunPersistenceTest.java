@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 import jakarta.persistence.EntityManager;
@@ -20,6 +21,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.context.transaction.TestTransaction;
 
 // Flyway creates the real PostgreSQL schema; Hibernate only validates the mapping.
@@ -174,5 +176,25 @@ class RunPersistenceTest {
         String stored = jdbcTemplate.queryForObject("select requirement from runs where id = ?", String.class,
                 first.getId());
         assertThat(stored).isEqualTo("first writer");
+    }
+
+    @Test
+    @DisplayName("AC-RUN-7.2 the service reads a stored run back by id")
+    void serviceReadsStoredRun() {
+        Run saved = runRepository.saveAndFlush(new Run("Build a task tracker"));
+        entityManager.clear();
+
+        Run read = runService.getRun(saved.getId());
+
+        assertThat(read.getId()).isEqualTo(saved.getId());
+        assertThat(read.getRequirement()).isEqualTo("Build a task tracker");
+    }
+
+    @Test
+    @DisplayName("AC-RUN-7.4 the service fails with 404 for an id that does not exist")
+    void serviceFailsWithNotFoundForUnknownId() {
+        assertThatThrownBy(() -> runService.getRun(UUID.randomUUID()))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode().value()).isEqualTo(404));
     }
 }
