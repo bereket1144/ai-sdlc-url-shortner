@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import org.bsc.langgraph4j.CompileConfig;
 import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.StateGraph;
@@ -32,12 +33,15 @@ import org.testcontainers.utility.DockerImageName;
 
 /**
  * Runs the real LangGraph4j engine against a real PostgreSQL (the version Compose uses) with fake
- * tasks and no model calls. It checks the two properties the approval gate will rely on: the run
- * stops at the gate without running anything past it, and the paused state is in the database,
- * where something that never saw the run can read it back.
+ * tasks and no model calls. It checks what the approval gate will rely on: the run stops at the
+ * gate without running anything past it, the paused state is in the database where something that
+ * never saw the run can read it back, and a paused run is resumed by a new graph and saver.
+ *
+ * <p>"New" here means new objects in the same JVM. That shows the state lives in PostgreSQL and not
+ * in the graph or saver; it does not show recovery after a killed process.
  *
  * <p>The graph is {@code draft -> approval-gate -> publish}, paused before {@code approval-gate}.
- * Resuming after the approval is a separate step.
+ * The gate only passes when the saved state says {@code approved}.
  */
 @Testcontainers
 class ApprovalPauseCheckpointTest {
@@ -72,6 +76,30 @@ class ApprovalPauseCheckpointTest {
         assertThat(executed).as("reading the checkpoint ran nothing").containsExactly("draft");
     }
 
+    @Test
+    void aPausedRunResumesOnAFreshGraphAndSaverAndEachLaterTaskRunsOnce() throws Exception {
+        String runId = "run-" + UUID.randomUUID();
+        RunnableConfig config = RunnableConfig.builder().threadId(runId).build();
+
+        // Run 1: goes up to the gate and stops.
+        buildGraph(newSaver()).invoke(Map.of(), config);
+        assertThat(executed).containsExactly("draft");
+
+        // Run 2: a new graph and saver, in the same JVM, that share nothing with run 1 except PostgreSQL.
+        // The approval is saved into the run's state, then the run is resumed from that checkpoint.
+        CompiledGraph<AgentState> freshGraph = buildGraph(newSaver());
+        RunnableConfig approved = freshGraph.updateState(config, Map.of("approved", true));
+        AgentState finalState = freshGraph.invoke(GraphInput.resume(), approved).orElseThrow();
+
+        // The task before the gate did not run again; the gate and the task after it ran once each.
+        assertThat(executed).containsExactly("draft", GATE, "publish");
+        assertThat(finalState.<String>value("draft")).contains("draft-v1");
+        assertThat(finalState.<Boolean>value("approved")).contains(true);
+
+        // The run is finished, and yet another new graph and saver see it as finished, not paused.
+        assertThat(buildGraph(newSaver()).getState(config).next()).isEqualTo(END);
+    }
+
     private CompiledGraph<AgentState> buildGraph(PostgresSaver saver) throws GraphStateException {
         return new StateGraph<>(AgentState::new)
                 .addNode("draft", node_async(state -> {
@@ -79,6 +107,9 @@ class ApprovalPauseCheckpointTest {
                     return Map.of("draft", "draft-v1");
                 }))
                 .addNode(GATE, node_async(state -> {
+                    if (!state.<Boolean>value("approved").orElse(false)) {
+                        throw new IllegalStateException("run reached the gate without an approval");
+                    }
                     executed.add(GATE);
                     return Map.of();
                 }))
