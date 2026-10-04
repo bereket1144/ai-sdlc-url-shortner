@@ -72,6 +72,21 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 36. QA and review of the run API.
   Done when: QA and code review of docs/platform/requirements/run-api.md are done and reported, their findings are fixed or answered, and every story in the file is marked done.
   Result: QA and review ran together on the whole feature (no blocking finding; 31 of 32 criteria covered, the other is shown by an unchanged V1). The dev agent applied the chosen fixes: duplicate tests deleted (98 to 63 tests), one full-stack read-back test added, a fixed message for a bad id, a pinned PostgreSQL image and `open-in-view=false`. `./mvnw clean verify` passes with 63 tests, line 56/56, branch 12/12. The memory limit became BUG-1 (open, for later); declined or deferred findings are answered in `reports/review/index.md`. RUN-1 to RUN-7 are marked done. (qa-agent, code-review-agent, development-agent)
-- [x] 37. Claim the next pending run.
+- [x] 37. SWAG-1 Publish the API document.
+  Done when: story SWAG-1 in docs/platform/requirements/swagger.md is coded: every acceptance criterion has a passing test.
+  Result: springdoc-openapi 3.1.1 (`springdoc-openapi-starter-webmvc-api`, API document only, no UI) serves `/v3/api-docs` with only the two run endpoints and their request and success schemas; AC-SWAG-1.1 to 1.4 each have a test in `ApiDocumentTest`; `./mvnw clean verify` passes with 67 tests, line 56/56, branch 12/12. (development-agent)
+- [x] 38. SWAG-2 Document the responses and errors.
+  Done when: story SWAG-2 in docs/platform/requirements/swagger.md is coded: every acceptance criterion has a passing test.
+  Result: `@Operation` and `@ApiResponse` annotations on `RunController` document 201 (with the `Location` header), 400 and 415 for create and 200, 400 and 404 for read; every error uses `application/problem+json` with the `ProblemDetail` schema (type, title, status, detail); AC-SWAG-2.1 to 2.3 each have a test in `ApiDocumentTest`; `./mvnw clean verify` passes with 70 tests, line 56/56, branch 12/12. (development-agent)
+- [x] 39. SWAG-3 Browse the API in a page.
+  Done when: story SWAG-3 in docs/platform/requirements/swagger.md is coded: every acceptance criterion has a passing test.
+  Result: the dependency is now `springdoc-openapi-starter-webmvc-ui` (no config class, no properties); `/swagger-ui/index.html` serves the page and `/v3/api-docs/swagger-config` points it at `/v3/api-docs`; AC-SWAG-3.1 to 3.3 each have a test in `SwaggerUiTest` (3.3 also still holds for the existing RUN-4 unknown-path tests); `./mvnw clean verify` passes with 73 tests, line 56/56, branch 12/12. (development-agent)
+- [x] 40. QA and review of the Swagger documentation.
+  Done when: QA and code review of docs/platform/requirements/swagger.md are done and reported, their findings are fixed or answered, and every story in the file is marked done.
+  Result: QA and review found no blocking issue (2 should-fix). Fixed: the 200 response of the read endpoint now declares `application/json` (RS-1); error responses now describe the real flat problem JSON with its optional `errors` list through a small `ProblemBody` record (RS-2); a test now shows the page loads the document configuration (RS-5, partly). The other findings are deferred or accepted with a reason in `reports/review/index.md`. `./mvnw clean verify` passes with 73 tests, line 56/57, branch 12/12. SWAG-1 to SWAG-3 are marked done. (qa-agent, code-review-agent, development-agent)
+- [x] 41. JaCoCo coverage check at 95%.
+  Done when: `./mvnw verify` fails if line or branch coverage of the bundle drops below 95%, and passes now.
+  Result: a JaCoCo `check` execution (bundle level, line and branch coverage ratio at least 0.95, no exclusions) runs in `verify`; the duplicated JaCoCo plugin block in `pom.xml` was merged into one. Shown once by setting the minimum to 1.01 (the check failed with "Coverage checks have not been met") and reverting; `./mvnw clean verify` passes with 73 tests, line 56/57, branch 12/12. (development-agent)
+- [x] 42. Claim the next pending run.
   Done when: a CREATED run can be claimed in a short transaction, its RUNNING status persists, an empty queue returns no ID, and a persistence test passes.
   Result: added the lookup index, guarded status transition, locked JPA query, claim service method and persistence test. The user reports the tests passing. (direct)
