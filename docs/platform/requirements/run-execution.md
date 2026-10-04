@@ -65,3 +65,9 @@ As a user, I want a workflow that throws to be reported as failed, so that I can
 
 - Model calls, additional workflow stages, and approval gates.
 - Automatic retry, checkpoint resume, and recovery after process termination.
+
+## Deferred
+
+Not a story yet, and it does not block this file being marked done. It is written down here so it is not forgotten (review finding R-3 in `reports/review/index.md`).
+
+- **Recover a run stranded by a process crash.** If the controller dies after a run is claimed (`RUNNING`) and before it reaches `SUCCEEDED` or `FAILED`, nothing picks the run up again and it stays `RUNNING` forever. EXEC-5 only covers a workflow exception that reaches the dispatcher. A recovery story needs a rule for finding stale `RUNNING` runs (for example a heartbeat or a time limit) and a decision between failing them and returning them to the queue. Deferred by the user on 2026-10-04 until the platform has more than the first graph node, because the answer depends on how a run is checkpointed and resumed.
