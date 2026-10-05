@@ -83,6 +83,21 @@ public class RunController {
         return details.artifact(id, kind, version).content();
     }
 
+    @Operation(summary = "Read the lineage of a run", description = "Returns the run's artifacts with what each was "
+            + "built from, the commit and the verification outcome when they exist, and the files of the latest "
+            + "development artifact with the criteria it says they serve. Built only from stored artifacts.")
+    @ApiResponse(responseCode = "200", description = "The lineage; its lists are empty before the run has stored an artifact.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LineageResponse.class)))
+    @ApiResponse(responseCode = "400", description = "The id is not a UUID.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "404", description = "No run has this id.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @GetMapping("/{id}/lineage")
+    public LineageResponse getLineage(@PathVariable UUID id) {
+        runService.getRun(id);
+        return details.lineage(id);
+    }
+
     @Operation(summary = "Read requirements clarification", description = "Returns the clarification questions, "
             + "with their artifact version, OPEN or ANSWERED status, and saved answers.")
     @ApiResponse(responseCode = "200", description = "The questions, or an empty array before any exist.")

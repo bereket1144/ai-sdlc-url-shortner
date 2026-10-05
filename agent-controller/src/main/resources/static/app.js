@@ -1,4 +1,5 @@
-// Reviewer page: starts a run, answers its questions and shows each stage's result as it appears.
+// Reviewer page: starts a run, answers its questions and shows each stage's result as it appears, with the lineage
+// of what was built from what. A second view (#metrics) shows the platform's reliability numbers.
 // It only calls the controller's own HTTP operations.
 //
 // AC-UI-1.9: text that comes from a run or a model is put on the page only through createElement, textContent and
@@ -287,7 +288,10 @@
     failure: $('failure'), failureCode: $('failure-code'), failureMessage: $('failure-message'),
     stages: $('stages'), questionsCard: $('questions-card'), questionsForm: $('questions-form'),
     questionList: $('question-list'), questionsMessage: $('questions-message'), questionsSend: $('questions-send'),
-    sections: $('sections'),
+    sections: $('sections'), lineageCard: $('lineage-card'), lineageMessage: $('lineage-message'),
+    lineageBody: $('lineage-body'),
+    metrics: $('metrics'), metricsBody: $('metrics-body'), metricsMessage: $('metrics-message'),
+    metricsRefresh: $('metrics-refresh'),
     building: el('p', { class: 'building', role: 'status', hidden: '' }, 'Building',
       el('span', { class: 'dots', 'aria-hidden': 'true' },
         el('span', { text: '.' }), el('span', { text: '.' }), el('span', { text: '.' }))),
@@ -308,16 +312,25 @@
   // followed (the person started or opened another run while it was on its way).
   let current = null;
 
+  // Counts the readings of the metrics, so that the answer to an older one is dropped.
+  let metricsLoads = 0;
+
   function showStart() {
     document.title = 'Run viewer';
     setMessage(ui.startMessage, '');
     ui.start.hidden = false;
     ui.run.hidden = true;
+    ui.metrics.hidden = true;
     renderRecent();
   }
 
   function route() {
     stop();
+    metricsLoads += 1; // a metrics answer still on its way belongs to a view that has been left
+    if (location.hash.slice(1) === 'metrics') {
+      showMetrics();
+      return;
+    }
     const id = new URLSearchParams(location.hash.slice(1)).get('run');
     if (id === null) {
       showStart();
@@ -340,10 +353,11 @@
     resetRunView();
     current = {
       id, timer: null, busy: false, shown: new Map(), stageItems: new Map(), answered: new Set(),
-      questionKey: null, questionFields: [], verificationSignature: null
+      questionKey: null, questionFields: [], verificationSignature: null, lineageSignature: null
     };
     setText(ui.runId, id);
     ui.start.hidden = true;
+    ui.metrics.hidden = true;
     ui.run.hidden = false;
     document.title = `Run ${id.slice(0, 8)} - Run viewer`;
     poll(current);
@@ -358,6 +372,9 @@
     ui.questionsCard.hidden = true;
     ui.failure.hidden = true;
     ui.notice.hidden = true;
+    ui.lineageCard.hidden = true;
+    ui.lineageBody.replaceChildren();
+    setMessage(ui.lineageMessage, '');
     setMessage(ui.questionsMessage, '');
     setText(ui.runStatus, '');
     for (const card of cards) {
@@ -388,6 +405,7 @@
       showRun(session, run);
       await syncQuestions(session, run);
       await syncArtifacts(session, run);
+      await syncLineage(session, run);
       more = !END_STATUSES.includes(run.status);
     } catch (error) {
       if (session !== current) {
@@ -469,14 +487,17 @@
     const result = run.verification;
     ui.verification.append(
       el('div', { class: 'stat' },
-        el('span', { class: 'stat-label', text: 'Build and tests' }),
-        el('span', { class: 'pill', 'data-tone': OUTCOME_TONES[result.outcome] || 'neutral',
-          text: humanize(asText(result.outcome).toLowerCase()) })),
+        el('span', { class: 'stat-label', text: 'Build and tests' }), outcomePill(result.outcome)),
       stat('Tests run', result.testsRun), stat('Passed', result.testsPassed), stat('Failed', result.testsFailed));
     if (run.commit) {
       ui.verification.append(el('div', { class: 'commit' },
         el('span', { class: 'stat-label', text: 'Commit' }), el('code', { class: 'mono', text: run.commit })));
     }
+  }
+
+  function outcomePill(outcome) {
+    return el('span', { class: 'pill', 'data-tone': OUTCOME_TONES[outcome] || 'neutral',
+      text: humanize(asText(outcome).toLowerCase()) });
   }
 
   function stat(label, value) {
@@ -538,6 +559,99 @@
     card.body.replaceChildren(rendered);
     card.badge.textContent = `version ${version}`;
     card.root.hidden = false;
+  }
+
+  // ---- Lineage (AC-AGT-47.3) -----------------------------------------------------------------------------------
+
+  // The lineage is read again only when an artifact, the commit or the build outcome has changed.
+  async function syncLineage(session, run) {
+    const artifacts = run.artifacts || [];
+    const signature = JSON.stringify([artifacts.map(artifact => [artifact.kind, artifact.version]),
+      run.commit || null, run.verification ? run.verification.outcome : null]);
+    if (artifacts.length === 0 || signature === session.lineageSignature) {
+      return;
+    }
+    let lineage;
+    try {
+      lineage = await api(`/v1/runs/${session.id}/lineage`);
+    } catch (error) {
+      if (session !== current) {
+        return;
+      }
+      // The signature stays unmarked, so a run that is still going tries again on the next poll.
+      console.error(`event=lineage_failed runId=${session.id} status=${error.status}`, error);
+      setMessage(ui.lineageMessage, `Could not read the lineage (${error.message}).`);
+      ui.lineageCard.hidden = false;
+      return;
+    }
+    if (session !== current) {
+      return;
+    }
+    session.lineageSignature = signature;
+    setMessage(ui.lineageMessage, '');
+    ui.lineageBody.replaceChildren(lineageView(lineage));
+    ui.lineageCard.hidden = false;
+  }
+
+  function kindTitle(kind) {
+    const section = SECTIONS.find(candidate => candidate.kind === kind);
+    return section ? section.title : humanize(kind);
+  }
+
+  // "Design v2": which stored version is meant.
+  function versionLabel(ref) {
+    return el('span', { class: 'id', text: `${kindTitle(ref.kind)} v${ref.version}` });
+  }
+
+  function fingerprintText(fingerprint) {
+    return el('span', { class: 'mono muted', text: asText(fingerprint).slice(0, 12) });
+  }
+
+  function lineageView(lineage) {
+    const artifacts = el('ul', { class: 'tree' });
+    for (const artifact of lineage.artifacts) {
+      artifacts.append(lineageArtifact(artifact));
+    }
+    const fragment = document.createDocumentFragment();
+    fragment.append(el('div', { class: 'field' },
+      el('h3', { text: 'Artifacts and what they were built from' }), artifacts));
+    if (lineage.commit) {
+      const commit = el('div', { class: 'commit' }, el('code', { class: 'mono', text: lineage.commit }));
+      if (lineage.verificationOutcome) {
+        commit.append(outcomePill(lineage.verificationOutcome));
+      }
+      fragment.append(el('div', { class: 'field' }, el('h3', { text: 'Commit and build' }), commit));
+    }
+    fragment.append(el('div', { class: 'field' },
+      el('h3', { text: 'Files and the criteria they serve' }), lineageFiles(lineage.files)));
+    return fragment;
+  }
+
+  function lineageArtifact(artifact) {
+    const builtFrom = artifact.builtFrom.length === 0
+      ? el('span', { class: 'muted', text: 'no earlier artifact' })
+      : el('ul', { class: 'tree' }, ...artifact.builtFrom.map(ref =>
+        el('li', {}, versionLabel(ref), fingerprintText(ref.fingerprint))));
+    return el('li', { class: 'group' },
+      el('ul', { class: 'tree' },
+        el('li', {}, versionLabel(artifact), fingerprintText(artifact.fingerprint)),
+        el('li', {}, el('span', { class: 'key', text: 'Summary' }),
+          el('span', { class: 'text', text: asText(artifact.summary) })),
+        el('li', {}, el('span', { class: 'key', text: 'Built from' }), builtFrom)));
+  }
+
+  function lineageFiles(files) {
+    if (files.length === 0) {
+      return el('p', { class: 'muted', text: 'No files yet' });
+    }
+    const list = el('ul', { class: 'tree' });
+    for (const file of files) {
+      const criteria = file.criteria.length === 0
+        ? [el('span', { class: 'muted', text: 'no criteria listed' })]
+        : file.criteria.map(id => el('span', { class: 'id', text: asText(id) }));
+      list.append(el('li', {}, el('span', { class: 'mono', text: asText(file.path) }), ' serves ', ...criteria));
+    }
+    return list;
   }
 
   // ---- Questions (AC-UI-1.4) ---------------------------------------------------------------------------------
@@ -624,6 +738,104 @@
       ui.questionsSend.disabled = false;
     }
   });
+
+  // ---- Metrics (AC-AGT-46.4) -------------------------------------------------------------------------------------
+
+  const NO_DATA = 'No data';
+
+  function percent(rate) {
+    return isEmpty(rate) ? NO_DATA : `${(rate * 100).toFixed(1)}%`;
+  }
+
+  function seconds(value) {
+    return isEmpty(value) ? NO_DATA : `${value.toFixed(1)} s`;
+  }
+
+  function decimal(value) {
+    return isEmpty(value) ? NO_DATA : value.toFixed(2);
+  }
+
+  function countWithShare(item) {
+    return isEmpty(item.share) ? String(item.count) : `${item.count} (${percent(item.share)})`;
+  }
+
+  // A row of figures; each figure is [label, value].
+  function metricGroup(...figures) {
+    return el('div', { class: 'metric-group' }, ...figures.map(([label, value]) => stat(label, value)));
+  }
+
+  function metricCard(title, ...children) {
+    return el('section', { class: 'card' }, el('h2', { text: title }), ...children);
+  }
+
+  function notMeasured(label, item) {
+    const value = isEmpty(item.value) ? 'Not measured' : String(item.value);
+    return el('li', {}, el('span', { class: 'key', text: label }),
+      el('span', { class: 'text', text: `${value}. ${asText(item.note)}` }));
+  }
+
+  function metricsCards(metrics) {
+    const failures = Object.entries(metrics.runs.byFailureReason).filter(([, count]) => count > 0);
+    const failureList = failures.length === 0
+      ? el('p', { class: 'muted', text: 'None' })
+      : el('ul', { class: 'tree' }, ...failures.map(([reason, count]) =>
+        el('li', {}, el('span', { class: 'key', text: humanize(reason.toLowerCase()) }), String(count))));
+    const latency = metrics.latencySeconds;
+    const calls = metrics.modelCalls;
+    return [
+      metricCard('Runs',
+        metricGroup(['Runs', metrics.runs.total], ['Success rate', percent(metrics.runs.successRate)]),
+        metricGroup(...Object.entries(metrics.runs.byStatus)
+          .map(([status, count]) => [humanize(status.toLowerCase()), count])),
+        el('h3', { text: 'Failures by reason' }), failureList),
+      metricCard('Latency of finished runs',
+        metricGroup(['Average', seconds(latency.average)], ['Median', seconds(latency.median)],
+          ['95th percentile', seconds(latency.p95)]),
+        el('p', { class: 'muted', text: asText(latency.note) })),
+      metricCard('Model calls',
+        metricGroup(['Calls', calls.total], ['Calls per run', decimal(calls.perRunAverage)],
+          ['Retries', countWithShare(calls.retries)], ['Repairs', countWithShare(calls.repairs)],
+          ['Fallbacks', countWithShare(calls.fallbacks)]),
+        metricGroup(['Prompt tokens', calls.reportedPromptTokens], ['Answer tokens', calls.reportedAnswerTokens])),
+      metricCard('Build and test results',
+        metricGroup(['Pass rate', percent(metrics.verification.passRate)], ['Results', metrics.verification.total])),
+      metricCard('Not measured yet',
+        el('ul', { class: 'tree' }, notMeasured('Mean time to recovery', metrics.meanTimeToRecovery),
+          notMeasured('Rollback frequency', metrics.rollbackFrequency)))
+    ];
+  }
+
+  function showMetrics() {
+    document.title = 'Metrics - Run viewer';
+    ui.start.hidden = true;
+    ui.run.hidden = true;
+    ui.metrics.hidden = false;
+    loadMetrics();
+  }
+
+  // The numbers are read when the view opens and when the person presses Refresh, never on a timer.
+  async function loadMetrics() {
+    const load = ++metricsLoads;
+    ui.metricsRefresh.disabled = true;
+    try {
+      const metrics = await api('/v1/metrics');
+      if (load !== metricsLoads) {
+        return;
+      }
+      setMessage(ui.metricsMessage, '');
+      ui.metricsBody.replaceChildren(...metricsCards(metrics));
+    } catch (error) {
+      if (load !== metricsLoads) {
+        return;
+      }
+      console.error(`event=metrics_failed status=${error.status}`, error);
+      setMessage(ui.metricsMessage, error.message);
+    } finally {
+      ui.metricsRefresh.disabled = false;
+    }
+  }
+
+  ui.metricsRefresh.addEventListener('click', loadMetrics);
 
   // ---- Starting a run (AC-UI-1.2) ----------------------------------------------------------------------------
 

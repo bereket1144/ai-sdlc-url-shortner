@@ -16,7 +16,10 @@
   <header class="topbar">
     <div class="wrap topbar-inner">
       <a class="brand" href="#"><span class="brand-mark" aria-hidden="true"></span><span>Run viewer</span></a>
-      <span class="brand-tag">From requirement to code</span>
+      <nav class="topbar-nav">
+        <span class="brand-tag">From requirement to code</span>
+        <a class="btn small" href="#metrics">Metrics</a>
+      </nav>
     </div>
   </header>
 
@@ -77,6 +80,27 @@
       </section>
 
       <div id="sections" class="sections"></div>
+
+      <section id="lineage-card" class="card" hidden>
+        <h2>Lineage</h2>
+        <p class="muted">Why this output exists: what each artifact was built from, and which criteria each file
+          serves.</p>
+        <p id="lineage-message" class="message" role="alert" hidden></p>
+        <div id="lineage-body"></div>
+      </section>
+    </section>
+
+    <section id="metrics" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h1>Reliability metrics</h1>
+          <button id="metrics-refresh" class="btn small" type="button">Refresh</button>
+        </div>
+        <p class="muted">Numbers worked out from the runs, model calls and verification results stored so far. They
+          are read when this page opens and when you press Refresh.</p>
+        <p id="metrics-message" class="message" role="alert" hidden></p>
+      </div>
+      <div id="metrics-body" class="sections"></div>
     </section>
   </main>
 </body>

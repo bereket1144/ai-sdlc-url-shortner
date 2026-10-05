@@ -117,13 +117,15 @@ body {
 
 .brand-tag { color: var(--muted); font-size: 0.9rem; }
 
+.topbar-nav { display: flex; align-items: center; gap: 1rem; }
+
 main {
   display: grid;
   gap: 1rem;
   padding-block: 1.5rem 4rem;
 }
 
-#run, .sections { display: grid; gap: 1rem; }
+#run, #metrics, .sections { display: grid; gap: 1rem; }
 
 /* ---- Cards ----------------------------------------------------------------------------------------------- */
 
@@ -388,7 +390,8 @@ pre.code code { font: inherit; }
 .dots span:nth-child(2) { animation-delay: 0.2s; }
 .dots span:nth-child(3) { animation-delay: 0.4s; }
 
-.verification {
+/* The panel of figures: the build result, and each group of numbers on the metrics page. */
+.verification, .metric-group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

@@ -43,11 +43,12 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14 the document lists the run endpoints and the artifact endpoint, and no other path")
+    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1 the document lists the run endpoints, the artifact, lineage and metrics endpoints, and no other path")
     void documentListsOnlyTheRunEndpoints() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}",
-                        "/v1/runs/{id}/artifacts/{kind}/{version}", "/v1/runs/{id}/questions", "/v1/runs/{id}/replies")))
+                        "/v1/runs/{id}/artifacts/{kind}/{version}", "/v1/runs/{id}/questions", "/v1/runs/{id}/replies",
+                        "/v1/runs/{id}/lineage", "/v1/metrics")))
                 .andExpect(jsonPath("$.paths['/v1/runs'].keys()", containsInAnyOrder("post")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].keys()", containsInAnyOrder("get")));
     }
