@@ -40,6 +40,14 @@ public class StageProgress {
         jdbc.update("delete from run_stage where run_id = ?", runId);
     }
 
+    /**
+     * Sets one stage back to not started, so that a run resumed at the earliest stage that is not finished starts at it.
+     * Public because a reviewer's rejection, which is decided in the run package, sets the rejected stage back.
+     */
+    public void reopen(UUID runId, String stage) {
+        jdbc.update("delete from run_stage where run_id = ? and stage = ?", runId, stage);
+    }
+
     /** The state of every stage that has one: RUNNING, FINISHED or FAILED. A stage that is absent has not started. */
     public Map<String, String> forRun(UUID runId) {
         Map<String, String> states = new HashMap<>();

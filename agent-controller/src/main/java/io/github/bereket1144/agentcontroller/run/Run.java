@@ -54,7 +54,8 @@ public class Run {
     @Column(nullable = false)
     private int attempt = 1;
 
-    // Where the latest attempt starts: a stage name, or START for the beginning. Null until the run is retried.
+    // Where the latest attempt starts: a stage name, or START for the beginning. Null until the run is retried or is
+    // queued again after a reviewer's decision.
     @Column(length = 32)
     private String resumedFrom;
 
@@ -125,6 +126,40 @@ public class Run {
             throw new IllegalStateException("Only a waiting run can resume");
         }
         status = RunStatus.CREATED;
+    }
+
+    /**
+     * Queues a waiting run again after a reviewer's decision, to be attempted from {@code startsAt}: a stage name, as in
+     * {@link #retry}. The run has not failed, so the attempt number is not used up.
+     *
+     * @throws IllegalStateException when the run is not waiting for input
+     */
+    public void resumeAt(String startsAt) {
+        if (startsAt == null || startsAt.isBlank()) {
+            throw new IllegalArgumentException("startsAt must not be blank");
+        }
+        if (status != RunStatus.WAITING_FOR_INPUT) {
+            throw new IllegalStateException("Only a waiting run can resume");
+        }
+        this.resumedFrom = startsAt;
+        this.status = RunStatus.CREATED;
+    }
+
+    /**
+     * Ends a waiting run as FAILED, for a reviewer's decision that closes it. {@link #fail} stays for a RUNNING run only
+     * (AC-EXEC-5.3); a run that waits is not running, so its end is a transition of its own.
+     *
+     * @throws IllegalStateException when the run is not waiting for input
+     */
+    public void failWhileWaiting(RunFailureReason reason) {
+        if (reason == null) {
+            throw new IllegalArgumentException("failure reason must not be null");
+        }
+        if (status != RunStatus.WAITING_FOR_INPUT) {
+            throw new IllegalStateException("Only a waiting run can end while it waits");
+        }
+        this.failureReason = reason;
+        this.status = RunStatus.FAILED;
     }
 
     public void fail() {

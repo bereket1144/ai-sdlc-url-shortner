@@ -149,4 +149,28 @@ class RunTest {
         assertThat(failed.getAttempt()).isEqualTo(1);
         assertThat(failed.getResumedFrom()).isNull();
     }
+
+    @Test
+    @DisplayName("AC-AGT-15.3 a decision acts only on a waiting run: a RUNNING run cannot be queued or ended by it, and "
+            + "a waiting run still cannot be failed through fail() (AC-EXEC-5.3)")
+    void aDecisionActsOnlyOnAWaitingRun() {
+        Run run = new Run("Build a task tracker");
+        run.start();
+
+        assertThatThrownBy(() -> run.resumeAt("planning")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> run.failWhileWaiting(RunFailureReason.REJECTED))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(run.getStatus()).isEqualTo(RunStatus.RUNNING);
+
+        run.waitForInput();
+        assertThatThrownBy(run::fail).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> run.resumeAt(" ")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> run.failWhileWaiting(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(run.getStatus()).isEqualTo(RunStatus.WAITING_FOR_INPUT);
+
+        run.resumeAt("planning");
+        assertThat(run.getStatus()).isEqualTo(RunStatus.CREATED);
+        assertThat(run.getResumedFrom()).isEqualTo("planning");
+        assertThat(run.getAttempt()).isEqualTo(1);
+    }
 }

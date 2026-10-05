@@ -99,6 +99,22 @@ public class AgentStageNode {
     }
 
     /**
+     * What is added to the task when a reviewer rejected earlier results of this stage: every comment so far, the oldest
+     * first, so that the agent revises its result and does not repeat what was rejected. Empty when there is no comment.
+     */
+    static String reviewerFeedback(List<String> comments) {
+        if (comments.isEmpty()) {
+            return "";
+        }
+        StringBuilder text = new StringBuilder("A reviewer rejected your earlier result. Revise it so that it addresses "
+                + "every reviewer comment below; the last comment is the most recent.");
+        for (int number = 1; number <= comments.size(); number++) {
+            text.append("\nReviewer comment ").append(number).append(": ").append(comments.get(number - 1));
+        }
+        return text.toString();
+    }
+
+    /**
      * An attempt that comes after a check failed: the feedback is added to the task text and the extra inputs to the
      * prompt, next to what the role reads anyway. An empty feedback and no extra inputs is the plain attempt.
      */

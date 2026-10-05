@@ -44,6 +44,9 @@ class RunReadTest {
     @MockitoBean
     private RunRetry retries;
 
+    @MockitoBean
+    private ApprovalService approvals;
+
     @Autowired
     private MockMvc mvc;
 

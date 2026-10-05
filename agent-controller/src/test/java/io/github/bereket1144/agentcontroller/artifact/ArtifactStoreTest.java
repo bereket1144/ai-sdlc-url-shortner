@@ -147,12 +147,12 @@ class ArtifactStoreTest {
     }
 
     @Test
-    @DisplayName("AC-AGT-11.2 the store offers store, find and forRun, and no operation that changes or deletes")
-    void theStoreOffersOnlyStoreFindAndForRun() {
+    @DisplayName("AC-AGT-11.2 the store offers store and three reads (find, forRun, latest), and no operation that changes or deletes")
+    void theStoreOffersOnlyStoreAndReads() {
         assertThat(Arrays.stream(ArtifactStore.class.getDeclaredMethods())
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
                 .map(Method::getName))
-                .containsExactlyInAnyOrder("store", "find", "forRun");
+                .containsExactlyInAnyOrder("store", "find", "forRun", "latest");
     }
 
     @Test

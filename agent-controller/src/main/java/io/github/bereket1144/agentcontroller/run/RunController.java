@@ -32,14 +32,16 @@ public class RunController {
     private final RunDetails details;
     private final ClarificationService clarification;
     private final RunRetry retries;
+    private final ApprovalService approvals;
 
     public RunController(RunService runService, RunCreation creation, RunDetails details,
-                         ClarificationService clarification, RunRetry retries) {
+                         ClarificationService clarification, RunRetry retries, ApprovalService approvals) {
         this.runService = runService;
         this.creation = creation;
         this.details = details;
         this.clarification = clarification;
         this.retries = retries;
+        this.approvals = approvals;
     }
 
     // The method returns a ResponseEntity, so the library cannot see the 201 status or the body type on its own.
@@ -77,8 +79,10 @@ public class RunController {
     @GetMapping("/{id}")
     public RunResponse getRun(@PathVariable UUID id) {
         Run run = runService.getRun(id);
+        // A waiting run waits either for answers or for a decision; each lookup finds nothing for the other.
+        boolean waiting = run.getStatus() == RunStatus.WAITING_FOR_INPUT;
         return RunResponse.from(run, details.stages(id), details.artifacts(id), details.verification(id),
-                run.getStatus() == RunStatus.WAITING_FOR_INPUT ? clarification.awaiting(id) : null);
+                waiting ? clarification.awaiting(id) : null, waiting ? approvals.pending(id) : null);
     }
 
     @Operation(summary = "Read an artifact",
@@ -136,6 +140,30 @@ public class RunController {
                 .body(new ReplyAccepted(id, "Answers submitted."));
     }
 
+    @Operation(summary = "Approve or reject the result of a stage", description = "Decides about the result that a run "
+            + "waits for: the approval field of the run says which. APPROVE queues the run, and it continues at the next "
+            + "stage with the approved version. REJECT, which needs a comment, queues the same stage to run again with "
+            + "the comment given to the agent; its next result waits for a decision again. After "
+            + "agent.approval.max-rejections rejections of one stage (3 unless set) the run ends FAILED with the reason "
+            + "REJECTED. Each version has one decision. A refused request changes nothing.")
+    @ApiResponse(responseCode = "202", description = "The decision is stored and the run is queued, or ended.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = DecisionAccepted.class)))
+    @ApiResponse(responseCode = "400", description = "The body is missing or invalid: no decision or an unknown one, "
+            + "a blank approver or one over 100 characters, a comment over 5,000 characters, or no comment for REJECT.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "404", description = "No run has this id.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "409", description = "The run does not wait for a decision, or the version has "
+            + "been decided already.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @PostMapping("/{id}/decisions")
+    public ResponseEntity<DecisionAccepted> decide(@PathVariable UUID id,
+                                                   @Valid @RequestBody ApprovalService.DecisionRequest request) {
+        approvals.decide(id, request);
+        return ResponseEntity.accepted().location(URI.create(RUNS_PATH + "/" + id))
+                .body(new DecisionAccepted(id, "Decision recorded."));
+    }
+
     @Operation(summary = "Retry a failed run", description = "Queues a FAILED run again. The first retry resumes at the "
             + "earliest stage that is not finished, with the stages before it left as they are; a later retry starts "
             + "from the beginning and reuses the stored clarification answers. A run has at most "
@@ -158,6 +186,8 @@ public class RunController {
     }
 
     public record ReplyAccepted(UUID runId, String message) { }
+
+    public record DecisionAccepted(UUID runId, String message) { }
 
     public record RetryAccepted(UUID id, int attempt) { }
 }

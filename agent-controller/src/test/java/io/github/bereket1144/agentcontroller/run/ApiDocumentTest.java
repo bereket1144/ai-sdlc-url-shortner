@@ -44,12 +44,12 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1, AC-AGT-66.6 the document lists the run endpoints, the artifact, lineage, retry and metrics endpoints, and no other path")
+    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1, AC-AGT-66.6, AC-AGT-15.8 the document lists the run endpoints, the artifact, lineage, retry, decisions and metrics endpoints, and no other path")
     void documentListsOnlyTheRunEndpoints() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}",
                         "/v1/runs/{id}/artifacts/{kind}/{version}", "/v1/runs/{id}/questions", "/v1/runs/{id}/replies",
-                        "/v1/runs/{id}/lineage", "/v1/runs/{id}/retry", "/v1/metrics")))
+                        "/v1/runs/{id}/lineage", "/v1/runs/{id}/retry", "/v1/runs/{id}/decisions", "/v1/metrics")))
                 .andExpect(jsonPath("$.paths['/v1/runs'].keys()", containsInAnyOrder("post")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].keys()", containsInAnyOrder("get")));
     }
@@ -82,7 +82,7 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.4, AC-AGT-50.4 the success bodies list their fields, the run kind and the base run, and the supported run states")
+    @DisplayName("AC-SWAG-1.4, AC-AGT-50.4, AC-AGT-15.8 the success bodies list their fields, the run kind, the base run and the approval, and the supported run states")
     void successBodiesAreDescribed() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/v1/runs'].post.responses['201'].content['application/json'].schema.$ref")
@@ -94,7 +94,7 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
                         "id", "requirement", "kind", "baseRunId", "status", "createdAt", "updatedAt", "version",
                         "attempt", "resumedFrom", "failureReason", "stages", "artifacts", "commit", "verification",
-                        "awaiting")))
+                        "awaiting", "approval")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.kind.enum",
                         containsInAnyOrder("GREENFIELD", "BROWNFIELD")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.baseRunId.format").value("uuid"))
@@ -131,6 +131,37 @@ class ApiDocumentTest {
                         containsInAnyOrder("id", "attempt")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.attempt.description").isNotEmpty())
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.resumedFrom.description").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("AC-AGT-15.8 the decisions operation is documented with its body, its 202, 400, 404 and 409 responses, "
+            + "the approval field with its five properties, and the failure code REJECTED")
+    void decisionsAreDocumented() throws Exception {
+        String decide = "$.paths['/v1/runs/{id}/decisions'].post";
+        String body = "$.components.schemas.DecisionRequest";
+        mvc.perform(get(DOCS))
+                .andExpect(jsonPath(decide + ".summary").isNotEmpty())
+                .andExpect(jsonPath(decide + ".responses.keys()", containsInAnyOrder("202", "400", "404", "409")))
+                .andExpect(jsonPath(decide + ".requestBody.content['application/json'].schema.$ref")
+                        .value("#/components/schemas/DecisionRequest"))
+                .andExpect(jsonPath(decide + ".responses['202'].content['application/json'].schema.$ref")
+                        .value("#/components/schemas/DecisionAccepted"))
+                .andExpect(jsonPath(decide + ".responses['409'].content['application/problem+json'].schema.$ref")
+                        .value("#/components/schemas/Problem"))
+                .andExpect(jsonPath(body + ".properties.keys()", containsInAnyOrder("decision", "approver", "comment")))
+                .andExpect(jsonPath(body + ".properties.decision.enum", containsInAnyOrder("APPROVE", "REJECT")))
+                .andExpect(jsonPath(body + ".required", hasItem("decision")))
+                .andExpect(jsonPath(body + ".required", hasItem("approver")))
+                .andExpect(jsonPath(body + ".required", not(hasItem("comment"))))
+                .andExpect(jsonPath(body + ".properties.approver.maxLength").value(100))
+                .andExpect(jsonPath(body + ".properties.comment.maxLength").value(5000))
+                .andExpect(jsonPath("$.components.schemas.DecisionAccepted.properties.keys()",
+                        containsInAnyOrder("runId", "message")))
+                .andExpect(jsonPath("$.components.schemas.RunResponse.properties.approval.$ref")
+                        .value("#/components/schemas/Approval"))
+                .andExpect(jsonPath("$.components.schemas.Approval.properties.keys()",
+                        containsInAnyOrder("kind", "version", "fingerprint", "summary", "rejectionsLeft")))
+                .andExpect(jsonPath("$.components.schemas.RunFailure.properties.code.enum", hasItem("REJECTED")));
     }
 
     @Test
