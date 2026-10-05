@@ -2,12 +2,14 @@ package io.github.bereket1144.agentcontroller.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog.InputKind;
@@ -15,12 +17,14 @@ import io.github.bereket1144.agentcontroller.model.ModelClient.FailureReason;
 import io.github.bereket1144.agentcontroller.model.ModelClient.FinishReason;
 import io.github.bereket1144.agentcontroller.model.ModelClient.ModelCallException;
 import io.github.bereket1144.agentcontroller.model.ModelClient.ModelResult;
+import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 class StructuredAnswerServiceTest {
 
+    private static final UUID RUN_ID = UUID.fromString("00000000-0000-0000-0000-000000000005");
     private static final String VALID = """
             {"stories":[{"id":"S-1"}],"openQuestions":[],"assumptions":[]}
             """;
@@ -44,7 +48,7 @@ class StructuredAnswerServiceTest {
         model.addResult(answer(VALID, FinishReason.COMPLETE));
 
         StructuredAnswerService.AcceptedAnswer accepted = service(model, 2).call(
-                "requirements", profile, "Write stories", inputs());
+                RUN_ID, "requirements", "Write stories", inputs());
 
         assertThat(accepted.repairAttempts()).isZero();
         assertThat(accepted.value().get("stories").get(0).get("id").asString()).isEqualTo("S-1");
@@ -59,7 +63,7 @@ class StructuredAnswerServiceTest {
         model.addResult(answer(VALID, FinishReason.COMPLETE));
 
         StructuredAnswerService.AcceptedAnswer accepted = service(model, 2).call(
-                "requirements", profile, "Write stories", inputs());
+                RUN_ID, "requirements", "Write stories", inputs());
 
         assertThat(accepted.repairAttempts()).isEqualTo(1);
         assertThat(model.calls()).hasSize(2);
@@ -77,7 +81,7 @@ class StructuredAnswerServiceTest {
         model.addResult(answer(VALID, FinishReason.COMPLETE));
 
         StructuredAnswerService.AcceptedAnswer accepted = service(model, 2).call(
-                "requirements", profile, "Write stories", inputs());
+                RUN_ID, "requirements", "Write stories", inputs());
 
         assertThat(accepted.repairAttempts()).isEqualTo(1);
         assertThat(model.calls().get(1).userText()).contains(
@@ -95,7 +99,7 @@ class StructuredAnswerServiceTest {
                 """, FinishReason.COMPLETE));
         model.addResult(answer("{}", FinishReason.COMPLETE));
 
-        assertThatThrownBy(() -> service(model, 2).call("requirements", profile, "Write stories", inputs()))
+        assertThatThrownBy(() -> service(model, 2).call(RUN_ID, "requirements", "Write stories", inputs()))
                 .isInstanceOfSatisfying(StructuredAnswerService.OutputInvalidException.class, failure -> {
                     assertThat(failure.code()).isEqualTo("OUTPUT_INVALID");
                     assertThat(failure.repairAttempts()).isEqualTo(2);
@@ -118,7 +122,7 @@ class StructuredAnswerServiceTest {
         ScriptedModelClient model = new ScriptedModelClient();
         model.addResult(answer(INVALID, FinishReason.COMPLETE));
 
-        assertThatThrownBy(() -> service(model, 0).call("requirements", profile, "Write stories", inputs()))
+        assertThatThrownBy(() -> service(model, 0).call(RUN_ID, "requirements", "Write stories", inputs()))
                 .isInstanceOf(StructuredAnswerService.OutputInvalidException.class);
         assertThat(model.calls()).hasSize(1);
     }
@@ -129,10 +133,15 @@ class StructuredAnswerServiceTest {
         ScriptedModelClient model = new ScriptedModelClient();
         ModelCallException outage = new ModelCallException(FailureReason.UNREACHABLE, profile.name());
         model.addFailure(outage);
+        model.addFailure(outage);
+        model.addFailure(outage);
 
-        assertThatThrownBy(() -> service(model, 2).call("requirements", profile, "Write stories", inputs()))
-                .isSameAs(outage);
-        assertThat(model.calls()).hasSize(1);
+        assertThatThrownBy(() -> service(model, 2).call(RUN_ID, "requirements", "Write stories", inputs()))
+                .isInstanceOfSatisfying(StructuredAnswerService.ModelUnavailableException.class, failure -> {
+                    assertThat(failure.code()).isEqualTo("MODEL_UNAVAILABLE");
+                    assertThat(failure.lastReason()).isEqualTo(FailureReason.UNREACHABLE);
+                });
+        assertThat(model.calls()).hasSize(3);
     }
 
     @Test
@@ -148,7 +157,8 @@ class StructuredAnswerServiceTest {
                 "local", null, Map.of(), 10));
         PromptBuilder prompts = new PromptBuilder(profiles, roles, 3);
         OutputValidator validator = new OutputValidator(roles, List.of(new RequirementsStoryIdsCheck()));
-        return new StructuredAnswerService(model, prompts, validator, repairs);
+        return new StructuredAnswerService(model, profiles, prompts, validator,
+                mock(ModelCallRecords.class), mock(ModelCallBudget.class), repairs, Duration.ZERO);
     }
 
     private static List<PromptBuilder.PromptInput> inputs() {

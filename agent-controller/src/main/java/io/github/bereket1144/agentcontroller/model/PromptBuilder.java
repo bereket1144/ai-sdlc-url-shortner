@@ -158,6 +158,11 @@ public class PromptBuilder {
         return ((long) system.length() + user.length() + charactersPerToken - 1) / charactersPerToken;
     }
 
+    long estimateAnswerTokens(String answer) {
+        Objects.requireNonNull(answer, "answer must not be null");
+        return ((long) answer.length() + charactersPerToken - 1) / charactersPerToken;
+    }
+
     private static void logBuilt(String role, ModelProfile profile, long estimated, long capacity, int reductions) {
         log.info("event=prompt_built role={} profile={} estimatedTokens={} capacityTokens={} reductions={}",
                 role, profile.name(), estimated, capacity, reductions);
