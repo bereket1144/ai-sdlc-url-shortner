@@ -303,6 +303,22 @@ As a reviewer, I want to retry a failed run, first from the stage that failed an
 - AC-AGT-66.5 The run's call budget and the stage retries of AGT-65 apply in every attempt. The attempt cap is checked by plain code.
 - AC-AGT-66.6 The API document lists the operation and the new fields, and the reviewer page shows a Retry button on a FAILED run.
 
+### AGT-67 Work on a branch of this repository
+
+Status: open
+
+Depends on: AGT-20, AGT-50, AGT-21.
+
+As a reviewer, I want each run's generated product and the agents' commits to be real commits of this repository, so that one repository holds the controller, the product and both sets of history, and a merge puts the product next to the controller.
+
+- AC-AGT-67.1 A run's workspace is a git worktree of the platform repository (`workspace.repository`, the repository's path, required when the development agent is on), created with `git worktree add` on a new branch `run/<run-id>` cut from `workspace.base-ref` (default `HEAD`), in the folder `<workspace.base>/<run-id>`, with a sparse checkout of the product folder (`workspace.product-folder`, default `apps/url-shortener`) and `runs/<run-id>/` only. There is no `git init` and no clone. Creating the workspace again for the same run reuses it.
+- AC-AGT-67.2 The agents' files keep flat relative paths (`app.py`, `tests/test_x.py`); the controller writes them under the product folder. The path rules are unchanged (nothing under `.git`, no `..`, no absolute path, no link, bounded size, no clash). The workspace-file reader and the existing-files input show paths relative to the product folder.
+- AC-AGT-67.3 Every commit is made in the worktree on the run's branch: one commit per change set by the author `development`, and the document export by `controller`. The export writes the README and `docs/` under the product folder, and also the run's evidence under `runs/<run-id>/`: the latest version of each artifact as a JSON file and the run's lineage as JSON, in the same commit.
+- AC-AGT-67.4 The sandbox build is given the product folder's files only and runs its command from that folder's root, as before.
+- AC-AGT-67.5 A run never changes the platform repository's checked-out branch, its index or its working files: a test shows `HEAD` and `git status` of the platform checkout unchanged after a run, and two runs side by side get two worktrees. The controller never merges, pushes or deletes a branch.
+- AC-AGT-67.6 A change run (BROWNFIELD) is cut from the base run's branch `run/<baseRunId>` instead of `workspace.base-ref`, so its history extends the base's, and the base's branch is unchanged. When the base's branch does not exist the run fails with the reason UNEXPECTED and nothing is written. The `baseRunId` validation of AGT-50 is unchanged.
+- AC-AGT-67.7 The documentation says how a reviewer reads and takes the work: `git log --graph run/<run-id>`, merging with `git merge --no-ff run/<run-id>`, and pushing the branches. AGENTS.md decisions 2, 4 and 5 and ADR 0006 describe the arrangement (a new decision record supersedes ADR 0006), and `scripts/deliver.sh` is kept only for runs made before this change.
+
 ### AGT-62 Run the whole pipeline once, from Postman, on a real model
 
 Status: open
