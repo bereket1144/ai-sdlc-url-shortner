@@ -302,6 +302,14 @@ The record of the work done in this repository, one entry per step, in the order
 - [ ] 106. UI-1 Follow a run in one page.
   Done when: story UI-1 in docs/platform/requirements/reviewer-ui.md is coded: every criterion has a passing test or, for the page's own behaviour in a browser, is named as checked by hand.
   Criterion update (user decision, 2026-10-05): a front end moves from "not planned" to a small reviewer page of plain HTML, CSS and JavaScript. (main agent, direct)
-- [ ] 107. AGT-21 Write the run's documents as files in its repository.
+- [x] 107. AGT-21 Write the run's documents as files in its repository.
   Done when: story AGT-21 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test.
   Criterion update (user decision, 2026-10-05): AGT-21 is narrowed to the README, the documents under docs/ and the diagram files, written after the documentation, QA and review stages join, instead of files under runs/<run-id>/<kind>/. (main agent, direct)
+  Result: `MarkdownRenderer` and `RunDocuments` (package `document`) write `README.md`, `docs/requirements.md`, `docs/design.md`, `docs/plan.md`, `docs/qa.md`, `docs/review.md` and `docs/diagrams/<n>.mmd` from the latest artifacts after the `collect` join, in one commit by `controller` that is not repeated for the same versions; `RunWorkspace.commitIfChanged` makes the commit; a run that failed earlier writes nothing; tested in `MarkdownRendererTest`, `RunDocumentsTest` and the scripted end-to-end test; `./mvnw clean verify` passes with 436 tests (4 skipped). (development-agent)
+- [ ] 108. AGT-46 and AGT-47 Metrics report and lineage, shown in the page.
+  Done when: stories AGT-46 and AGT-47 in docs/platform/requirements/agent-pipeline.md are coded: every criterion has a passing test or, for the page, is named as checked by hand.
+  Criterion update (user decision, 2026-10-05): AGT-46 computes its numbers from stored runs, model calls and verification results instead of audit events, and AGT-47 is narrowed to a lineage read operation over stored artifacts; both are shown in the reviewer page. (main agent, direct)
+- [ ] 109. QA and review of the agent pipeline stories coded since AGT-6.
+  Done when: QA and code review of the coded stories AGT-6 to AGT-12, AGT-16, AGT-21, AGT-61 to AGT-64 and UI-1 are reported, each finding has a row with its resolution in reports/review/index.md, and the coverage gaps are named; nothing is fixed in this step.
+- [ ] 110. Record the key decisions and refresh the architecture overview.
+  Done when: docs/adr/ holds a short decision record for each of the thin skeleton first, the sandbox container, a git repository per run, question and answer clarification, light tests with the coverage gate, and the OpenAI-style model client; docs/platform/architecture.md matches the system as built.

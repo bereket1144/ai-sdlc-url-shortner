@@ -498,7 +498,7 @@ As the platform, I want every run to work in its own copy of the repository on i
 
 ### AGT-21 Write the run's documents as files in its repository
 
-Status: open
+Status: coded
 
 Depends on: AGT-20.
 
@@ -760,25 +760,26 @@ As a reviewer, I want every action of a run recorded in an append-only trail, so
 
 Status: open
 
-Depends on: AGT-44.
+Depends on: none. The numbers come from data the platform already stores (runs, model calls, verification results).
 
-As the platform owner, I want reliability numbers computed from the trail, so that I can see how often runs succeed, retry, fall back, stop and recover, and how long they take.
+As the platform owner, I want reliability numbers computed from what the platform stores, so that I can see how often runs succeed, retry, fall back and fail, and how long they take.
 
-- AC-AGT-46.1 From the audit events, plain code computes per run and across runs: the success rate; the retry frequency by stage; the stop and rollback frequency; the fallback frequency; the mean time to recovery (from a failed step to a healthy one); and the end-to-end latency, with the time spent waiting for people shown separately.
-- AC-AGT-46.2 A metrics report is written into the run's folder.
-- AC-AGT-46.3 The numbers come only from events. Adding or removing events in a test changes them as defined, and each definition is written in the report.
+- AC-AGT-46.1 `GET /v1/metrics` returns, computed by plain code from the stored runs, model calls and verification results: the number of runs and the count per status; the success rate (SUCCEEDED over finished runs); the count per failure reason; the end-to-end latency of finished runs (average, median and 95th percentile, in seconds, with the time spent waiting for people included and said so); the number of model calls in total and per run on average; the number of retries, repairs and fallbacks and each one's share of all model calls; the sum of the reported prompt and answer tokens; and the verification pass rate (PASSED over all stored results). Mean time to recovery and the rollback frequency are present with the value null and a short text saying the platform has no recovery or rollback yet.
+- AC-AGT-46.2 With no runs every count is 0 and every rate or latency is null; the operation never fails because there is no data.
+- AC-AGT-46.3 The response holds numbers and fixed labels only: no requirement, question, answer, model text or run id.
+- AC-AGT-46.4 The reviewer page shows these numbers in a small metrics section.
 
 ### AGT-47 Trace any change back to its requirement
 
 Status: open
 
-Depends on: AGT-11, AGT-15, AGT-23.
+Depends on: AGT-11.
 
-As a reviewer, I want to ask why a file exists and be told the task, the decision, the criterion, the requirement and the approvals behind it, so that every change can be justified.
+As a reviewer, I want to ask why a run's output exists and be told which artifacts it was built from and which files serve which criteria, so that every change can be justified.
 
-- AC-AGT-47.1 For a file or a commit of the candidate, a lineage operation returns: the task that produced it, the design components and decisions behind that task, the acceptance criteria it serves, the requirement story they came from, and who approved each of those artifacts and when.
-- AC-AGT-47.2 The answer is built only from stored ids, artifact lineage and decisions.
-- AC-AGT-47.3 A file that no task of the run produced is reported as not produced by this run.
+- AC-AGT-47.1 `GET /v1/runs/{id}/lineage` returns the run's artifacts (kind, version, fingerprint and summary), for each artifact the artifacts it was built from (kind, version and fingerprint, from its stored `consumed` references), the commit id and the verification outcome when they exist, and the files of the development artifact, each with the criterion ids that the development agent says it serves (`affectedCriteria`).
+- AC-AGT-47.2 The answer is built only from stored artifacts and their consumed references. An unknown run is a 404 in the RUN-4 format. A run with no artifacts yet returns empty lists.
+- AC-AGT-47.3 The reviewer page shows, for each artifact, what it was built from, and the files with their criteria.
 
 ### AGT-48 Know who approves
 
