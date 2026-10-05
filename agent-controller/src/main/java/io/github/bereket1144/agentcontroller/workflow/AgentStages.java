@@ -53,7 +53,9 @@ public class AgentStages {
             return new AgentStageNode(role, roles, stageInputs, answers, artifacts);
         }
         return new AgentStageNode(role, roles, stageInputs, answers, artifacts, runId -> AgentStageNode.TASK
-                + " Write every file under " + ChangeSet.PRODUCT_FOLDER + " or under runs/" + runId + "/.");
+                + " Write every file under " + ChangeSet.PRODUCT_FOLDER + " or under runs/" + runId + "/."
+                + " The content of each file must be the complete file, ready to run: no placeholders, no ellipses and"
+                + " no comments such as \"rest of the code\". Include the tests as files in the same change set.");
     }
 
     /** The agent node of each role that is switched on, by role id; empty when none is. */

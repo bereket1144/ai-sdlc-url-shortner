@@ -21,6 +21,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param temperature        the sampling temperature; 0 asks for the most repeatable answer
  * @param apiKey             the key of a hosted model, or null for a local one; read from the environment only
  * @param apiStyle           the kind of API the model server speaks, or null to infer it from the key
+ * @param reasoning          false asks an OpenAI-style server not to spend tokens on hidden reasoning; null sends
+ *                           nothing and leaves the model's default
  */
 public record ModelProfile(
         String name,
@@ -33,7 +35,8 @@ public record ModelProfile(
         @DefaultValue("2") int retryLimit,
         @DefaultValue("0") double temperature,
         String apiKey,
-        ApiStyle apiStyle) {
+        ApiStyle apiStyle,
+        Boolean reasoning) {
 
     /** The protocol a model server speaks: Ollama's chat API, Anthropic's messages API or an OpenAI-style chat API. */
     public enum ApiStyle { OLLAMA, ANTHROPIC, OPENAI }
@@ -48,7 +51,15 @@ public record ModelProfile(
                         Duration callTimeout, int maxConcurrentCalls, int retryLimit, double temperature,
                         String apiKey) {
         this(name, model, baseAddress, contextWindow, answerLimit, callTimeout, maxConcurrentCalls, retryLimit,
-                temperature, apiKey, null);
+                temperature, apiKey, null, null);
+    }
+
+    /** A profile that names a style and leaves the reasoning setting alone. */
+    public ModelProfile(String name, String model, URI baseAddress, int contextWindow, int answerLimit,
+                        Duration callTimeout, int maxConcurrentCalls, int retryLimit, double temperature,
+                        String apiKey, ApiStyle apiStyle) {
+        this(name, model, baseAddress, contextWindow, answerLimit, callTimeout, maxConcurrentCalls, retryLimit,
+                temperature, apiKey, apiStyle, null);
     }
 
     /** The named style, or when none is named: a profile with a key is Anthropic, one without is Ollama. */
@@ -62,7 +73,7 @@ public record ModelProfile(
     /** Binding cannot know the map key, so {@link ModelProperties} copies each profile with its key as the name. */
     ModelProfile named(String profileName) {
         return new ModelProfile(profileName, model, baseAddress, contextWindow, answerLimit, callTimeout,
-                maxConcurrentCalls, retryLimit, temperature, apiKey, apiStyle);
+                maxConcurrentCalls, retryLimit, temperature, apiKey, apiStyle, reasoning);
     }
 
     /** The key is left out on purpose: this text can end up in a log or an error message. */

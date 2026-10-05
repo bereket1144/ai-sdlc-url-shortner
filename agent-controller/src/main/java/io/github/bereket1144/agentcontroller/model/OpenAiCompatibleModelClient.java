@@ -68,12 +68,16 @@ public class OpenAiCompatibleModelClient implements ModelClient {
         int answerChars = 0;
         try {
             RestClient client = clients.computeIfAbsent(profile.name(), ignored -> OllamaModelClient.clientFor(profile));
-            Map<String, Object> request = Map.of(
+            Map<String, Object> request = new java.util.LinkedHashMap<>(Map.of(
                     "model", profile.model(),
                     "max_tokens", profile.answerLimit(),
                     "temperature", profile.temperature(),
                     "messages", List.of(Map.of("role", "system", "content", systemText),
-                            Map.of("role", "user", "content", userText)));
+                            Map.of("role", "user", "content", userText))));
+            if (profile.reasoning() != null) {
+                // OpenRouter's switch for hidden reasoning; false keeps the answer limit for the answer itself.
+                request.put("reasoning", Map.of("enabled", profile.reasoning()));
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> response = client.post().uri("/chat/completions")
                     .header("Authorization", "Bearer " + profile.apiKey())

@@ -60,6 +60,25 @@ class OpenAiCompatibleModelClientTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-63.2 a profile that sets reasoning to false sends it, and one that sets nothing sends no reasoning field")
+    void sendsTheReasoningSettingOnlyWhenSet() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>();
+        try (Stub stub = new Stub(exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, "{\"choices\":[{\"message\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}");
+        })) {
+            ModelProfile plain = profile(stub.address());
+            client(plain).call("requirements", plain, "system", "user");
+            assertThat(body.get()).doesNotContain("reasoning");
+
+            ModelProfile noReasoning = new ModelProfile("router", "router-model", stub.address().resolve("/api/v1"),
+                    200000, 1024, Duration.ofSeconds(2), 1, 2, 0.0, KEY, ApiStyle.OPENAI, false);
+            client(noReasoning).call("requirements", noReasoning, "system", "user");
+            assertThat(body.get()).contains("\"reasoning\":{\"enabled\":false}");
+        }
+    }
+
+    @Test
     @DisplayName("AC-AGT-63.3, 63.4 length is an answer limit, a leading think block is removed, and an empty answer is unreadable")
     void readsOtherFinishReasonsAndStripsThinking() throws Exception {
         AtomicReference<String> reply = new AtomicReference<>();
