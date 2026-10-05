@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <!-- The page loads nothing from outside and runs only its own script (AC-UI-1.1, AC-UI-1.9). -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Run viewer</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#"><span class="brand-mark" aria-hidden="true"></span><span>Run viewer</span></a>
+      <span class="brand-tag">From requirement to code</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="start" class="card">
+      <h1>Start a run</h1>
+      <p class="muted">Describe what you want built. The agents take it through requirements, design, planning,
+        code, QA, review and documentation. Follow each stage here, and answer the agents' questions when they ask.</p>
+      <form id="start-form">
+        <label for="requirement">Requirement</label>
+        <textarea id="requirement" name="requirement" rows="7" required
+                  placeholder="Describe what should be built, in a few sentences."></textarea>
+        <div class="row">
+          <button id="start-button" class="btn primary" type="submit">Start run</button>
+          <p id="start-message" class="message" role="alert" hidden></p>
+        </div>
+      </form>
+      <div id="recent" class="recent-block" hidden>
+        <h2>Recent runs</h2>
+        <ul id="recent-list" class="recent"></ul>
+      </div>
+    </section>
+
+    <section id="run" hidden>
+      <div class="card run-head">
+        <div class="run-id">
+          <p class="eyebrow">Run</p>
+          <p id="run-id" class="mono"></p>
+        </div>
+        <span id="run-status" class="pill" role="status"></span>
+        <a class="btn" href="#">New run</a>
+      </div>
+
+      <p id="notice" class="notice" role="status" hidden></p>
+
+      <section id="failure" class="card failure" role="alert" hidden>
+        <h2>The run failed</h2>
+        <p><code id="failure-code" class="mono"></code></p>
+        <p id="failure-message"></p>
+      </section>
+
+      <section class="card">
+        <h2>Stages</h2>
+        <ol id="stages" class="stepper"></ol>
+      </section>
+
+      <section id="questions-card" class="card attention" hidden>
+        <h2>The agent needs your answers</h2>
+        <p class="muted">Answer every question, then send all the answers together. The run goes on when they are
+          accepted.</p>
+        <form id="questions-form">
+          <div id="question-list"></div>
+          <p id="questions-message" class="message" role="alert" hidden></p>
+          <div class="row">
+            <button id="questions-send" class="btn primary" type="submit">Send answers</button>
+          </div>
+        </form>
+      </section>
+
+      <div id="sections" class="sections"></div>
+    </section>
+  </main>
+</body>
+</html>
