@@ -22,7 +22,8 @@ import org.springframework.stereotype.Service;
 /**
  * The workspace of one run: a git worktree of the platform repository in {@code <base>/<run-id>}, on a new branch
  * {@code run/<run-id>}, where a change set is written and committed. The branch is cut from a base ref, or, for a run
- * that changes an earlier run, from that run's branch, so its commits stack on top of the earlier history. Only the
+ * that changes an earlier run, from that run's branch, so its commits stack on top of the earlier history; a run that
+ * changes none starts with an empty product folder, whatever the base ref holds there. Only the
  * product folder and the run's evidence folder {@code runs/<run-id>} are checked out; the agents' files are written
  * under the product folder. It uses the {@code git} command line and runs nothing from the workspace. The branch of
  * the platform repository that is checked out, its index and its working files are never changed, and nothing is
@@ -35,6 +36,7 @@ public class RunWorkspace {
 
     private static final Logger log = LoggerFactory.getLogger(RunWorkspace.class);
     private static final String DEVELOPMENT = "development";
+    private static final String CONTROLLER = "controller";
     private static final String BRANCH_PREFIX = "run/";
     private static final String EVIDENCE_FOLDER = "runs";
     private static final ChangeSet NONE = new ChangeSet(List.of());
@@ -99,6 +101,7 @@ public class RunWorkspace {
             return root;
         }
         String branch = BRANCH_PREFIX + runId;
+        boolean startsFromBaseRef = false;
         if (branchExists(branch)) {
             git(repository, Map.of(), "worktree", "add", "--no-checkout", root.toString(), branch);
             log.info("event=workspace_created runId={} branch={} start=existing_branch", runId, branch);
@@ -106,6 +109,7 @@ public class RunWorkspace {
             String start = baseRunId == null ? baseRef : startOfChange(runId, baseRunId);
             git(repository, Map.of(), "worktree", "add", "--no-checkout", "-b", branch, root.toString(), start);
             log.info("event=workspace_created runId={} branch={} start={}", runId, branch, start);
+            startsFromBaseRef = baseRunId == null;
         }
         // "worktree add --no-checkout" leaves the index empty, so the files are checked out here: the sparse checkout
         // keeps only the product and the evidence folders in the folder, and read-tree fills the index with every file
@@ -113,7 +117,26 @@ public class RunWorkspace {
         git(root, Map.of(), "sparse-checkout", "set", "--no-cone", "/" + product + "/",
                 "/" + EVIDENCE_FOLDER + "/" + runId + "/");
         git(root, Map.of(), "read-tree", "-mu", "HEAD");
+        if (startsFromBaseRef) {
+            emptyProductFolder(runId, root);
+        }
         return root;
+    }
+
+    /**
+     * A run that changes no earlier run builds its product from nothing, but the base ref may already hold the product
+     * of an earlier run. Its files would stay beside the new ones and their tests would fail against the new modules,
+     * so they are removed in a first commit by the controller. The merge of the run then replaces the old product.
+     */
+    private void emptyProductFolder(UUID runId, Path root) {
+        int files = (int) git(root, Map.of(), "ls-files", "--", product).lines().count();
+        if (files == 0) {
+            return;
+        }
+        git(root, Map.of("GIT_LITERAL_PATHSPECS", "1"), "rm", "-r", "--quiet", "--force", "--", product);
+        git(root, identity(CONTROLLER), "commit", "--quiet", "--no-gpg-sign", "-m",
+                "controller: start run " + runId + " with an empty product folder");
+        log.info("event=product_folder_emptied runId={} files={}", runId, files);
     }
 
     private String startOfChange(UUID runId, UUID baseRunId) {

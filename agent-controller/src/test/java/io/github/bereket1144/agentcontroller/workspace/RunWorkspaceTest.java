@@ -34,7 +34,7 @@ class RunWorkspaceTest {
     @BeforeEach
     void setUp() {
         platform = PlatformRepository.create(temp.resolve("platform"), Map.of(
-                "README.md", "platform\n", "agent-controller/pom.xml", "<project/>\n", PRODUCT + "/old.txt", "old\n"));
+                "README.md", "platform\n", "agent-controller/pom.xml", "<project/>\n"));
         base = temp.resolve("workspaces");
         workspace = new RunWorkspace(base.toString(), platform.toString(), "HEAD", PRODUCT);
     }
@@ -50,8 +50,29 @@ class RunWorkspaceTest {
         assertThat(root.resolve(".git")).isRegularFile();
         assertThat(git(root, "symbolic-ref", "--short", "HEAD")).isEqualTo("run/" + runId);
         assertThat(git(root, "rev-parse", "HEAD")).isEqualTo(git(platform, "rev-parse", "HEAD"));
-        assertThat(namesIn(root)).containsExactlyInAnyOrder(".git", "apps");
-        assertThat(root.resolve(PRODUCT).resolve("old.txt")).hasContent("old\n");
+        assertThat(namesIn(root)).containsExactlyInAnyOrder(".git");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-67.1 a workspace of a run that changes no earlier run starts with an empty product folder, "
+            + "although the base ref holds the product of an earlier run: one commit by the controller removes it")
+    void aRunThatChangesNoEarlierRunStartsWithAnEmptyProductFolder() throws Exception {
+        Path earlier = PlatformRepository.create(temp.resolve("earlier"), Map.of(
+                "README.md", "platform\n", PRODUCT + "/old.py", "old\n", PRODUCT + "/tests/test_old.py", "old\n"));
+        RunWorkspace fromEarlier = new RunWorkspace(base.toString(), earlier.toString(), "HEAD", PRODUCT);
+
+        Path root = fromEarlier.create(runId);
+
+        assertThat(namesIn(root)).containsExactlyInAnyOrder(".git");
+        assertThat(git(root, "rev-list", "--count", "HEAD")).isEqualTo("2");
+        assertThat(git(root, "log", "-1", "--format=%an")).isEqualTo("controller");
+        assertThat(git(root, "log", "-1", "--format=%s")).contains(runId.toString()).contains("empty product folder");
+        assertThat(git(root, "diff", "--name-status", "HEAD~1", "HEAD").lines())
+                .containsExactlyInAnyOrder("D\t" + PRODUCT + "/old.py", "D\t" + PRODUCT + "/tests/test_old.py");
+        assertThat(git(root, "status", "--porcelain")).isEmpty();
+        // The base ref and the checkout are as they were.
+        assertThat(earlier.resolve(PRODUCT).resolve("old.py")).hasContent("old\n");
+        assertThat(git(earlier, "rev-parse", "main")).isEqualTo(git(root, "rev-parse", "HEAD~1"));
     }
 
     @Test
@@ -75,7 +96,7 @@ class RunWorkspaceTest {
         assertThat(git(root, "diff", "--name-status", "HEAD~1", "HEAD").lines())
                 .containsExactlyInAnyOrder("A\t" + PRODUCT + "/app.py", "A\t" + PRODUCT + "/tests/test_app.py");
         assertThat(git(root, "ls-tree", "-r", "--name-only", "HEAD").lines())
-                .contains("README.md", "agent-controller/pom.xml", PRODUCT + "/old.txt");
+                .contains("README.md", "agent-controller/pom.xml");
     }
 
     @Test
@@ -217,13 +238,15 @@ class RunWorkspaceTest {
                 new FileChange(".gitignore", "ignored.txt\n"), new FileChange("ignored.txt", "x"))));
 
         assertThat(git(base.resolve(runId.toString()), "ls-files", "--", PRODUCT).lines())
-                .containsExactlyInAnyOrder(PRODUCT + "/.gitignore", PRODUCT + "/ignored.txt", PRODUCT + "/old.txt");
+                .containsExactlyInAnyOrder(PRODUCT + "/.gitignore", PRODUCT + "/ignored.txt");
     }
 
     @Test
     @DisplayName("AC-AGT-69.2 a deleted file is removed from the product folder and from the commit, next to a written "
             + "one, and the commit is not taken for a drop of files of the branch")
     void aDeletedFileLeavesTheFolderAndTheCommit() {
+        workspace.commit(runId, new ChangeSet(List.of(new FileChange("old.txt", "old\n"))));
+
         workspace.commit(runId, new ChangeSet(List.of(
                 FileChange.deletion("old.txt"), new FileChange("new.txt", "new\n"))));
 
@@ -267,6 +290,7 @@ class RunWorkspaceTest {
     @DisplayName("AC-AGT-69.2 the path rules apply to a deletion: a path under .git and a path through a link are "
             + "refused and nothing is deleted")
     void thePathRulesApplyToADeletion() throws Exception {
+        workspace.commit(runId, new ChangeSet(List.of(new FileChange("old.txt", "old\n"))));
         Path root = workspace.create(runId);
         Path outside = Files.createDirectory(temp.resolve("outside"));
         Files.writeString(outside.resolve("victim.txt"), "keep");
@@ -288,13 +312,14 @@ class RunWorkspaceTest {
     @DisplayName("AC-AGT-69.2 a commit is still refused when the index has lost a file of the branch that the change "
             + "set did not delete")
     void anUnintendedDropIsStillRefused() {
+        workspace.commit(runId, new ChangeSet(List.of(new FileChange("old.txt", "old\n"))));
         Path root = workspace.create(runId);
         git(root, "rm", "--cached", "--quiet", "--", PRODUCT + "/old.txt");
 
         assertThatThrownBy(() -> workspace.commit(runId, new ChangeSet(List.of(new FileChange("new.txt", "x\n")))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("The workspace is not checked out");
-        assertThat(git(root, "rev-list", "--count", "HEAD")).isEqualTo("1");
+        assertThat(git(root, "rev-list", "--count", "HEAD")).isEqualTo("2");
     }
 
     private static List<String> namesIn(Path folder) throws Exception {
