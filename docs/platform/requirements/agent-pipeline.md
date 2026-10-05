@@ -169,7 +169,7 @@ As the platform, I want each role's answer checked against its structure by plai
 
 ### AGT-6 Retry model failures, then fall back to a second model
 
-Status: open
+Status: coded
 
 Depends on: AGT-3, AGT-5.
 
@@ -198,7 +198,7 @@ As the reviewer, I want every model call recorded with what went in and what cam
 
 ### AGT-8 Stop a run that exceeds its budget
 
-Status: open
+Status: coded
 
 Depends on: AGT-7.
 
@@ -211,7 +211,7 @@ As the platform owner, I want limits on how many model calls and tokens a run ma
 
 ### AGT-9 Say why a run failed
 
-Status: open
+Status: coded
 
 Depends on: AGT-5.
 
