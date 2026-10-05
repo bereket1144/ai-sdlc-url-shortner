@@ -496,18 +496,19 @@ As the platform, I want every run to work in its own copy of the repository on i
 - AC-AGT-20.4 Commits are made only on the run branch, never on the main branch.
 - AC-AGT-20.5 A run's workspace can be removed when the run ends. Removal deletes only that run's folder.
 
-### AGT-21 Write approved artifacts as files in the run's folder
+### AGT-21 Write the run's documents as files in its repository
 
 Status: open
 
 Depends on: AGT-20.
 
-As a reviewer, I want the stories, the design and the plan to exist as readable files in the run's folder, so that the evidence of a run can be read without a database.
+As a reviewer, I want the README, the stories, the design, the plan and the QA and review results to exist as readable files in the run's repository, so that the delivered project is complete and its evidence can be read without a database.
 
-- AC-AGT-21.1 The controller writes each approved or produced artifact into the workspace as readable files under `runs/<run-id>/<kind>/`: Markdown for the text, the diagram sources as separate files, and the artifact's structured content, and commits them. Rendering is plain code.
-- AC-AGT-21.2 Writing the same artifact version twice produces identical files and no second commit.
-- AC-AGT-21.3 The commit author is the controller. The message names the run, the artifact kind and the version.
-- AC-AGT-21.4 The files hold the artifact only. They hold no call records and no log text.
+- AC-AGT-21.1 After the documentation, QA and review stages have joined, and when the development agent is on, the controller writes these files into the run's workspace and commits them in one commit: `README.md` from the documentation artifact (its setup, usage, architecture, examples, known limits and evidence links as sections), `docs/requirements.md`, `docs/design.md`, `docs/plan.md`, `docs/qa.md` and `docs/review.md` from the latest version of each artifact, and each diagram source of the design as its own file `docs/diagrams/<n>.mmd`. A file that already exists at one of those paths, for example a README written by the development stage, is replaced. Rendering is plain code and turns any JSON value into Markdown; no model is called.
+- AC-AGT-21.2 Writing the same artifact versions twice produces identical files and no second commit.
+- AC-AGT-21.3 The commit author is `controller`, and the message names the run and the artifact kinds and versions written.
+- AC-AGT-21.4 The files hold the artifacts only. They hold no call records and no log text.
+- AC-AGT-21.5 A run that failed before these stages joined writes none of these files.
 
 ### AGT-22 Let the development agent propose file changes
 

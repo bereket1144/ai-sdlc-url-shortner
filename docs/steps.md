@@ -302,3 +302,6 @@ The record of the work done in this repository, one entry per step, in the order
 - [ ] 106. UI-1 Follow a run in one page.
   Done when: story UI-1 in docs/platform/requirements/reviewer-ui.md is coded: every criterion has a passing test or, for the page's own behaviour in a browser, is named as checked by hand.
   Criterion update (user decision, 2026-10-05): a front end moves from "not planned" to a small reviewer page of plain HTML, CSS and JavaScript. (main agent, direct)
+- [ ] 107. AGT-21 Write the run's documents as files in its repository.
+  Done when: story AGT-21 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test.
+  Criterion update (user decision, 2026-10-05): AGT-21 is narrowed to the README, the documents under docs/ and the diagram files, written after the documentation, QA and review stages join, instead of files under runs/<run-id>/<kind>/. (main agent, direct)
