@@ -93,7 +93,7 @@ Shown when: one role, asked through the scripted model or the local model, retur
 
 ### AGT-1 Give every role an expert identity
 
-Status: open
+Status: coded
 
 Depends on: none.
 
