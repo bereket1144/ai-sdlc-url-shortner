@@ -5,20 +5,6 @@ Instructions for AI coding assistants working in this repository. This file is t
 Note on naming: "agents" in this file means the coding assistants helping to build the platform. The SDLC agents that the platform itself runs are described under "What this project is".
 
 
-# One logical step at a time (this rule comes before everything else)
-
-- **Do one logical step per turn:** one coherent piece of work that delivers one working behaviour, with everything it needs to work. That includes every layer it touches (state, service, repository, API) and its tests. Example: adding a failed state to a run, with the service change, the repository query, the API exposure, and their tests, is one step.
-- **Then stop.** Say what was done in a few lines, name the single next step, and wait for the user.
-- **Never give the user more than one thing** to decide, review, or approve. If several things need a decision, ask about the first one only. Ask about the next after the answer.
-- **Never chain steps.** Do not continue to the next logical step because it seems obvious or related.
-- **Keep a step reviewable.** If the work holds two independent behaviours, or cannot be described as one outcome in a short paragraph, do the first, stop, and say what remains.
-- **When the user says "step by step"** (or asks for smaller steps), go back to the smallest piece: one class, one test, one fix, one setting, or one document per turn. This stays in force until the user says otherwise.
-- **This holds for direct work and for subagents alike.** One subagent per turn, given one logical step. When it returns, stop and report. If you are a subagent, do the one step you were given and return; do not start another.
-
-In the steps log (see "Steps log" and "User stories"), a step is one user story, or one QA and review of a feature, and it takes many such logical steps. Each turn does one.
-
----
-
 # Timeless constraints (not a checklist)
 
 **How to work with the user (comes before everything below):** Find the simplest solution the user can fully understand and grow it one logical step at a time; never jump to the final design. Change one logical thing per step and always say WHY (the problem it solves) before WHAT, in plain words.
@@ -69,7 +55,7 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 # Decisions already made
 
 1. **One Spring Boot app.** `agent-controller` holds the graph, the SDLC agents, gates, approvals, and audit. There is no microservice per agent; an agent is a class with a role, a prompt, allowed tools, and a budget.
-2. **One Git repository for the submission**, at the repository root: the platform, the product under `apps/url-shortener/`, each run's history as a branch `run/<run-id>`, and each run's evidence under `runs/<run-id>/`. No nested repositories and no submodules. The controller works in a worktree of this repository for each run (decision 4). With `workspace.auto-merge=true` (enabled in the live profile), it merges completed, verified work into the clean controller checkout before recording success, so the generated product appears beside the controller. Local edits or conflicts block delivery and retain the run branch. The human pushes the branches; the controller never pushes. Older runs are not imported automatically.
+2. **One Git repository for the delivery**, at the repository root: the platform, the product under `apps/url-shortener/`, each run's history as a branch `run/<run-id>`, and each run's evidence under `runs/<run-id>/`. No nested repositories and no submodules. The controller works in a worktree of this repository for each run (decision 4). With `workspace.auto-merge=true` (enabled in the live profile), it merges completed, verified work into the clean controller checkout before recording success, so the generated product appears beside the controller. Local edits or conflicts block delivery and retain the run branch. The human pushes the branches; the controller never pushes. Older runs are not imported automatically.
 3. **`docker compose up` starts PostgreSQL only; the controller runs locally** from the IDE or with `./mvnw spring-boot:run`, against the Compose database. A reviewer needs Java 21 and Docker.
 4. **Each run is a git worktree of this repository,** added by the controller with `git worktree add` on the branch `run/<run-id>`, cut from a base ref (`HEAD` by default; for a change run, the base run's branch), in the folder `<workspace.base>/<run-id>`. The folder lies outside the checkout by default and holds a sparse checkout of the product folder `apps/url-shortener/` and of `runs/<run-id>/` only. Workspace creation and development commits leave the controller checkout unchanged. Automatic delivery is the explicit exception: after verification and document export it updates the currently checked-out branch, index and working files with a merge, limited to the product and run evidence. It requires a clean checkout, refuses conflicts and never switches branches, pushes, prunes or deletes a branch or a worktree. See ADR 0013.
 5. **SDLC agents never touch files.** The controller gives an agent the file contents it needs, the agent returns a patch, and the controller checks the paths and applies it. Agent patches may only write inside the product folder of that run's workspace, and never under `.git`.
@@ -87,7 +73,7 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 - **Never push.** The human pushes. `.claude/settings.json` denies `git push` for Claude Code, and the same rule applies to every other tool.
 - **Commit each working piece.** Small commits that say what changed and why, start with the area such as `feat(controller):` or `docs:`, and are made only when the user says so. End the subject line with the name of the agent that did the work in brackets, such as `feat(controller): serve a browsable Swagger UI page for the run API (SWAG-3) [development-agent]`. Use `[main agent]` when the main session did the work directly.
 - **Never commit `PLAN.md`** or copy text from it into committed files. If it exists locally it is a private long-form plan; read it for the destination, and build only what the current step needs.
-- **No employer, client, or recruiter names** anywhere in the repository.
+- **No names of people or organisations outside this project** anywhere in the repository.
 - **When a real decision is made,** record it as a short decision record under `docs/adr/`.
 
 # Role contracts
@@ -126,7 +112,7 @@ For every step that changes code, build files, or configuration:
 
 - **QA and review run together, as one call, once per feature, and only when the user asks.** They report back; the user chooses which findings the development agent fixes. No agent starts another.
 - **Unit coverage is the JaCoCo report** that `./mvnw verify` writes; it is not copied into a hand-written file. **Functional coverage** is a table of acceptance criteria against the tests that prove them, generated from the requirements file and the test results once, at final packaging.
-- Before submission, every file in the repository must be covered by a review, and the coverage reports must be current.
+- Before delivery, every file in the repository must be covered by a review, and the coverage reports must be current.
 
 # User stories
 

@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Amended by [ADR 0009](0009-choose-the-model-api-style-by-profile-setting.md): a hosted client and an OpenAI-style client were added behind the same port after this decision.
+
 ## Context
 
 The SDLC roles need model answers without knowing a provider protocol. The local profile must send explicit model limits and return the provider's finish reason, usage, and failures. A later hosted profile may use a different API.
