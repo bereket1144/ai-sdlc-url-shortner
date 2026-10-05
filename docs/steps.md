@@ -351,9 +351,11 @@ The record of the work done in this repository, one entry per step, in the order
 - [ ] 118. AGT-15 Approve the design and the plan before the next stage.
   Done when: story AGT-15 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test.
   Criterion update (user decision, 2026-10-05): approvals cover the design and the plan only, not the stories; AGT-15 is rewritten and AGT-32 (merge approval) is not part of it. (main agent, direct)
-- [ ] 119. UI-3 A chat bar pinned at the bottom, and approvals.
+- [x] 119. UI-3 A chat bar pinned at the bottom, and approvals.
   Done when: story UI-3 in docs/platform/requirements/reviewer-ui.md is coded and its criteria are named as checked by hand.
   Criterion update (user decision, 2026-10-05): the chat bar is pinned at the bottom and replaces the "Request a change" card. (main agent, direct)
+  Result: the page has a chat bar pinned to the bottom that replaces the "Request a change" card (enabled only for a SUCCEEDED run with a commit, otherwise disabled with a one-line reason; Enter sends), an approval card (stage, artifact version, summary, rejections left, a button that opens the artifact, a remembered name, a comment, Approve and Reject with a required comment for Reject) built against the agreed `approval` field and `POST /v1/runs/{id}/decisions`, and Stop and Resume buttons in the run header with a neutral STOPPED status that stops polling; the API helper accepts an empty 202 body and a read requested during another is repeated; only `createElement` and `textContent` are used (no `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` or `eval`) and `node --check` passes; the page was not opened in a browser, the approval and stop paths still need a hand check once steps 118 and 120 are merged, so UI-3 stays open until then; no Java build was run because only static files changed. (development-agent)
+
 - [ ] 120. AGT-43 Stop a run at any point and resume it from where it stopped.
   Done when: story AGT-43 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test.
   Criterion update (user decision, 2026-10-05): stop is a new non-failure status STOPPED and resume continues like the first retry; rollback by deleting the workspace is not part of it. It starts after step 118 is merged, because both change the graph and the run states. (main agent, direct)
