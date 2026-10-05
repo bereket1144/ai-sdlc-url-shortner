@@ -14,6 +14,7 @@ import java.util.concurrent.Semaphore;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -22,8 +23,12 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
-/** Calls the configured local Ollama API without exposing its protocol to SDLC roles. */
+/**
+ * Calls the configured local Ollama API without exposing its protocol to SDLC roles. It is the model client unless
+ * {@code agent.model-client.mode} is {@code replay}.
+ */
 @Component
+@ConditionalOnProperty(name = "agent.model-client.mode", havingValue = "live", matchIfMissing = true)
 public class OllamaModelClient implements ModelClient {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaModelClient.class);
