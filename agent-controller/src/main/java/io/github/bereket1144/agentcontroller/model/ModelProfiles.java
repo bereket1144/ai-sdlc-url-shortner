@@ -49,4 +49,16 @@ public class ModelProfiles {
         String assigned = properties.roles().get(role);
         return assigned == null ? primary() : properties.profiles().get(assigned);
     }
+
+    /** Refuse a caller-created profile before its address or model identifier can reach an HTTP client. */
+    void requireConfigured(ModelProfile profile) {
+        if (profile == null || !profile.equals(properties.profiles().get(profile.name()))) {
+            throw new IllegalArgumentException("Model profile is not configured");
+        }
+    }
+
+    /** The reserve kept free when building prompts for any configured model. */
+    public int safetyMarginPercent() {
+        return properties.safetyMarginPercent();
+    }
 }

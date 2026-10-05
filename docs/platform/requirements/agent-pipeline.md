@@ -122,7 +122,7 @@ As the platform owner, I want models described by configuration, with their limi
 
 ### AGT-3 Call a model through one port
 
-Status: open
+Status: coded
 
 Depends on: AGT-2.
 
