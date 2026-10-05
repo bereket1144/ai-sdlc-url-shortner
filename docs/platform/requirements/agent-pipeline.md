@@ -139,7 +139,7 @@ As the platform, I want every model call to go through one interface, so that ro
 
 ### AGT-4 Build each prompt inside the model's window
 
-Status: open
+Status: coded
 
 Depends on: AGT-1, AGT-2.
 
