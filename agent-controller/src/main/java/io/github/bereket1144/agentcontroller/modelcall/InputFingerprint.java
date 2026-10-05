@@ -19,6 +19,11 @@ public final class InputFingerprint {
         return hash("SHA-256", lengthPrefixed(profileName) + lengthPrefixed(systemText) + lengthPrefixed(userText));
     }
 
+    /** The SHA-256 hash of a text, as 64 hexadecimal characters; the artifact store fingerprints stored content with it. */
+    public static String sha256(String text) {
+        return hash("SHA-256", text);
+    }
+
     /** Each part is written as its length, a colon and the part, so text moved between parts changes the hash. */
     private static String lengthPrefixed(String part) {
         return part.length() + ":" + part;

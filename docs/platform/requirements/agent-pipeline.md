@@ -257,7 +257,7 @@ Shown when: an ambiguous requirement produces questions, the reviewer answers th
 
 ### AGT-11 Keep each stage's output as a versioned artifact
 
-Status: open
+Status: coded
 
 Depends on: AGT-5.
 
