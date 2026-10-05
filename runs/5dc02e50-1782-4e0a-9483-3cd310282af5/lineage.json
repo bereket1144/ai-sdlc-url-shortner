@@ -1,0 +1,154 @@
+{
+  "artifacts" : [ {
+    "kind" : "requirements",
+    "version" : 1,
+    "fingerprint" : "4394d32f9b3eefd48d0993d35a088e666e3781deba2c92aaf3732fdf76b655b3",
+    "summary" : "4 clarification questions",
+    "builtFrom" : [ ]
+  }, {
+    "kind" : "requirements",
+    "version" : 2,
+    "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f",
+    "summary" : "4 stories, 0 open questions, 10 assumptions",
+    "builtFrom" : [ {
+      "kind" : "requirements",
+      "version" : 1,
+      "fingerprint" : "4394d32f9b3eefd48d0993d35a088e666e3781deba2c92aaf3732fdf76b655b3"
+    } ]
+  }, {
+    "kind" : "design",
+    "version" : 1,
+    "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278",
+    "summary" : "components 5, interfaces 4, decisions 5, alternatives 4, risks 6, diagrams 3",
+    "builtFrom" : [ {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    } ]
+  }, {
+    "kind" : "plan",
+    "version" : 1,
+    "fingerprint" : "b648e0b3442ea749197141b82a0e05decce9fb3f32a8326e905d99e2eb47aea6",
+    "summary" : "tasks 7, assumptions 7",
+    "builtFrom" : [ {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    }, {
+      "kind" : "design",
+      "version" : 1,
+      "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278"
+    } ]
+  }, {
+    "kind" : "development",
+    "version" : 1,
+    "fingerprint" : "727f42e6f5e27515c939d04caad0db4f676e1639b7ddcfdd4a7d67a1bcff0fbe",
+    "summary" : "changes 10, affectedCriteria 15, verificationNotes 5",
+    "builtFrom" : [ {
+      "kind" : "plan",
+      "version" : 1,
+      "fingerprint" : "b648e0b3442ea749197141b82a0e05decce9fb3f32a8326e905d99e2eb47aea6"
+    }, {
+      "kind" : "design",
+      "version" : 1,
+      "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278"
+    }, {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    } ]
+  }, {
+    "kind" : "development",
+    "version" : 2,
+    "fingerprint" : "4c6a296e4e74500036a8189d54eae745e6f4e06657e2a22ae987ef2e8e332c43",
+    "summary" : "changes 2, affectedCriteria 8, verificationNotes 4",
+    "builtFrom" : [ {
+      "kind" : "plan",
+      "version" : 1,
+      "fingerprint" : "b648e0b3442ea749197141b82a0e05decce9fb3f32a8326e905d99e2eb47aea6"
+    }, {
+      "kind" : "design",
+      "version" : 1,
+      "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278"
+    }, {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    } ]
+  }, {
+    "kind" : "qa",
+    "version" : 1,
+    "fingerprint" : "917be1949d15a90c648bd41017ad957e5ad1c07152c39f9c57d3fc9e211706f8",
+    "summary" : "proposedTests 17, observedEvidence 4, coverageGaps 8, failureDetails 4",
+    "builtFrom" : [ {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    }, {
+      "kind" : "design",
+      "version" : 1,
+      "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278"
+    }, {
+      "kind" : "plan",
+      "version" : 1,
+      "fingerprint" : "b648e0b3442ea749197141b82a0e05decce9fb3f32a8326e905d99e2eb47aea6"
+    }, {
+      "kind" : "development",
+      "version" : 2,
+      "fingerprint" : "4c6a296e4e74500036a8189d54eae745e6f4e06657e2a22ae987ef2e8e332c43"
+    } ]
+  }, {
+    "kind" : "documentation",
+    "version" : 1,
+    "fingerprint" : "552ed8db668f9e3eb115ce5198be88bd9643919cbb7af0b66f13f60e54e59e05",
+    "summary" : "examples 7, knownLimits 12, evidenceLinks 4",
+    "builtFrom" : [ {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    }, {
+      "kind" : "design",
+      "version" : 1,
+      "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278"
+    }, {
+      "kind" : "plan",
+      "version" : 1,
+      "fingerprint" : "b648e0b3442ea749197141b82a0e05decce9fb3f32a8326e905d99e2eb47aea6"
+    }, {
+      "kind" : "development",
+      "version" : 2,
+      "fingerprint" : "4c6a296e4e74500036a8189d54eae745e6f4e06657e2a22ae987ef2e8e332c43"
+    } ]
+  }, {
+    "kind" : "review",
+    "version" : 1,
+    "fingerprint" : "a9ca8b7cfbe292a7aa0d48395168f69b29fc6f36c555c87204dee3533333e52d",
+    "summary" : "reviewedFiles 2, findings 7, evidence 6",
+    "builtFrom" : [ {
+      "kind" : "requirements",
+      "version" : 2,
+      "fingerprint" : "88275a1a2faf25a22d54edb89629eb63a128c88a4c6bdbf4286dd0464b908f3f"
+    }, {
+      "kind" : "design",
+      "version" : 1,
+      "fingerprint" : "55e122cee6277cb36d79e70b999f54702b2490c57063ea4368613062a228a278"
+    }, {
+      "kind" : "plan",
+      "version" : 1,
+      "fingerprint" : "b648e0b3442ea749197141b82a0e05decce9fb3f32a8326e905d99e2eb47aea6"
+    }, {
+      "kind" : "development",
+      "version" : 2,
+      "fingerprint" : "4c6a296e4e74500036a8189d54eae745e6f4e06657e2a22ae987ef2e8e332c43"
+    } ]
+  } ],
+  "commit" : "f90772c9f28ec5af4fa1d8eb2f2f3b659ea4f4de",
+  "verificationOutcome" : "PASSED",
+  "files" : [ {
+    "path" : "app.py",
+    "criteria" : [ "S-1-1", "S-1-2", "S-1-3", "S-2-1", "S-2-2", "S-2-3", "S-3-3", "S-4-3" ]
+  }, {
+    "path" : "link_store.py",
+    "criteria" : [ "S-1-1", "S-1-2", "S-1-3", "S-2-1", "S-2-2", "S-2-3", "S-3-3", "S-4-3" ]
+  } ]
+}

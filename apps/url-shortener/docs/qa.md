@@ -1,0 +1,261 @@
+# QA results
+
+## proposedTests
+
+- **1**
+  - **id**: PT-1
+  - **name**: Create returns 7-char base62 code and copyable short URL
+  - **type**: integration
+  - **targets**
+    - S-1-1
+    - S-1-3
+  - **steps**: POST /links with a valid absolute https URL; assert 200, JSON body has 'code' matching ^[0-9A-Za-z]{7}$ and 'short_url' non-empty and copyable (path or absolute).
+  - **proves**: Happy-path create contract and code shape.
+  - **determinism**: Assert shape only, not specific code value.
+- **2**
+  - **id**: PT-2
+  - **name**: Same long URL twice yields two distinct codes, both redirect
+  - **type**: integration
+  - **targets**
+    - S-1-2
+  - **steps**: POST same URL twice; assert two 200s with different codes; GET each code; assert 302 with Location equal to the original URL.
+  - **proves**: No dedup; both codes resolve to the same target.
+- **3**
+  - **id**: PT-3
+  - **name**: Missing/empty URL rejected with 400 and no row
+  - **type**: integration
+  - **targets**
+    - S-1-4
+  - **steps**: POST with no body, empty body, url='' (form and JSON); assert 400 each; assert store.count() unchanged.
+  - **proves**: Negative boundary for empty input; no side effect.
+- **4**
+  - **id**: PT-4
+  - **name**: Non-absolute and non-http(s) URLs rejected with 400 and no row
+  - **type**: integration
+  - **targets**
+    - S-1-5
+  - **steps**: POST values: 'example.com', '/path', 'ftp://x/y', 'javascript:alert(1)', 'http://', 'https://', 'mailto:a@b'; assert 400 each; assert store.count() unchanged.
+  - **proves**: Scheme and absoluteness boundary; no side effect.
+- **5**
+  - **id**: PT-5
+  - **name**: Known code returns 302 with exact Location
+  - **type**: integration
+  - **targets**
+    - S-2-1
+  - **steps**: Create link; GET /{code} with redirects disabled; assert 302 and Location header equals stored long URL exactly.
+  - **proves**: Follow contract and header correctness.
+- **6**
+  - **id**: PT-6
+  - **name**: Unknown code returns 404 with no Location
+  - **type**: integration
+  - **targets**
+    - S-2-2
+  - **steps**: GET /zzzzzzz (7 base62 chars, never created); assert 404 and no Location header.
+  - **proves**: Negative follow path; no redirect issued.
+- **7**
+  - **id**: PT-7
+  - **name**: Follow path performs no writes
+  - **type**: integration
+  - **targets**
+    - S-2-4
+  - **steps**: Create link; snapshot store.count() and DB file mtime/size; GET code N times; assert count unchanged and no new tables/rows; optionally wrap sqlite connection to assert only SELECT executed.
+  - **proves**: Read-only follow; no click data recorded or exposed.
+- **8**
+  - **id**: PT-8
+  - **name**: Links do not expire and have no click limit
+  - **type**: integration
+  - **targets**
+    - S-2-3
+  - **steps**: Create link; follow it 1000 times; assert every response is 302 with same Location; no time-based expiry logic present.
+  - **proves**: No expiry, no click cap.
+- **9**
+  - **id**: PT-9
+  - **name**: Forced collision yields a different code
+  - **type**: unit
+  - **targets**
+    - S-3-1
+  - **steps**: Inject a generator/store stub where first insert raises CodeCollision; assert generator retries and returns a different code; assert final store row maps new code to the URL.
+  - **proves**: Collision retry behavior.
+- **10**
+  - **id**: PT-10
+  - **name**: Retry-limit exhaustion returns 500, not infinite loop
+  - **type**: unit
+  - **targets**
+    - S-3-1
+  - **steps**: Stub store to always raise CodeCollision; assert CodeGenerationError raised within bounded attempts and HTTP layer maps it to 500.
+  - **proves**: Bounded retry; failure handling.
+- **11**
+  - **id**: PT-11
+  - **name**: Code maps to exactly one long URL
+  - **type**: integration
+  - **targets**
+    - S-3-2
+  - **steps**: Create link A; attempt direct store.insert(same_code, other_url); assert CodeCollision; GET code; assert Location == A's URL.
+  - **proves**: UNIQUE constraint is authoritative; no overwrite.
+- **12**
+  - **id**: PT-12
+  - **name**: Restart persistence
+  - **type**: integration
+  - **targets**
+    - S-3-3
+    - S-4-3
+  - **steps**: Run 1: start server on temp SQLite file, create link, stop server. Run 2: start server on same file, GET code; assert 302 with original Location.
+  - **proves**: Data survives process restart.
+- **13**
+  - **id**: PT-13
+  - **name**: Fresh DB bootstrap is idempotent
+  - **type**: integration
+  - **targets**
+    - S-4-2
+  - **steps**: Start service against a nonexistent path; assert schema created and create+follow work. Start again on same file; assert no error and prior links still resolve.
+  - **proves**: Schema creation on first start; idempotent restart.
+- **14**
+  - **id**: PT-14
+  - **name**: Offline suite passes with no outbound network
+  - **type**: integration
+  - **targets**
+    - S-4-1
+  - **steps**: Run full suite in a container with outbound network blocked (e.g., no default route or firewall drop); assert all create/follow tests pass; assert no DNS/socket calls to external hosts.
+  - **proves**: Stdlib+SQLite only; no network dependency.
+- **15**
+  - **id**: PT-15
+  - **name**: Concurrent creates of same URL produce distinct codes and consistent redirects
+  - **type**: concurrency
+  - **targets**
+    - S-1-2
+    - S-3-1
+    - S-3-2
+  - **steps**: Fire N parallel POST /links with the same URL; assert N distinct codes; GET each; assert each 302 to the URL; assert store.count() == N.
+  - **proves**: Threaded server + shared SQLite connection handle concurrency without corruption.
+- **16**
+  - **id**: PT-16
+  - **name**: Malformed and oversized request bodies
+  - **type**: integration
+  - **targets**
+    - S-1-4
+    - S-1-5
+  - **steps**: POST with invalid Content-Length, body > MAX_BODY_BYTES, malformed JSON, JSON array, JSON with non-string url; assert 400 each and no row written.
+  - **proves**: Parser failure handling; no side effects.
+- **17**
+  - **id**: PT-17
+  - **name**: Path edge cases on follow
+  - **type**: integration
+  - **targets**
+    - S-2-2
+  - **steps**: GET '/', '/links', '/a/b', '/{code}?x=1', '/{code}#frag'; assert 404 for non-code paths and 302 for code with query/fragment stripped.
+  - **proves**: Routing boundary; query/fragment handling.
+
+## criterionMapping
+
+- **S-1-1**
+  - PT-1
+- **S-1-2**
+  - PT-2
+  - PT-15
+- **S-1-3**
+  - PT-1
+- **S-1-4**
+  - PT-3
+  - PT-16
+- **S-1-5**
+  - PT-4
+  - PT-16
+- **S-2-1**
+  - PT-5
+- **S-2-2**
+  - PT-6
+  - PT-17
+- **S-2-3**
+  - PT-8
+- **S-2-4**
+  - PT-7
+- **S-3-1**
+  - PT-9
+  - PT-10
+  - PT-15
+- **S-3-2**
+  - PT-11
+  - PT-15
+- **S-3-3**
+  - PT-12
+- **S-4-1**
+  - PT-14
+- **S-4-2**
+  - PT-13
+- **S-4-3**
+  - PT-12
+  - PT-13
+
+## observedEvidence
+
+- **1**
+  - **source**: DEVELOPMENT_ARTIFACT v2 verificationNotes
+  - **observation**: Author reports the full suite was run offline and previously failing HTTP tests now receive a status line and headers instead of RemoteDisconnected.
+  - **status**: reported, not independently observed by QA
+- **2**
+  - **source**: DEVELOPMENT_ARTIFACT v2 rationale
+  - **observation**: protocol_version='HTTP/1.1' with explicit Content-Length added; sqlite3 connection opened with check_same_thread=False.
+  - **status**: code inspection only; runtime behavior unverified here
+- **3**
+  - **source**: DEVELOPMENT_ARTIFACT v2 link_store.lookup
+  - **observation**: lookup issues only SELECT; no INSERT/UPDATE on follow path in code.
+  - **status**: static inspection; runtime write-freedom unverified
+- **4**
+  - **source**: DEVELOPMENT_ARTIFACT v2 app.py
+  - **observation**: build_short_url returns path-only '/{code}', which is an allowed form per requirements assumptions.
+  - **status**: static inspection
+
+## coverageGaps
+
+- **1**
+  - **gap**: No test asserts the exact base62 alphabet used; PT-1 only checks [0-9A-Za-z]{7}. If the implementer's alphabet differs (e.g., includes '-' or '_'), S-1-1 would be violated but PT-1 would pass.
+  - **action**: Confirm alphabet with implementer, then tighten PT-1 regex.
+- **2**
+  - **gap**: No test verifies that the short URL returned is actually followable end-to-end from the response body alone (PT-1 checks shape, PT-2 uses the code).
+  - **action**: Add a test that parses short_url from the create response and GETs it.
+- **3**
+  - **gap**: Concurrency test PT-15 is proposed but not observed; the shared sqlite3 connection with check_same_thread=False is not proven safe under parallel writes (SQLite serializes, but WAL + single connection may still raise 'database is locked' under load).
+  - **action**: Run PT-15 with N>=20 and assert no 5xx.
+- **4**
+  - **gap**: No test covers the 500 path from CodeGenerationError at the HTTP layer (PT-10 covers unit only).
+  - **action**: Add integration test with a stub generator that exhausts retries.
+- **5**
+  - **gap**: No test asserts that a 400 response body is empty or that no Location header is set on 400/404.
+  - **action**: Add header assertions to PT-3, PT-4, PT-6.
+- **6**
+  - **gap**: S-2-4 'no click data exposed' is only checked via absence of writes; no test asserts no statistics/listing endpoint exists.
+  - **action**: Add a test that GET /stats or similar returns 404.
+- **7**
+  - **gap**: Host header spoofing risk noted in design; build_short_url ignores host and returns path, so risk is mitigated, but no test asserts the returned short_url is path-only (or absolute) consistently.
+  - **action**: Add assertion on short_url form.
+- **8**
+  - **gap**: No test verifies behavior when the SQLite file is read-only or corrupt (failure handling).
+  - **action**: Add negative test expecting 5xx, not a hang.
+
+## failureDetails
+
+- **1**
+  - **id**: FD-1
+  - **relatedTest**: PT-15
+  - **risk**: ThreadingHTTPServer serves each request on a new thread sharing one sqlite3 connection. Even with check_same_thread=False, concurrent writes can raise sqlite3.OperationalError('database is locked') if WAL busy timeout is not set, producing 500s under load.
+  - **expected**: All concurrent creates return 200 with distinct codes.
+  - **unverified**: true
+- **2**
+  - **id**: FD-2
+  - **relatedTest**: PT-10
+  - **risk**: CodeGenerationError is caught in do_POST and mapped to 500, but the retry limit value is an implementer choice; if unbounded, PT-10 will hang.
+  - **expected**: Bounded retries; 500 on exhaustion.
+  - **unverified**: true
+- **3**
+  - **id**: FD-3
+  - **relatedTest**: PT-1
+  - **risk**: build_short_url ignores the Host header and returns '/{code}'. If a client expects an absolute URL, S-1-3 'copyable form' may be judged insufficient by a reviewer, though requirements assumptions allow path-only.
+  - **expected**: Path-only is acceptable per assumptions; flag for reviewer confirmation.
+  - **unverified**: false
+- **4**
+  - **id**: FD-4
+  - **relatedTest**: PT-16
+  - **risk**: parse_long_url decodes with errors='replace'; a body with invalid UTF-8 may produce a string that passes or fails validation unpredictably.
+  - **expected**: 400 for undecodable bodies.
+  - **unverified**: true
+

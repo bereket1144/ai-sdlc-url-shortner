@@ -1,0 +1,116 @@
+{
+  "components" : [ {
+    "name" : "HTTP handler layer",
+    "responsibility" : "Route POST /links (create) and GET /{code} (follow); parse request, build responses, map errors to 400/404/302.",
+    "notes" : "Python stdlib only (http.server/BaseHTTPRequestHandler or equivalent). No framework."
+  }, {
+    "name" : "URL validator",
+    "responsibility" : "Accept only absolute http/https URLs; reject missing/empty/non-absolute/other-scheme values.",
+    "notes" : "Pure function; no network calls (offline constraint)."
+  }, {
+    "name" : "Code generator",
+    "responsibility" : "Produce 7-character base62 codes; retry on collision until an unused code is found.",
+    "notes" : "Alphabet and retry limit are implementer choices per assumptions."
+  }, {
+    "name" : "Link store (SQLite)",
+    "responsibility" : "Persist code->long_url mapping; enforce uniqueness of code; survive restarts; create schema on first start.",
+    "notes" : "UNIQUE constraint on code is the collision authority; file path is implementer choice."
+  }, {
+    "name" : "Response builder",
+    "responsibility" : "Return short URL (absolute from request host or path) in a copyable form; set Location header on redirect.",
+    "notes" : "Form of returned short URL is implementer choice per assumptions."
+  } ],
+  "interfaces" : [ {
+    "name" : "POST /links",
+    "input" : "Long URL as form field or JSON body (shape is implementer choice).",
+    "output" : "Success: short URL (absolute or path). Failure: 400 with no link created.",
+    "errors" : "400 for missing/empty URL; 400 for non-absolute or non-http(s) URL."
+  }, {
+    "name" : "GET /{code}",
+    "input" : "7-char base62 code in path.",
+    "output" : "302 with Location = stored long URL. 404 if code unknown.",
+    "errors" : "404 for unknown code; no redirect issued."
+  }, {
+    "name" : "LinkStore.insert(code, long_url)",
+    "input" : "code, long_url.",
+    "output" : "Success or uniqueness violation.",
+    "errors" : "Uniqueness violation triggers generator retry."
+  }, {
+    "name" : "LinkStore.lookup(code)",
+    "input" : "code.",
+    "output" : "long_url or not-found.",
+    "errors" : "Not-found maps to 404."
+  } ],
+  "dataFlow" : "Create: client POST /links -> handler parses body -> validator checks absolute http/https -> generator produces 7-char base62 code -> store.insert with UNIQUE(code); on collision, regenerate and retry -> response builder returns short URL. Follow: client GET /{code} -> handler -> store.lookup(code) -> if found, 302 with Location=long_url; if not, 404. No click data is written or read on follow. Persistence: SQLite file holds code->long_url; schema created on startup if absent; same file reused across restarts.",
+  "decisions" : [ {
+    "id" : "D-1",
+    "decision" : "Use SQLite UNIQUE constraint on code as the single source of truth for collision handling.",
+    "rationale" : "Satisfies S-3-1, S-3-2, and the concurrency assumption without application-level locking.",
+    "alternatives" : [ "In-memory set with periodic flush", "Application-level lock around generation+insert" ]
+  }, {
+    "id" : "D-2",
+    "decision" : "Generate codes randomly (7 base62 chars) and retry on collision rather than using a counter or hash.",
+    "rationale" : "Meets S-1-1 (7 base62 chars) and S-1-2 (same URL twice yields two distinct short URLs).",
+    "alternatives" : [ "Monotonic counter encoded in base62", "Hash of long URL truncated to 7 chars" ]
+  }, {
+    "id" : "D-3",
+    "decision" : "Validate URL with stdlib parsing only; require scheme in {http, https} and an absolute form.",
+    "rationale" : "Meets S-1-4, S-1-5, and the offline constraint (S-4-1); no DNS or network resolution.",
+    "alternatives" : [ "Regex-only validation", "Attempt network reachability check" ]
+  }, {
+    "id" : "D-4",
+    "decision" : "Follow path performs lookup and 302 only; no write of click/usage data.",
+    "rationale" : "Meets S-2-4 and keeps follow path read-only and fast.",
+    "alternatives" : [ "Log clicks to a table", "Emit metrics" ]
+  }, {
+    "id" : "D-5",
+    "decision" : "Create schema idempotently at startup against the configured SQLite file.",
+    "rationale" : "Meets S-4-2 and S-4-3 (restart persistence).",
+    "alternatives" : [ "External migration step", "In-memory DB" ]
+  } ],
+  "alternatives" : [ {
+    "option" : "In-memory dict store",
+    "rejectedBecause" : "Fails S-3-3 and S-4-3 (restart persistence)."
+  }, {
+    "option" : "Counter-based codes",
+    "rejectedBecause" : "Predictable and enumerable; also complicates S-1-2 semantics if dedup were attempted."
+  }, {
+    "option" : "Hash-derived codes",
+    "rejectedBecause" : "Same URL would map to same code, conflicting with S-1-2's two-distinct-short-URLs expectation unless salted, which reintroduces collisions."
+  }, {
+    "option" : "External framework or DB",
+    "rejectedBecause" : "Violates S-4-1 stdlib+SQLite offline constraint."
+  } ],
+  "risks" : [ {
+    "risk" : "Open redirect / abuse: any http(s) target is accepted, so the service can be used to mask malicious links.",
+    "mitigation" : "Out of scope per assumptions (no abuse protection in this version); flag for a future requirement."
+  }, {
+    "risk" : "Code space exhaustion or high collision rate at scale (62^7 ~ 3.5e12).",
+    "mitigation" : "Retry loop; monitor collision frequency; revisit code length if needed."
+  }, {
+    "risk" : "Unbounded retry loop if store is full or misconfigured.",
+    "mitigation" : "Implementer sets a retry limit and returns a 5xx on exhaustion (limit is an implementer choice per assumptions)."
+  }, {
+    "risk" : "SQLite write contention under concurrent creates.",
+    "mitigation" : "Rely on UNIQUE constraint and short transactions; acceptable for this version's scope."
+  }, {
+    "risk" : "Host header used to build absolute short URL can be spoofed.",
+    "mitigation" : "Returning a path-only short URL is an allowed alternative per assumptions."
+  }, {
+    "risk" : "No rate limiting means trivial resource exhaustion.",
+    "mitigation" : "Explicitly out of scope; note for future version."
+  } ],
+  "diagrams" : [ {
+    "name" : "Component diagram",
+    "format" : "text",
+    "content" : "Client -> HTTP handler -> URL validator\n                     -> Code generator -> Link store (SQLite)\n                     -> Response builder -> Client"
+  }, {
+    "name" : "Create sequence",
+    "format" : "text",
+    "content" : "Client -> Handler: POST /links(long_url)\nHandler -> Validator: validate(long_url)\nValidator --> Handler: ok | 400\nHandler -> Generator: new_code()\nGenerator --> Handler: code\nHandler -> Store: insert(code, long_url)\nStore --> Handler: ok | collision\nHandler -> ResponseBuilder: short_url(code)\nResponseBuilder --> Client: 200 short URL"
+  }, {
+    "name" : "Follow sequence",
+    "format" : "text",
+    "content" : "Client -> Handler: GET /{code}\nHandler -> Store: lookup(code)\nStore --> Handler: long_url | not found\nHandler --> Client: 302 Location=long_url | 404"
+  } ]
+}

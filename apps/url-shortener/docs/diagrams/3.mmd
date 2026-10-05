@@ -1,0 +1,1 @@
+{"name":"Follow sequence","format":"text","content":"Client -> Handler: GET /{code}\nHandler -> Store: lookup(code)\nStore --> Handler: long_url | not found\nHandler --> Client: 302 Location=long_url | 404"}
