@@ -46,7 +46,8 @@ public class RequirementsAgentNode {
         // A failed call or an answer that stays invalid throws a typed exception; nothing is stored then.
         AcceptedAnswer answer = answers.call(runId, ROLE, TASK, List.of(
                 new PromptInput(InputKind.ORIGINAL_REQUIREMENT, "1", requirement, null, false)));
-        JsonNode content = answer.value();
+        // An open question does not pause the run yet; it is also listed as an assumption (AC-AGT-62.4).
+        JsonNode content = AgentStageNode.withQuestionsAsAssumptions(answer.value());
         int stories = content.get("stories").size();
         int questions = content.get("openQuestions").size();
         int assumptions = content.get("assumptions").size();

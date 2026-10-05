@@ -5,6 +5,7 @@ import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,28 +34,36 @@ public class WorkflowRunner {
 
     /** Every stage on its dummy node. */
     public WorkflowRunner(DummySdlcNodes nodes) throws GraphStateException {
-        this(nodes, Optional.empty());
+        this(nodes, Optional.empty(), Optional.empty());
     }
 
     /** The requirements agent replaces the dummy requirements stage when its setting enabled it. */
-    @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent)
             throws GraphStateException {
-        NodeAction<AgentState> requirements = requirementsAgent.isPresent()
-                ? requirementsAgent.get()::requirements : nodes::requirements;
-        log.info("event=workflow_stage_selected stage=requirements node={}",
-                requirementsAgent.isPresent() ? "agent" : "dummy");
+        this(nodes, requirementsAgent, Optional.empty());
+    }
+
+    /**
+     * A stage whose setting enabled its agent runs on that agent; every other stage stays on its dummy node. The agent
+     * stages are optional only because a test context that loads this class alone does not hold them.
+     */
+    @Autowired
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages) throws GraphStateException {
+        Map<String, NodeAction<AgentState>> agents = new HashMap<>();
+        requirementsAgent.ifPresent(node -> agents.put("requirements", node::requirements));
+        agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role, node::execute)));
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         this.graph = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))
-                .addNode("requirements", node_async(requirements))
-                .addNode("impactAnalysis", node_async(nodes::impactAnalysis))
-                .addNode("design", node_async(nodes::design))
-                .addNode("planning", node_async(nodes::planning))
-                .addNode("development", node_async(nodes::development))
-                .addNode("qa", node_async(nodes::qa))
-                .addNode("review", node_async(nodes::review))
-                .addNode("documentation", node_async(nodes::documentation))
+                .addNode("requirements", node_async(stage(agents, "requirements", nodes::requirements)))
+                .addNode("impactAnalysis", node_async(stage(agents, "impactAnalysis", nodes::impactAnalysis)))
+                .addNode("design", node_async(stage(agents, "design", nodes::design)))
+                .addNode("planning", node_async(stage(agents, "planning", nodes::planning)))
+                .addNode("development", node_async(stage(agents, "development", nodes::development)))
+                .addNode("qa", node_async(stage(agents, "qa", nodes::qa)))
+                .addNode("review", node_async(stage(agents, "review", nodes::review)))
+                .addNode("documentation", node_async(stage(agents, "documentation", nodes::documentation)))
                 .addNode("collect", node_async(nodes::collect))
                 .addEdge(START, "initialize")
                 .addEdge("initialize", "requirements")
@@ -71,6 +80,13 @@ public class WorkflowRunner {
                 .addEdge("documentation", "collect")
                 .addEdge("collect", END)
                 .compile();
+    }
+
+    private static NodeAction<AgentState> stage(Map<String, NodeAction<AgentState>> agents, String role,
+                                                NodeAction<AgentState> dummy) {
+        NodeAction<AgentState> agent = agents.get(role);
+        log.info("event=workflow_stage_selected stage={} node={}", role, agent == null ? "dummy" : "agent");
+        return agent == null ? dummy : agent;
     }
 
     public AgentState run(UUID runId, String requirement, RunKind kind) {
