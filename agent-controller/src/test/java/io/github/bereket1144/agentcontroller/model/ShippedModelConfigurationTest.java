@@ -39,6 +39,14 @@ class ShippedModelConfigurationTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-62.6 the shipped configuration holds the file layout of the development prompt: a flat layout with one tests folder, naming no product or run folder")
+    void shippedConfigurationHoldsTheFileLayout() {
+        shipped.run(context -> assertThat(context.getEnvironment().getProperty("sandbox.verify.file-layout"))
+                .contains("flat layout", "tests/")
+                .doesNotContain("url-shortener", "apps/", "runs/"));
+    }
+
+    @Test
     @DisplayName("AC-AGT-2.2 an environment variable replaces the model identifier of the shipped local profile")
     void environmentVariableReplacesTheShippedModelIdentifier() {
         shipped.withInitializer(environmentVariable("AGENT_MODELS_PROFILES_LOCAL_MODEL", "another-model"))

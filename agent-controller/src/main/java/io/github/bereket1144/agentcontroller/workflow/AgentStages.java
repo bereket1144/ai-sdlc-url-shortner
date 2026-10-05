@@ -32,10 +32,12 @@ public class AgentStages {
     public AgentStages(Environment environment, RoleCatalog roles, StageInputs stageInputs,
                        StructuredAnswerService answers, ArtifactStore artifacts) {
         Map<String, AgentStageNode> enabled = new LinkedHashMap<>();
+        // Left out when the sandbox needs no hint; then the development agent is given the task text alone.
+        String fileLayout = environment.getProperty("sandbox.verify.file-layout", "").strip();
         for (String role : ROLES) {
             String setting = environment.getProperty("agent.stages." + role, "dummy");
             switch (setting) {
-                case "agent" -> enabled.put(role, node(role, roles, stageInputs, answers, artifacts));
+                case "agent" -> enabled.put(role, node(role, fileLayout, roles, stageInputs, answers, artifacts));
                 case "dummy" -> { }
                 default -> throw new IllegalStateException(
                         "agent.stages." + role + " must be agent or dummy, not " + setting);
@@ -45,16 +47,17 @@ public class AgentStages {
         log.info("event=agent_stages_enabled roles={}", enabled.keySet());
     }
 
-    /** The development role is told what layout its files take; every other role gets the plain task text. */
-    private static AgentStageNode node(String role, RoleCatalog roles, StageInputs stageInputs,
+    /**
+     * The development role is told what layout its files take, as {@code sandbox.verify.file-layout} says, so that
+     * this class names no language or test tool; every other role gets the plain task text.
+     */
+    private static AgentStageNode node(String role, String fileLayout, RoleCatalog roles, StageInputs stageInputs,
                                        StructuredAnswerService answers, ArtifactStore artifacts) {
         if (!role.equals("development")) {
             return new AgentStageNode(role, roles, stageInputs, answers, artifacts);
         }
         return new AgentStageNode(role, roles, stageInputs, answers, artifacts, AgentStageNode.TASK
-                + " Use a flat layout: put the modules next to each other in the repository root and all the tests in"
-                + " one tests/ folder. Do not add an extra nested package folder and do not put the files in a folder"
-                + " named after the product."
+                + (fileLayout.isEmpty() ? "" : " " + fileLayout)
                 + " The content of each file must be the complete file, ready to run: no placeholders, no ellipses and"
                 + " no comments such as \"rest of the code\". Include the tests as files in the same change set.");
     }

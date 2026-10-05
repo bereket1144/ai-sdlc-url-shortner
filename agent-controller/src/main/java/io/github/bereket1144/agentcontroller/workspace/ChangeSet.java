@@ -1,5 +1,6 @@
 package io.github.bereket1144.agentcontroller.workspace;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,6 +16,10 @@ import tools.jackson.databind.JsonNode;
 public record ChangeSet(List<FileChange> files) {
 
     static final int MAX_FILE_BYTES = 100_000;
+    /** Well under the limit of the file system (1,024 on macOS) once the folder of the workspace is added. */
+    static final int MAX_PATH_BYTES = 500;
+    /** The longest name of one file or folder that the usual file systems accept. */
+    static final int MAX_NAME_BYTES = 255;
 
     public ChangeSet {
         files = List.copyOf(files);
@@ -39,7 +44,8 @@ public record ChangeSet(List<FileChange> files) {
 
     /**
      * Why a path may never be written, as a phrase that follows "Change N", or null when it may. A change may write any
-     * relative path inside the run's workspace except one inside the repository's own {@code .git} folder.
+     * relative path inside the run's workspace except one inside the repository's own {@code .git} folder, and the
+     * path must be one that the file system can hold, so that a bad path is refused here and not when it is written.
      */
     static String pathProblem(String path) {
         if (path.isBlank()) {
@@ -48,13 +54,35 @@ public record ChangeSet(List<FileChange> files) {
         if (path.matches("(?s)([/\\\\]|[A-Za-z]:).*")) {
             return "has an absolute path";
         }
+        if (path.indexOf('\0') >= 0) {
+            return "has a path with a NUL character";
+        }
         if (path.contains("..")) {
             return "has a path with \"..\"";
         }
+        List<String> parts = parts(path);
+        if (parts.isEmpty()) {
+            return "has a path without a file name";
+        }
         // Compared without regard to case, because a file system that ignores case would still reach the folder.
-        if (Arrays.stream(path.split("[/\\\\]")).anyMatch(part -> part.equalsIgnoreCase(".git"))) {
+        if (parts.stream().anyMatch(part -> part.equalsIgnoreCase(".git"))) {
             return "has a path under .git";
         }
+        if (byteLength(path) > MAX_PATH_BYTES) {
+            return "has a path longer than " + MAX_PATH_BYTES + " bytes";
+        }
+        if (parts.stream().anyMatch(part -> byteLength(part) > MAX_NAME_BYTES)) {
+            return "has a file or folder name longer than " + MAX_NAME_BYTES + " bytes";
+        }
         return null;
+    }
+
+    /** The folders and the file name of a path, in order, without empty parts and "." parts. */
+    static List<String> parts(String path) {
+        return Arrays.stream(path.split("[/\\\\]")).filter(part -> !part.isEmpty() && !part.equals(".")).toList();
+    }
+
+    private static int byteLength(String text) {
+        return text.getBytes(StandardCharsets.UTF_8).length;
     }
 }

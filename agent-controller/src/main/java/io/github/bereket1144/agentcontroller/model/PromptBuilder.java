@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import io.github.bereket1144.agentcontroller.agent.InputAccessDeniedException;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
@@ -26,6 +28,10 @@ public class PromptBuilder {
             Use only the supplied context. Ask or state an assumption rather than inventing facts.
             Do not claim to have run a check or approved an artifact. The controller decides validity and approval.
             """;
+
+    /** The opening bracket of every framing marker of the user part: input, previous answer and validation blocks. */
+    private static final Pattern FRAMING_MARKER =
+            Pattern.compile("\\[(?=/?(?:INPUT|PREVIOUS_ANSWER|VALIDATION_MESSAGES))", Pattern.CASE_INSENSITIVE);
 
     private final ModelProfiles profiles;
     private final RoleCatalog roles;
@@ -108,9 +114,10 @@ public class PromptBuilder {
         if (failures.isEmpty()) {
             throw new IllegalArgumentException("A repair needs validation messages");
         }
-        String user = original.userText() + "\n[PREVIOUS_ANSWER]\n" + previousAnswer
+        String user = original.userText() + "\n[PREVIOUS_ANSWER]\n" + neutralised(previousAnswer)
                 + "\n[/PREVIOUS_ANSWER]\n[VALIDATION_MESSAGES]\n"
-                + String.join("\n", failures) + "\n[/VALIDATION_MESSAGES]\n"
+                + failures.stream().map(PromptBuilder::neutralised).collect(Collectors.joining("\n"))
+                + "\n[/VALIDATION_MESSAGES]\n"
                 + "Correct the answer and return one JSON object.\n"
                 + (failures.contains(StructuredAnswerService.CUT_OFF_MESSAGE)
                         ? "The previous answer was too long and was cut off: write a much shorter one, with fewer and "
@@ -140,7 +147,7 @@ public class PromptBuilder {
                 + role.output().fields().stream()
                         .map(field -> field.name() + ":" + field.type() + ":"
                                 + (field.required() ? "required" : "optional"))
-                        .collect(java.util.stream.Collectors.joining(", "))
+                        .collect(Collectors.joining(", "))
                 + "\nHuman approval required: " + role.output().approvalRequired()
                 + "\nBoundaries: " + role.boundaries()
                 + "\nUncertainty: " + role.uncertainty()
@@ -158,10 +165,19 @@ public class PromptBuilder {
             PromptInput input = inputs.get(index);
             result.append("[INPUT kind=").append(input.kind()).append(" version=").append(input.version())
                     .append("]\n")
-                    .append(shortened.contains(index) ? input.shortText() : input.fullText())
+                    .append(neutralised(shortened.contains(index) ? input.shortText() : input.fullText()))
                     .append("\n[/INPUT]\n");
         }
         return result.toString();
+    }
+
+    /**
+     * Text that comes from outside the platform (a requirement, a file, a model answer) is data. A backslash is put
+     * before the bracket of any framing marker in it, so it can neither close its own block nor forge another one.
+     * Text without a marker is left as it is.
+     */
+    private static String neutralised(String text) {
+        return FRAMING_MARKER.matcher(text).replaceAll("\\\\[");
     }
 
     private long estimate(String system, String user) {

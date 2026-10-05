@@ -1,7 +1,10 @@
 package io.github.bereket1144.agentcontroller.model;
 
+import java.net.URI;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -26,6 +29,9 @@ record ModelProperties(
         @DefaultValue("10") int safetyMarginPercent) {
 
     private static final String PREFIX = "agent.models.";
+
+    /** The hosts where a key may travel over plain http, because the request never leaves the machine. */
+    private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]");
 
     ModelProperties {
         require(safetyMarginPercent >= 0 && safetyMarginPercent < 100,
@@ -59,7 +65,8 @@ record ModelProperties(
     private static void requireValid(ModelProfile profile, int safetyMarginPercent) {
         String path = PREFIX + "profiles." + profile.name() + ".";
         require(!isBlank(profile.model()), path + "model is required");
-        require(profile.baseAddress() != null, path + "base-address is required");
+        requireUsableAddress(profile.baseAddress(), path);
+        requireUsableKey(profile, path);
         require(profile.contextWindow() > 0, path + "context-window must be set and greater than 0");
         require(profile.answerLimit() > 0, path + "answer-limit must be set and greater than 0");
         require(profile.callTimeout() != null && profile.callTimeout().isPositive(),
@@ -72,6 +79,32 @@ record ModelProperties(
                 path + "answer-limit (" + profile.answerLimit() + ") plus the safety margin (" + margin
                         + " tokens, " + safetyMarginPercent + "% of the window) must be smaller than context-window ("
                         + profile.contextWindow() + "), or no room is left for a prompt");
+    }
+
+    // The address itself is left out of the messages: it may carry a user name and password.
+    private static void requireUsableAddress(URI address, String path) {
+        require(address != null, path + "base-address is required");
+        boolean web = "http".equalsIgnoreCase(address.getScheme()) || "https".equalsIgnoreCase(address.getScheme());
+        require(web && address.getHost() != null,
+                path + "base-address must be an http or https address with a host, such as http://localhost:11434");
+    }
+
+    // The key, the style and the address are checked together, so that a profile which would fail at its first call
+    // fails at startup. The key is never put in a message.
+    private static void requireUsableKey(ModelProfile profile, String path) {
+        String key = profile.apiKey();
+        // A variable that is set but empty arrives as a blank key: not null, so it would infer the Anthropic style.
+        require(key == null || !key.isBlank(), path + "api-key is set but empty: give it a value or remove it");
+        ModelProfile.ApiStyle style = profile.style();
+        String styleName = style.name().toLowerCase(Locale.ROOT);
+        require(style != ModelProfile.ApiStyle.OLLAMA || key == null,
+                path + "api-key must not be set when api-style is ollama: the local client sends no key");
+        require(style == ModelProfile.ApiStyle.OLLAMA || key != null,
+                path + "api-key is required when api-style is " + styleName);
+        boolean safeToSend = "https".equalsIgnoreCase(profile.baseAddress().getScheme())
+                || LOOPBACK_HOSTS.contains(profile.baseAddress().getHost().toLowerCase(Locale.ROOT));
+        require(key == null || safeToSend,
+                path + "base-address must use https when an api-key is set (plain http is allowed for localhost only)");
     }
 
     private static void requireKnown(Map<String, ModelProfile> known, String field, String profileName) {

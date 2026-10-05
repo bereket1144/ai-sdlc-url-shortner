@@ -74,6 +74,21 @@ class ModelConfigurationFailureTest {
                         "agent.models.profiles.local.model"),
                 invalid("a missing base address", config -> config.remove(LOCAL + "base-address"),
                         "agent.models.profiles.local.base-address"),
+                invalid("a base address without a scheme and host", config ->
+                        config.put(LOCAL + "base-address", "localhost:11434"),
+                        "agent.models.profiles.local.base-address", "http or https"),
+                invalid("the openai style without a key", config -> config.put(LOCAL + "api-style", "openai"),
+                        "agent.models.profiles.local.api-key", "openai"),
+                invalid("the ollama style with a key", config -> {
+                    config.put(LOCAL + "api-style", "ollama");
+                    config.put(LOCAL + "api-key", "a-key");
+                }, "agent.models.profiles.local.api-key", "ollama"),
+                invalid("a key that is set but empty", config -> config.put(HOSTED + "api-key", ""),
+                        "agent.models.profiles.hosted.api-key", "empty"),
+                invalid("a key that would be sent over plain http", config -> {
+                    config.put(HOSTED + "api-key", "a-key");
+                    config.put(HOSTED + "base-address", "http://models.example.test");
+                }, "agent.models.profiles.hosted.base-address", "https"),
                 invalid("a retry limit of -1", config -> config.put(LOCAL + "retry-limit", "-1"),
                         "agent.models.profiles.local.retry-limit"),
                 invalid("a safety margin of -1 percent", config -> config.put(SAFETY_MARGIN, "-1"),

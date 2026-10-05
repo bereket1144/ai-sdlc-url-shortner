@@ -22,11 +22,11 @@ import org.springframework.util.FileSystemUtils;
 /**
  * Builds and tests a workspace in a new container, through the {@code docker} command line.
  *
- * <p>The steps are: create the container (non-root, no network, limits, a label that names the platform), copy the
- * workspace in, start it and wait, copy the one report file out, and remove the container. No folder of the host is
- * mounted. {@code --rm} is not used: Docker would delete the container the moment it exits, before the report
- * could be copied out, so the container is removed by an explicit {@code docker rm -f} in a {@code finally} block.
- * That command also kills a container that ran over its time limit.
+ * <p>The steps are: create the container (non-root, no capabilities, no new privileges, no network, limits, a label
+ * that names the platform), copy the workspace in, start it and wait, copy the one report file out, and remove the
+ * container. No folder of the host is mounted. {@code --rm} is not used: Docker would delete the container the
+ * moment it exits, before the report could be copied out, so the container is removed by an explicit
+ * {@code docker rm -f} in a {@code finally} block. That command also kills a container that ran over its time limit.
  */
 @Component
 @EnableConfigurationProperties(SandboxProperties.class)
@@ -105,11 +105,17 @@ public class DockerVerificationRunner implements VerificationRunner {
         return parseReport(report, commitId);
     }
 
+    // There is no --read-only and no --tmpfs on purpose. "docker cp" is refused on a read-only root file system, and a
+    // tmpfs is empty again once the container has stopped, so the workspace could not be copied in and the report
+    // could not be copied out. The disk limit therefore stays open (AGT-33.2); see review finding RX-1.
     private List<String> createCommand(String container) {
         return List.of("docker", "create",
                 "--name", container,
                 "--label", LABEL,
                 "--user", USER,
+                // A setuid binary in the image cannot raise the privileges of the generated code.
+                "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges",
                 "--network", "none",
                 "--memory", properties.memory(),
                 // Without a swap limit equal to the memory limit, a container may use twice the memory.

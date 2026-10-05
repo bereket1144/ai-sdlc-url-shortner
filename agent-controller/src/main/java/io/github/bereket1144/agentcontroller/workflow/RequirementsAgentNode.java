@@ -15,6 +15,7 @@ import io.github.bereket1144.agentcontroller.run.ClarificationService;
 import org.bsc.langgraph4j.state.AgentState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -31,18 +32,25 @@ public class RequirementsAgentNode {
 
     private static final Logger log = LoggerFactory.getLogger(RequirementsAgentNode.class);
     private static final String ROLE = "requirements";
-    private static final String CONTEXT = "Execution context: Python standard library, SQLite storage and pytest "
-            + "are fixed for this version. Tests run offline in a container. Do not ask the user to choose these. ";
 
     private final StructuredAnswerService answers;
     private final ArtifactStore artifacts;
     private final ClarificationService clarification;
+    private final String context;
 
+    /**
+     * @param executionContext what the agent is told is fixed for the build, such as the language and the test tool.
+     *                         It comes from {@code sandbox.verify.execution-context}, so that this class names none
+     *                         of them; when it is left out the prompts carry no such sentence
+     */
     public RequirementsAgentNode(StructuredAnswerService answers, ArtifactStore artifacts,
-                                 ClarificationService clarification) {
+                                 ClarificationService clarification,
+                                 @Value("${sandbox.verify.execution-context:}") String executionContext) {
         this.answers = answers;
         this.artifacts = artifacts;
         this.clarification = clarification;
+        // Followed by a space, so that the text of a phase can be added to it.
+        this.context = executionContext.isBlank() ? "" : executionContext.strip() + " ";
     }
 
     /** The graph consumes the final reference prepared before it starts, without another model call. */
@@ -61,7 +69,7 @@ public class RequirementsAgentNode {
         // The questions are asked once, before the first stories. After the reply the run goes straight to the
         // stories, and a run with nothing to ask stores no clarification batch at all.
         if (history.questions().isEmpty()) {
-            AcceptedAnswer batch = answers.call(runId, ROLE, CONTEXT
+            AcceptedAnswer batch = answers.call(runId, ROLE, context
                     + "CLARIFICATION phase: return a questions array and an empty assumptions array. Present all "
                     + "unresolved product questions in one batch of at most four, ordered from most to least "
                     + "important. Ask only decisions that materially affect the product, and do not ask the user to "
@@ -78,7 +86,7 @@ public class RequirementsAgentNode {
                 return Map.of("waitingForInput", true);
             }
         }
-        AcceptedAnswer answer = answers.call(runId, ROLE, CONTEXT
+        AcceptedAnswer answer = answers.call(runId, ROLE, context
                 + "STORIES phase: generate user stories with numbered acceptance criteria using the original "
                 + "requirement and all saved answers; an answer is the requester's decision. Return stories, "
                 + "openQuestions:[] and assumptions. Write one short plain-text statement in assumptions for every "
@@ -104,8 +112,20 @@ public class RequirementsAgentNode {
 
     private static List<PromptInput> inputs(String requirement, ClarificationService.Questions history) {
         return List.of(new PromptInput(InputKind.ORIGINAL_REQUIREMENT, "1", requirement, null, false),
-                new PromptInput(InputKind.QUESTIONS_AND_ANSWERS, "1",
-                        JsonMapper.shared().writeValueAsString(history), null, false));
+                new PromptInput(InputKind.QUESTIONS_AND_ANSWERS, "1", questionsText(history), null, false));
+    }
+
+    /**
+     * The questions and answers as the prompt shows them. The time of the reply and the batch version are left out:
+     * they differ between runs with the same answers and would give each run its own prompt fingerprint, so a
+     * recording of one run could never be replayed for another.
+     */
+    private static String questionsText(ClarificationService.Questions history) {
+        ObjectNode copy = JsonMapper.shared().valueToTree(history);
+        for (JsonNode item : copy.get("questions")) {
+            ((ObjectNode) item).remove(List.of("answeredAt", "artifactVersion"));
+        }
+        return JsonMapper.shared().writeValueAsString(copy);
     }
 
     private static boolean hasItems(JsonNode value, String field) {

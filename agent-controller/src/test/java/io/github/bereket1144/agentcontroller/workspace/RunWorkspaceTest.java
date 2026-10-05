@@ -112,6 +112,16 @@ class RunWorkspaceTest {
         assertThat(base.resolve(runId.toString()).resolve(".git/hooks/pre-commit")).doesNotExist();
     }
 
+    @Test
+    @DisplayName("AC-AGT-62.6 a .gitignore in the change set cannot keep another file of the same change set out of the commit")
+    void aGitignoreInTheChangeSetDoesNotHideAFile() throws Exception {
+        workspace.commit(runId, new ChangeSet(List.of(
+                new FileChange(".gitignore", "ignored.txt\n"), new FileChange("ignored.txt", "x"))));
+
+        assertThat(git(base.resolve(runId.toString()), "ls-files").split("\n"))
+                .containsExactlyInAnyOrder(".gitignore", "ignored.txt");
+    }
+
     private static List<String> namesIn(Path folder) throws Exception {
         try (Stream<Path> entries = Files.list(folder)) {
             return entries.map(entry -> entry.getFileName().toString()).toList();

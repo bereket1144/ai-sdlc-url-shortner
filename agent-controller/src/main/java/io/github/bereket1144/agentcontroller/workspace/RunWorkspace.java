@@ -111,7 +111,9 @@ public class RunWorkspace {
                 throw new IllegalArgumentException("Change " + (index + 1) + " " + problem);
             }
         }
-        List<String> add = new ArrayList<>(List.of("add", "--"));
+        // --force: a .gitignore, also one of this same change set, must not keep a file of the change set out of the
+        // commit; without it git refuses to add an ignored file and the run would end with an unexpected error.
+        List<String> add = new ArrayList<>(List.of("add", "--force", "--"));
         for (FileChange file : files) {
             write(root.resolve(file.path()), file.content());
             add.add(file.path());

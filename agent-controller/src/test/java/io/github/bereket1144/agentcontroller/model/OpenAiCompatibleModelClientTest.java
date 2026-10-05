@@ -2,6 +2,7 @@ package io.github.bereket1144.agentcontroller.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -139,8 +140,13 @@ class OpenAiCompatibleModelClientTest {
         ModelProfile unkeyed = new ModelProfile("router", "router-model", URI.create("http://127.0.0.1:1/api/v1"),
                 200000, 1024, Duration.ofSeconds(2), 1, 2, 0.0, null, ApiStyle.OPENAI);
 
-        assertThatThrownBy(() -> client(unkeyed).call("requirements", unkeyed, "system", "user"))
-                .isInstanceOf(IllegalArgumentException.class);
+        // The startup check refuses such a profile now, so the client is given a ModelProfiles that accepts any
+        // profile: this proves the client's own refusal, which stays as the second line of defence.
+        OpenAiCompatibleModelClient client = new OpenAiCompatibleModelClient(mock(ModelProfiles.class), roles());
+
+        assertThatThrownBy(() -> client.call("requirements", unkeyed, "system", "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("without a key");
     }
 
     @Test
@@ -168,9 +174,12 @@ class OpenAiCompatibleModelClientTest {
 
     private static OpenAiCompatibleModelClient client(ModelProfile profile) throws IOException {
         ModelProperties properties = new ModelProperties(Map.of("router", profile), "router", null, Map.of(), 10);
-        RoleCatalog roles = new RoleCatalog(new PathMatchingResourcePatternResolver()
+        return new OpenAiCompatibleModelClient(new ModelProfiles(properties), roles());
+    }
+
+    private static RoleCatalog roles() throws IOException {
+        return new RoleCatalog(new PathMatchingResourcePatternResolver()
                 .getResources("classpath*:/agent-roles/*.properties"));
-        return new OpenAiCompatibleModelClient(new ModelProfiles(properties), roles);
     }
 
     private static ModelProfile profile(URI address) {

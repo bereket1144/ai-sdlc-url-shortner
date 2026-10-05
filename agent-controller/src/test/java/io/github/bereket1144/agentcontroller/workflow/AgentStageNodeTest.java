@@ -148,21 +148,24 @@ class AgentStageNodeTest {
     }
 
     @Test
-    @DisplayName("AC-AGT-62.6 the development prompt asks for a flat layout with one tests folder and names no product or run folder")
-    void theDevelopmentPromptAsksForAFlatLayout() {
+    @DisplayName("AC-AGT-62.6 the development prompt carries the file layout from the configuration, and the platform code words none")
+    void theDevelopmentPromptCarriesTheConfiguredLayout() {
         List<String> prompts = Collections.synchronizedList(new ArrayList<>());
         ModelClient model = (role, modelProfile, system, user) -> {
             prompts.add(system + "\n" + user);
             return new ModelResult(ANSWERS.get(role), FinishReason.COMPLETE, null, null, null);
         };
-        AgentStageNode node = stages(model, "development").nodes().get("development");
+        MockEnvironment environment = new MockEnvironment().withProperty("agent.stages.development", "agent")
+                .withProperty("sandbox.verify.file-layout", "Put every file in the src folder: CONFIGURED_LAYOUT_TEXT.");
+        AgentStageNode node = new AgentStages(environment, roles, stageInputs, service(model), store)
+                .nodes().get("development");
 
         node.execute(new AgentState(Map.of("runId", runId, "requirement", REQUIREMENT)));
 
         // The task text and the role text are both in the prompt, so one check covers both.
         assertThat(prompts).singleElement().asString()
-                .contains("flat layout", "tests/")
-                .doesNotContain("url-shortener", "apps/", "runs/");
+                .contains("CONFIGURED_LAYOUT_TEXT", "complete file")
+                .doesNotContain("flat layout", "tests/", "url-shortener", "apps/", "runs/");
     }
 
     @Test

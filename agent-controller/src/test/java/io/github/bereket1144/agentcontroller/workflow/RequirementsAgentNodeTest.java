@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +34,7 @@ import io.github.bereket1144.agentcontroller.model.RequirementsCriteriaCheck;
 import io.github.bereket1144.agentcontroller.model.RequirementsStoryIdsCheck;
 import io.github.bereket1144.agentcontroller.model.ScriptedModelClient;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService;
+import io.github.bereket1144.agentcontroller.modelcall.InputFingerprint;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords;
 import io.github.bereket1144.agentcontroller.run.RunKind;
 import io.github.bereket1144.agentcontroller.run.ClarificationService;
@@ -49,6 +51,7 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 class RequirementsAgentNodeTest {
 
     private static final String REQUIREMENT = "PRIVATE_REQUIREMENT build a small command-line calculator";
+    private static final String CONTEXT = "Execution context: CONFIGURED_CONTEXT_TEXT is fixed for this version.";
     private static final String ANSWER = """
             {"stories":[{"id":"S-1","title":"Add","role":"user","want":"to add two numbers","benefit":"a sum",
               "acceptanceCriteria":[{"id":"S-1.1","text":"PRIVATE_CRITERION two numbers are added"}]}],
@@ -136,14 +139,55 @@ class RequirementsAgentNodeTest {
                 });
     }
 
+    @Test
+    @DisplayName("AC-AGT-62.16 the execution context in the prompts is the configured text, and the node itself names no language or tool")
+    void theExecutionContextComesFromConfiguration() throws IOException {
+        RequirementsAgentNode node = node();
+
+        node.prepare(state());
+
+        assertThat(model.calls()).hasSize(2).allSatisfy(call -> assertThat(call.userText())
+                .contains("Task:\n" + CONTEXT + " ")
+                .doesNotContain("Python", "SQLite", "pytest"));
+    }
+
+    @Test
+    @DisplayName("AC-AGT-10.2 the stories prompt holds no reply time and no batch version, so equal answers give equal fingerprints")
+    void equalAnswersGiveEqualPromptFingerprints() throws IOException {
+        model.addResult(new ModelResult(ANSWER, FinishReason.COMPLETE, null, null, null));
+        model.addResult(new ModelResult(ANSWER, FinishReason.COMPLETE, null, null, null));
+        when(store.store(any())).thenReturn(ref);
+
+        // The same question and answer, replied at another time and stored as another batch version.
+        nodeWith(answered(1, Instant.parse("2026-01-01T08:00:00Z"))).prepare(state());
+        nodeWith(answered(2, Instant.parse("2026-06-30T17:45:10Z"))).prepare(state());
+
+        assertThat(model.calls()).hasSize(2);
+        assertThat(model.calls().get(0).userText()).contains("PRIVATE_ANSWER reuse the code")
+                .doesNotContain("answeredAt", "artifactVersion", "2026-");
+        assertThat(InputFingerprint.of("local", model.calls().get(1).systemText(), model.calls().get(1).userText()))
+                .isEqualTo(InputFingerprint.of("local", model.calls().get(0).systemText(),
+                        model.calls().get(0).userText()));
+    }
+
     private AgentState state() {
         return new AgentState(Map.of("runId", runId, "requirement", REQUIREMENT, "kind", RunKind.GREENFIELD));
+    }
+
+    private static ClarificationService.Questions answered(int batchVersion, Instant answeredAt) {
+        return new ClarificationService.Questions(List.of(new ClarificationService.Item("Q-1", "Duplicate handling?",
+                "API contract", "New code", batchVersion, "ANSWERED", "PRIVATE_ANSWER reuse the code", answeredAt)));
     }
 
     private RequirementsAgentNode node() throws IOException {
         model.addResult(new ModelResult("{\"questions\":[],\"assumptions\":[]}", FinishReason.COMPLETE, null, null, null));
         model.addResult(new ModelResult(ANSWER, FinishReason.COMPLETE, null, null, null));
         when(store.store(any())).thenReturn(ref);
+        return nodeWith(new ClarificationService.Questions(List.of()));
+    }
+
+    /** A node whose clarification history is the one given; the model answers are queued by the caller. */
+    private RequirementsAgentNode nodeWith(ClarificationService.Questions history) throws IOException {
         RoleCatalog roles = new RoleCatalog(new PathMatchingResourcePatternResolver()
                 .getResources("classpath*:/agent-roles/*.properties"));
         ModelProfiles profiles = mock(ModelProfiles.class);
@@ -155,7 +199,7 @@ class RequirementsAgentNodeTest {
                 new PromptBuilder(profiles, roles, 3), validator, mock(ModelCallRecords.class),
                 mock(ModelCallBudget.class), 2, Duration.ZERO);
         ClarificationService clarification = mock(ClarificationService.class);
-        when(clarification.questions(runId)).thenReturn(new ClarificationService.Questions(List.of()));
-        return new RequirementsAgentNode(answers, store, clarification);
+        when(clarification.questions(runId)).thenReturn(history);
+        return new RequirementsAgentNode(answers, store, clarification, CONTEXT);
     }
 }

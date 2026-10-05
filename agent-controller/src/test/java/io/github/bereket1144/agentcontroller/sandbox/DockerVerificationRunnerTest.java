@@ -26,8 +26,9 @@ class DockerVerificationRunnerTest {
     Path workspace;
 
     @Test
-    @DisplayName("AC-AGT-62.8 the build runs in a new labelled container with no network, a non-root user and limits, "
-            + "gets the workspace by copy, returns only its report by copy and is removed afterwards")
+    @DisplayName("AC-AGT-62.8 the build runs in a new labelled container with no network, no capabilities, no new "
+            + "privileges, a non-root user and limits, gets the workspace by copy, returns only its report by copy "
+            + "and is removed afterwards")
     void containerIsLockedDownCopiedInAndOutAndRemoved() {
         FakeDocker docker = new FakeDocker(PASSING_REPORT, false);
 
@@ -42,6 +43,8 @@ class DockerVerificationRunnerTest {
                 .startsWith("docker", "create")
                 .containsSequence("--network", "none")
                 .containsSequence("--user", "10001:10001")
+                .containsSequence("--cap-drop", "ALL")
+                .containsSequence("--security-opt", "no-new-privileges")
                 .containsSequence("--memory", "1g")
                 .containsSequence("--cpus", "1.0")
                 .containsSequence("--pids-limit", "256")
