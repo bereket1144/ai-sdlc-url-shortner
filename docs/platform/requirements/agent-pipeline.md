@@ -290,7 +290,7 @@ As the platform owner, I want a stage that fails to be attempted again, and a fa
 
 ### AGT-66 Retry a failed run, resuming first and then restarting once
 
-Status: open
+Status: coded
 
 Depends on: AGT-65.
 
