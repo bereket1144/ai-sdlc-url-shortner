@@ -72,11 +72,21 @@ public class RunService {
     /** Commit FAILED independently so a caller can rethrow the workflow error without rolling this back. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void failRun(UUID runId) {
+        recordFailure(runId, RunFailureReason.UNEXPECTED);
+    }
+
+    /** Save the classified reason and FAILED status in the same independent transaction. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void failRun(UUID runId, Throwable failure) {
+        recordFailure(runId, RunFailureReason.from(failure));
+    }
+
+    private void recordFailure(UUID runId, RunFailureReason reason) {
         Run run = runRepository.findById(runId).orElseThrow(() -> {
             log.warn("event=run_failure_target_missing runId={}", runId);
             return new IllegalStateException("Run not found while recording failure");
         });
-        run.fail();
-        log.info("event=run_failure_transition_requested runId={}", runId);
+        run.fail(reason);
+        log.info("event=run_failure_transition_requested runId={} reason={}", runId, reason);
     }
 }

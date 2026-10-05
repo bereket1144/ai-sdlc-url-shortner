@@ -98,6 +98,22 @@ class RunTest {
         run.fail();
 
         assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
+        assertThat(run.getFailureReason()).isEqualTo(RunFailureReason.UNEXPECTED);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-9.3 a FAILED transition requires a reason and sets it with the status")
+    void failureReasonIsPartOfTransition() {
+        Run run = new Run("Build a task tracker");
+        run.start();
+
+        assertThatThrownBy(() -> run.fail(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(run.getStatus()).isEqualTo(RunStatus.RUNNING);
+        assertThat(run.getFailureReason()).isNull();
+
+        run.fail(RunFailureReason.OUTPUT_INVALID);
+        assertThat(run.getStatus()).isEqualTo(RunStatus.FAILED);
+        assertThat(run.getFailureReason()).isEqualTo(RunFailureReason.OUTPUT_INVALID);
     }
 
     @Test

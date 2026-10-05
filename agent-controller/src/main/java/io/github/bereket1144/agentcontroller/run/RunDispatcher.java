@@ -37,7 +37,7 @@ public class RunDispatcher {
             workflowRunner.run(runId, run.getRequirement(), run.getKind());
         } catch (RuntimeException | Error workflowFailure) {
             try {
-                runService.failRun(runId);
+                runService.failRun(runId, workflowFailure);
             } catch (RuntimeException recordingFailure) {
                 workflowFailure.addSuppressed(recordingFailure);
                 log.error("event=run_failure_recording_failed runId={} errorType={}",

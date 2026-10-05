@@ -56,6 +56,43 @@ class RunMigrationTest {
         }
     }
 
+    @Test
+    @DisplayName("AC-AGT-9.4 a run failed before failure codes existed reads back as UNEXPECTED")
+    void olderFailedRunGetsUnexpectedReason() throws Exception {
+        try (PostgreSQLContainer postgres = new PostgreSQLContainer(
+                DockerImageName.parse(TestcontainersConfiguration.POSTGRES_IMAGE))) {
+            postgres.start();
+            UUID id = UUID.randomUUID();
+            migrateTo(postgres, "1");
+            try (Connection connection = connect(postgres); Statement statement = connection.createStatement()) {
+                statement.executeUpdate("insert into runs (id, requirement) values ('" + id + "', 'old run')");
+            }
+            migrateTo(postgres, "6");
+            try (Connection connection = connect(postgres); Statement statement = connection.createStatement()) {
+                statement.executeUpdate("update runs set status = 'FAILED' where id = '" + id + "'");
+            }
+            migrateTo(postgres, "latest");
+
+            try (Connection connection = connect(postgres); Statement statement = connection.createStatement();
+                    ResultSet row = statement.executeQuery(
+                            "select status, failure_reason from runs where id = '" + id + "'")) {
+                assertThat(row.next()).isTrue();
+                assertThat(row.getString("status")).isEqualTo("FAILED");
+                assertThat(row.getString("failure_reason")).isEqualTo("UNEXPECTED");
+            }
+            try (Connection connection = connect(postgres); Statement statement = connection.createStatement()) {
+                assertThatThrownBy(() -> statement.executeUpdate(
+                        "update runs set failure_reason = null where id = '" + id + "'"))
+                        .isInstanceOf(SQLException.class)
+                        .hasMessageContaining("runs_failure_reason_matches_status");
+                assertThatThrownBy(() -> statement.executeUpdate(
+                        "update runs set failure_reason = 'MADE_UP' where id = '" + id + "'"))
+                        .isInstanceOf(SQLException.class)
+                        .hasMessageContaining("runs_failure_reason_known");
+            }
+        }
+    }
+
     private static void migrateTo(PostgreSQLContainer postgres, String target) {
         Flyway.configure()
                 .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())

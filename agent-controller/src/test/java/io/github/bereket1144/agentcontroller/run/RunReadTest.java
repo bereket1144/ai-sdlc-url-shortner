@@ -71,7 +71,25 @@ class RunReadTest {
                 .andExpect(jsonPath("$.status").value("CREATED"))
                 .andExpect(jsonPath("$.createdAt").value("2026-01-02T03:04:05Z"))
                 .andExpect(jsonPath("$.updatedAt").value("2026-01-02T03:04:06Z"))
-                .andExpect(jsonPath("$.version").value(3));
+                .andExpect(jsonPath("$.version").value(3))
+                .andExpect(jsonPath("$.failureReason").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("AC-AGT-9.2 FAILED reads show only the fixed reason code and sentence")
+    void failedRunShowsFixedReason() throws Exception {
+        UUID id = UUID.randomUUID();
+        Run run = mock(Run.class);
+        when(run.getId()).thenReturn(id);
+        when(run.getStatus()).thenReturn(RunStatus.FAILED);
+        when(run.getFailureReason()).thenReturn(RunFailureReason.MODEL_UNAVAILABLE);
+        when(runService.getRun(id)).thenReturn(run);
+
+        mvc.perform(get("/v1/runs/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.failureReason.code").value("MODEL_UNAVAILABLE"))
+                .andExpect(jsonPath("$.failureReason.message")
+                        .value("The model could not complete the request."));
     }
 
     @Test

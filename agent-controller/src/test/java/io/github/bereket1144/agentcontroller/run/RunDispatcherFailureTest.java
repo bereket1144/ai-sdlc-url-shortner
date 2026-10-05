@@ -3,6 +3,8 @@ package io.github.bereket1144.agentcontroller.run;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -40,7 +42,7 @@ class RunDispatcherFailureTest {
 
         assertThatThrownBy(() -> new RunDispatcher(runService, workflowRunner).dispatchNext())
                 .isSameAs(workflowError);
-        verify(runService).failRun(runId);
+        verify(runService).failRun(runId, workflowError);
     }
 
     @Test
@@ -58,7 +60,7 @@ class RunDispatcherFailureTest {
         when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
         doThrow(workflowFailure).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD);
-        doThrow(recordingFailure).when(runService).failRun(runId);
+        doThrow(recordingFailure).when(runService).failRun(runId, workflowFailure);
 
         assertThatThrownBy(() -> new RunDispatcher(runService, workflowRunner).dispatchNext())
                 .isSameAs(workflowFailure);
@@ -91,7 +93,7 @@ class RunDispatcherFailureTest {
             dispatcherLog.detachAppender(appender);
         }
 
-        verify(runService, never()).failRun(runId);
+        verify(runService, never()).failRun(eq(runId), any(Throwable.class));
         assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage)
                 .contains("event=run_success_recording_failed runId=" + runId
                         + " errorType=java.lang.IllegalStateException")

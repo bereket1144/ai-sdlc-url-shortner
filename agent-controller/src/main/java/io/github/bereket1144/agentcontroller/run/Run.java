@@ -41,6 +41,10 @@ public class Run {
     @Column(nullable = false)
     private RunStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private RunFailureReason failureReason;
+
     // Hibernate sets this when the row is first inserted and never writes it again.
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -90,10 +94,18 @@ public class Run {
     }
 
     public void fail() {
+        fail(RunFailureReason.UNEXPECTED);
+    }
+
+    public void fail(RunFailureReason reason) {
         if (status != RunStatus.RUNNING) {
             throw new IllegalStateException(
                     "Only a RUNNING run can fail");
         }
+        if (reason == null) {
+            throw new IllegalArgumentException("failure reason must not be null");
+        }
+        this.failureReason = reason;
         this.status = RunStatus.FAILED;
     }
 

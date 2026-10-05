@@ -2,10 +2,12 @@ package io.github.bereket1144.agentcontroller.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import java.util.UUID;
 
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
+import io.github.bereket1144.agentcontroller.model.ModelCallBudget.BudgetExhaustedException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,11 +55,26 @@ class RunFailurePersistenceTest {
         TransactionTemplate callerTransaction = new TransactionTemplate(transactionManager);
         // Simulate a caller rethrowing the workflow error after failure recording.
         assertThatThrownBy(() -> callerTransaction.execute(status -> {
-            runService.failRun(createdId);
+            runService.failRun(createdId, workflowFailure);
             throw workflowFailure;
         })).isSameAs(workflowFailure);
 
-        assertThat(runService.getRun(createdId).getStatus()).isEqualTo(RunStatus.FAILED);
+        Run stored = runService.getRun(createdId);
+        assertThat(stored.getStatus()).isEqualTo(RunStatus.FAILED);
+        assertThat(stored.getFailureReason()).isEqualTo(RunFailureReason.UNEXPECTED);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-9.1 a typed budget failure is stored with its fixed code")
+    void persistsTypedFailureReason() {
+        createdId = runService.createRun("Build a task tracker").getId();
+        runService.claimNextRun().orElseThrow();
+
+        runService.failRun(createdId, mock(BudgetExhaustedException.class));
+
+        Run stored = runService.getRun(createdId);
+        assertThat(stored.getStatus()).isEqualTo(RunStatus.FAILED);
+        assertThat(stored.getFailureReason()).isEqualTo(RunFailureReason.BUDGET_EXHAUSTED);
     }
 
     @Test

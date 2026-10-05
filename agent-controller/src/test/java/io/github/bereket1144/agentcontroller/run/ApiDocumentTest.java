@@ -83,9 +83,24 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['200'].content['application/json'].schema.$ref")
                         .value("#/components/schemas/RunResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
-                        "id", "requirement", "status", "createdAt", "updatedAt", "version")))
+                        "id", "requirement", "status", "createdAt", "updatedAt", "version", "failureReason")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
                         containsInAnyOrder("CREATED", "RUNNING", "SUCCEEDED", "FAILED")));
+    }
+
+    @Test
+    @DisplayName("AC-AGT-9.5 the run API documents the fixed failure codes and message")
+    void failureReasonIsDocumented() throws Exception {
+        mvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.components.schemas.RunResponse.properties.failureReason.$ref")
+                        .value("#/components/schemas/RunFailure"))
+                .andExpect(jsonPath("$.components.schemas.RunFailure.properties.keys()",
+                        containsInAnyOrder("code", "message")))
+                .andExpect(jsonPath("$.components.schemas.RunFailure.properties.code.enum",
+                        containsInAnyOrder("OUTPUT_INVALID", "MODEL_UNAVAILABLE", "CONTEXT_TOO_LARGE",
+                                "BUDGET_EXHAUSTED", "REPLAY_MISSING", "ACCESS_DENIED", "REJECTED",
+                                "ASSEMBLY_CONFLICT", "STOPPED_BY_REVIEWER", "STAGE_TIMEOUT",
+                                "RECOVERY_FAILED", "UNEXPECTED")));
     }
 
     @Test
