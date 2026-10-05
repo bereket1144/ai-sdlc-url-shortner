@@ -9,9 +9,9 @@ import java.util.Objects;
 import tools.jackson.databind.JsonNode;
 
 /**
- * The files the development role changes: each with a path and its full new content. This type also holds the one
- * rule for where a change may write and how large a file may be, so that the answer check and the workspace apply
- * the same rule.
+ * The files the development role changes: each with a path and its full new content, or a path to delete. This type
+ * also holds the one rule for where a change may write and how large a file may be, so that the answer check and the
+ * workspace apply the same rule.
  */
 public record ChangeSet(List<FileChange> files) {
 
@@ -25,11 +25,30 @@ public record ChangeSet(List<FileChange> files) {
         files = List.copyOf(files);
     }
 
-    /** One file: a path relative to the workspace and the complete new text of the file, never a difference. */
-    public record FileChange(String path, String content) {
+    /**
+     * One file: a path relative to the workspace and either the complete new text of the file, never a difference, or
+     * the order to delete the file, which has no text.
+     */
+    public record FileChange(String path, String content, boolean delete) {
         public FileChange {
             Objects.requireNonNull(path, "path must not be null");
-            Objects.requireNonNull(content, "content must not be null");
+            if (delete) {
+                if (content != null) {
+                    throw new IllegalArgumentException("a deletion has no content");
+                }
+            } else {
+                Objects.requireNonNull(content, "content must not be null");
+            }
+        }
+
+        /** A file to write with this complete text. */
+        public FileChange(String path, String content) {
+            this(path, content, false);
+        }
+
+        /** A file to delete. */
+        public static FileChange deletion(String path) {
+            return new FileChange(path, null, true);
         }
     }
 
@@ -37,15 +56,19 @@ public record ChangeSet(List<FileChange> files) {
     public static ChangeSet from(JsonNode changes) {
         List<FileChange> files = new ArrayList<>();
         for (JsonNode change : changes) {
-            files.add(new FileChange(change.get("path").asString(), change.get("content").asString()));
+            String path = change.get("path").asString();
+            // The answer check has made sure that a "delete" is true and that such a change has no content.
+            files.add(change.has("delete") ? FileChange.deletion(path)
+                    : new FileChange(path, change.get("content").asString()));
         }
         return new ChangeSet(files);
     }
 
     /**
-     * Why a path may never be written, as a phrase that follows "Change N", or null when it may. A change may write any
-     * relative path inside the run's workspace except one inside the repository's own {@code .git} folder, and the
-     * path must be one that the file system can hold, so that a bad path is refused here and not when it is written.
+     * Why a path may never be written or deleted, as a phrase that follows "Change N", or null when it may. A change
+     * may write or delete any relative path inside the run's workspace except one inside the repository's own
+     * {@code .git} folder, and the path must be one that the file system can hold, so that a bad path is refused here
+     * and not when it is written.
      */
     static String pathProblem(String path) {
         if (path.isBlank()) {

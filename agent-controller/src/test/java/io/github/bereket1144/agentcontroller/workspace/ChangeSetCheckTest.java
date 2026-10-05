@@ -68,6 +68,49 @@ class ChangeSetCheckTest {
                         "Change 1 is larger than " + ChangeSet.MAX_FILE_BYTES + " bytes"));
     }
 
+    @Test
+    @DisplayName("AC-AGT-69.1 a deletion needs no content, may be mixed with writes, and a change set of only "
+            + "deletions is accepted")
+    void acceptsDeletions() {
+        assertThat(check.validate(answer(change("new.py", "x"), deletion("old.py")))).isEmpty();
+        assertThat(check.validate(answer(deletion("old.py"), deletion("pkg/old.py")))).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("refusedDeletions")
+    @DisplayName("AC-AGT-69.1 a change with both content and delete or with neither, a delete that is not true, a "
+            + "deletion without a path or of a path that ends in a slash, and a path that is written and deleted or "
+            + "deleted twice are refused")
+    void refusesBadDeletions(String description, JsonNode answer, String message) {
+        assertThat(check.validate(answer)).containsExactly(message);
+    }
+
+    static Stream<Arguments> refusedDeletions() {
+        return Stream.of(
+                Arguments.of("content and delete in one change",
+                        answer("{\"path\":\"a.py\",\"content\":\"x\",\"delete\":true}"),
+                        "Change 1 has both content and delete"),
+                Arguments.of("a delete that is not true", answer("{\"path\":\"a.py\",\"delete\":\"yes\"}"),
+                        "Change 1 has a delete that is not true"),
+                Arguments.of("a delete that is false", answer("{\"path\":\"a.py\",\"delete\":false}"),
+                        "Change 1 has a delete that is not true"),
+                Arguments.of("a change with neither content nor delete", answer("{\"path\":\"a.py\"}"),
+                        "Change 1 has no content text"),
+                Arguments.of("a deletion without a path", answer("{\"delete\":true}"),
+                        "Change 1 has no path text"),
+                Arguments.of("a path that ends in a slash", answer(deletion("src/")),
+                        "Change 1 deletes a path that ends in a slash, and only files can be deleted"),
+                Arguments.of("a path that is written and then deleted",
+                        answer(change("a.py", "x"), deletion("./a.py")),
+                        "Change 2 repeats the path of change 1"),
+                Arguments.of("a path that is deleted twice", answer(deletion("a.py"), deletion("a.py")),
+                        "Change 2 repeats the path of change 1"));
+    }
+
+    private static String deletion(String path) {
+        return MAPPER.createObjectNode().put("path", path).put("delete", true).toString();
+    }
+
     private static String change(String path, String content) {
         return MAPPER.createObjectNode().put("path", path).put("content", content).toString();
     }

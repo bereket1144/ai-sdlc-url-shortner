@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -217,6 +218,83 @@ class RunWorkspaceTest {
 
         assertThat(git(base.resolve(runId.toString()), "ls-files", "--", PRODUCT).lines())
                 .containsExactlyInAnyOrder(PRODUCT + "/.gitignore", PRODUCT + "/ignored.txt", PRODUCT + "/old.txt");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.2 a deleted file is removed from the product folder and from the commit, next to a written "
+            + "one, and the commit is not taken for a drop of files of the branch")
+    void aDeletedFileLeavesTheFolderAndTheCommit() {
+        workspace.commit(runId, new ChangeSet(List.of(
+                FileChange.deletion("old.txt"), new FileChange("new.txt", "new\n"))));
+
+        Path root = base.resolve(runId.toString());
+        assertThat(root.resolve(PRODUCT).resolve("old.txt")).doesNotExist();
+        assertThat(root.resolve(PRODUCT).resolve("new.txt")).hasContent("new\n");
+        assertThat(git(root, "diff", "--no-renames", "--name-status", "HEAD~1", "HEAD").lines())
+                .containsExactlyInAnyOrder("D\t" + PRODUCT + "/old.txt", "A\t" + PRODUCT + "/new.txt");
+        assertThat(git(root, "status", "--porcelain")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.2 deleting a file that is not there is not an error and changes nothing")
+    void deletingAMissingFileChangesNothing() {
+        String head = workspace.head(runId);
+
+        Optional<String> committed = workspace.commitIfChanged(runId,
+                new ChangeSet(List.of(FileChange.deletion("missing.txt"))), "development", "no change");
+
+        assertThat(committed).isEmpty();
+        assertThat(workspace.head(runId)).isEqualTo(head);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.2 a path that is a folder refuses the whole change set and nothing is written")
+    void aFolderCannotBeDeleted() {
+        workspace.commit(runId, new ChangeSet(List.of(new FileChange("src/app.py", "x\n"))));
+        String head = workspace.head(runId);
+        ChangeSet changes = new ChangeSet(List.of(new FileChange("other.py", "x\n"), FileChange.deletion("src")));
+
+        assertThatThrownBy(() -> workspace.commit(runId, changes))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Change 2 is a folder, and only files can be deleted");
+        Path product = base.resolve(runId.toString()).resolve(PRODUCT);
+        assertThat(product.resolve("other.py")).doesNotExist();
+        assertThat(product.resolve("src/app.py")).exists();
+        assertThat(workspace.head(runId)).isEqualTo(head);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.2 the path rules apply to a deletion: a path under .git and a path through a link are "
+            + "refused and nothing is deleted")
+    void thePathRulesApplyToADeletion() throws Exception {
+        Path root = workspace.create(runId);
+        Path outside = Files.createDirectory(temp.resolve("outside"));
+        Files.writeString(outside.resolve("victim.txt"), "keep");
+        Files.createSymbolicLink(root.resolve(PRODUCT).resolve("linked"), outside);
+
+        assertThatThrownBy(() -> workspace.commit(runId,
+                new ChangeSet(List.of(FileChange.deletion("old.txt"), FileChange.deletion(".git/config")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Change 2 has a path under .git");
+        assertThatThrownBy(() -> workspace.commit(runId,
+                new ChangeSet(List.of(FileChange.deletion("linked/victim.txt")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Change 1 goes through a link");
+        assertThat(root.resolve(PRODUCT).resolve("old.txt")).exists();
+        assertThat(outside.resolve("victim.txt")).hasContent("keep");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.2 a commit is still refused when the index has lost a file of the branch that the change "
+            + "set did not delete")
+    void anUnintendedDropIsStillRefused() {
+        Path root = workspace.create(runId);
+        git(root, "rm", "--cached", "--quiet", "--", PRODUCT + "/old.txt");
+
+        assertThatThrownBy(() -> workspace.commit(runId, new ChangeSet(List.of(new FileChange("new.txt", "x\n")))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("The workspace is not checked out");
+        assertThat(git(root, "rev-list", "--count", "HEAD")).isEqualTo("1");
     }
 
     private static List<String> namesIn(Path folder) throws Exception {

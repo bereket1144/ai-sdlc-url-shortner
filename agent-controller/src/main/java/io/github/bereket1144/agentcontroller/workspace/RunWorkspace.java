@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -149,11 +150,13 @@ public class RunWorkspace {
     }
 
     /**
-     * Writes every file of the change set into the product folder of the run's workspace and makes one commit by the
-     * development role. Nothing is written unless every file is allowed.
+     * Writes every file of the change set into the product folder of the run's workspace, deletes every file that it
+     * says to delete, and makes one commit by the development role. Nothing is written or deleted unless every path is
+     * allowed.
      *
      * @return the id of the new commit
-     * @throws IllegalArgumentException when a path is not allowed or goes through a link; names the change by number
+     * @throws IllegalArgumentException when a path is not allowed, goes through a link, or is a folder that is to be
+     *                                  deleted; names the change by number
      */
     public String commit(UUID runId, ChangeSet changes) {
         Path root = stage(runId, changes, NONE);
@@ -168,13 +171,14 @@ public class RunWorkspace {
 
     /**
      * Writes every file of the change set under the product folder and every file of the evidence under the run's own
-     * evidence folder {@code runs/<run-id>}, replacing a file that is already at its path, and makes one commit by the
-     * given author, unless every file already holds this content. Nothing is written unless every file is allowed.
+     * evidence folder {@code runs/<run-id>}, replacing a file that is already at its path, deletes every file that the
+     * change set says to delete, and makes one commit by the given author, unless no file differs after that. Deleting
+     * a file that is not there changes nothing. Nothing is written or deleted unless every path is allowed.
      *
      * @param author the author and committer name; the address is a fixed placeholder built from it
      * @return the id of the new commit, or empty when the files were unchanged and so nothing was committed
-     * @throws IllegalArgumentException when a path is not allowed or goes through a link; names the change by number,
-     *                                  counting the evidence after the change set
+     * @throws IllegalArgumentException when a path is not allowed, goes through a link, or is a folder that is to be
+     *                                  deleted; names the change by number, counting the evidence after the change set
      */
     public Optional<String> commitIfChanged(UUID runId, ChangeSet changes, ChangeSet evidence, String author,
                                             String message) {
@@ -194,11 +198,15 @@ public class RunWorkspace {
         }
     }
 
-    /** Checks every path, then writes the files and adds them to the index of the run's worktree. */
+    /**
+     * Checks every path, then writes the files and adds them to the index of the run's worktree, and removes the files
+     * to delete from the worktree and from the index.
+     */
     private Path stage(UUID runId, ChangeSet changes, ChangeSet evidence) {
         Path root = create(runId);
         // A worktree that was added but not checked out has an empty index, and a commit then deletes every file of the
-        // branch. The one-line summary keeps the output small however many files the branch has.
+        // branch. The one-line summary keeps the output small however many files the branch has. It looks before the
+        // removals of this change set are staged, so a deletion that the change set asked for is not taken for a drop.
         String deleted = git(root, Map.of(), "diff", "--cached", "--shortstat", "--diff-filter=D");
         if (!deleted.isEmpty()) {
             log.error("event=workspace_not_checked_out runId={} deleted=\"{}\"", runId, deleted);
@@ -214,21 +222,47 @@ public class RunWorkspace {
             if (problem == null && goesThroughLink(root, placement.path())) {
                 problem = "goes through a link";
             }
+            // Only files are deleted, and a folder here is a mistake, so the whole change set is refused.
+            if (problem == null && placement.file().delete()
+                    && Files.isDirectory(root.resolve(placement.path()), LinkOption.NOFOLLOW_LINKS)) {
+                problem = "is a folder, and only files can be deleted";
+            }
             if (problem != null) {
                 log.warn("event=change_set_refused runId={} change={} reason=\"{}\"", runId, index + 1, problem);
                 throw new IllegalArgumentException("Change " + (index + 1) + " " + problem);
             }
         }
+        List<String> written = new ArrayList<>();
+        List<String> removed = new ArrayList<>();
+        for (Placement placement : placements) {
+            if (placement.file().delete()) {
+                removed.add(placement.path());
+            } else {
+                write(root.resolve(placement.path()), placement.file().content());
+                written.add(placement.path());
+            }
+        }
         // --force: a .gitignore, also one of this same change set, must not keep a file of the change set out of the
         // commit; without it git refuses to add an ignored file and the run would end with an unexpected error.
-        List<String> add = new ArrayList<>(List.of("add", "--force", "--"));
-        for (Placement placement : placements) {
-            write(root.resolve(placement.path()), placement.file().content());
-            add.add(placement.path());
+        gitOnPaths(root, List.of("add", "--force", "--"), written);
+        // --force removes a file that has changes that are not committed. --ignore-unmatch makes a file that is not
+        // there a change of nothing and not an error. The file leaves the worktree and the index in one command.
+        gitOnPaths(root, List.of("rm", "--quiet", "--force", "--ignore-unmatch", "--"), removed);
+        if (!removed.isEmpty()) {
+            log.info("event=change_set_deletions_staged runId={} deletions={}", runId, removed.size());
         }
-        // A path is a literal name, never a pattern: "*.py" must add only a file called "*.py".
-        git(root, Map.of("GIT_LITERAL_PATHSPECS", "1"), add.toArray(String[]::new));
         return root;
+    }
+
+    /** Runs the git command on the paths; with no path it does nothing, because "git rm" with none is an error. */
+    private static void gitOnPaths(Path root, List<String> command, List<String> paths) {
+        if (paths.isEmpty()) {
+            return;
+        }
+        List<String> arguments = new ArrayList<>(command);
+        arguments.addAll(paths);
+        // A path is a literal name, never a pattern: "*.py" must add only a file called "*.py".
+        git(root, Map.of("GIT_LITERAL_PATHSPECS", "1"), arguments.toArray(String[]::new));
     }
 
     private static String commitStaged(UUID runId, Path root, int fileCount, String author, String message) {

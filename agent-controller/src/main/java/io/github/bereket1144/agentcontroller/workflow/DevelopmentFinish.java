@@ -5,7 +5,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog.InputKind;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactRef;
@@ -32,16 +34,22 @@ import org.springframework.stereotype.Component;
  * product folder of that commit is built and tested in the sandbox, and the result is kept. A result that is not a
  * clear pass ends the stage with {@link VerificationFailedException}. When the stage is attempted again, the agent is
  * given the failures and the files of the product folder and answers with a corrected change set, which is committed
- * on top and checked again. A stop request is a safe point before anything is committed and again while the build
- * runs: the build is stopped, and the stage ends with a RunStoppedException; the result of a stopped build says
- * nothing about the code, so it is not kept. It exists only when the development agent is on.
+ * on top and checked again. A corrected change set that leaves the product as it was is not built again, because the
+ * same code would give the same result: the attempt fails at once, and the next one is told that nothing changed. A
+ * stop request is a safe point before anything is committed and again while the build runs: the build is stopped, and
+ * the stage ends with a RunStoppedException; the result of a stopped build says nothing about the code, so it is not
+ * kept. It exists only when the development agent is on.
  */
 @Component
 @ConditionalOnProperty(name = "agent.stages.development", havingValue = "agent")
 public class DevelopmentFinish {
 
     private static final Logger log = LoggerFactory.getLogger(DevelopmentFinish.class);
+    private static final String STAGE = "development";
     private static final String AUTHOR = "development";
+    /** Added to the task of a fix attempt that comes after a fix attempt whose answer changed nothing. */
+    static final String UNCHANGED_NOTE = "Your previous answer changed nothing. At least one file must change or be "
+            + "deleted.";
     /** Added to the task of the first attempt of a run that changes an earlier run, whose files the agent is shown. */
     private static final String CHANGE_TASK = "CHANGE attempt. The repository already holds the code of an earlier run: "
             + "the input " + InputKind.SELECTED_WORKSPACE_FILES + " holds the current text of its files. Change an "
@@ -67,6 +75,12 @@ public class DevelopmentFinish {
     private final VerificationRecords records;
     private final WorkspaceFiles workspaceFiles;
     private final StopCheck stop;
+    /**
+     * The runs whose latest fix attempt changed nothing, and whose next fix attempt is told so. The stage is attempted
+     * again with the same graph state, so the fact cannot travel in it; it is kept here until the agent has answered the
+     * next fix attempt. A restart of the controller forgets it, and the only loss is the note.
+     */
+    private final Set<UUID> unchangedAnswers = ConcurrentHashMap.newKeySet();
 
     public DevelopmentFinish(ArtifactStore artifacts, RunWorkspace workspaces, VerificationRunner verifier,
                              VerificationRecords records, WorkspaceFiles workspaceFiles, StopCheck stop) {
@@ -81,10 +95,12 @@ public class DevelopmentFinish {
     /**
      * One attempt of the development stage. It is a plain attempt unless the latest build and test of the run did not
      * pass; then it is a fix attempt, and the agent is told which tests failed and is given the current files. The
-     * first try of a restarted attempt is a plain attempt, whatever the earlier attempt left behind.
+     * first try of a restarted attempt is a plain attempt, whatever the earlier attempt left behind. A fix attempt that
+     * follows a fix attempt that changed nothing is told so in its task.
      *
      * @param node the development agent's node
      * @return what {@link #finish} returns for the answer of the agent
+     * @throws VerificationFailedException when a fix attempt's answer leaves the product unchanged: nothing is built
      */
     Map<String, Object> develop(AgentState state, AgentStageNode node) {
         UUID runId = state.<UUID>value("runId").orElseThrow(() -> new IllegalStateException("Missing run id"));
@@ -92,6 +108,8 @@ public class DevelopmentFinish {
         Optional<VerificationResult> failed = records.latest(runId).filter(result -> !result.passed())
                 .filter(result -> !result.commitId().equals(beforeRestart));
         if (failed.isEmpty()) {
+            // A plain attempt writes its code afresh, so an earlier attempt that changed nothing is of no concern.
+            unchangedAnswers.remove(runId);
             // A run that changes an earlier run is told to change the files that are there; the node shows them.
             boolean changesExistingCode = state.<RunKind>value("kind").filter(kind -> kind == RunKind.BROWNFIELD)
                     .isPresent();
@@ -103,8 +121,12 @@ public class DevelopmentFinish {
         log.info("event=development_fix_attempt runId={} commit={} outcome={} failingTests={} files={} omitted={}",
                 runId, result.commitId(), result.outcome(), result.failingTests().size(), snapshot.files().size(),
                 snapshot.omitted());
-        return finish(state, node.execute(state, fixTask(result),
-                List.of(ExistingFiles.input(result.commitId(), snapshot))));
+        String task = unchangedAnswers.contains(runId) ? fixTask(result) + "\n" + UNCHANGED_NOTE : fixTask(result);
+        Map<String, Object> answer = node.execute(state, task,
+                List.of(ExistingFiles.input(result.commitId(), snapshot)));
+        // The note has been given with an answer. A call that failed before one came leaves it for the next attempt.
+        unchangedAnswers.remove(runId);
+        return finish(state, answer, failed);
     }
 
     /** The failures as text for the task. The report is data from generated code, so it is fenced as such. */
@@ -117,14 +139,30 @@ public class DevelopmentFinish {
                 + failed.excerpt() + "\n[/TEST_REPORT]\n"
                 + "The input " + InputKind.SELECTED_WORKSPACE_FILES + " holds the current text of the files in the "
                 + "repository. Return a corrected change set: every file that must change, each with its complete new "
-                + "text, and no file that can stay as it is.";
+                + "text, every file that must go as {\"path\": \"...\", \"delete\": true} with no content, and no file "
+                + "that can stay as it is. To rename a file, write it under the new name and delete the old one, and "
+                + "change every file that refers to the old name.";
     }
 
     /**
+     * The answer of an attempt that is not a fix attempt: it is always built, as it is committed or as the branch is.
+     *
      * @param update what the development stage returned: its artifact reference under {@code development}
      * @return the same update with the commit id and the outcome added for the stages after it
      */
     Map<String, Object> finish(AgentState state, Map<String, Object> update) {
+        return finish(state, update, Optional.empty());
+    }
+
+    /**
+     * @param update what the development stage returned: its artifact reference under {@code development}
+     * @param fixing the failed check that this attempt is to repair, or empty when it is not a fix attempt
+     * @return the same update with the commit id and the outcome added for the stages after it
+     * @throws VerificationFailedException when the build did not pass, or when a fix attempt changed nothing and so
+     *                                     nothing was built; the failed check stays the latest one then
+     */
+    private Map<String, Object> finish(AgentState state, Map<String, Object> update,
+                                       Optional<VerificationResult> fixing) {
         UUID runId = state.<UUID>value("runId").orElseThrow(() -> new IllegalStateException("Missing run id"));
         // A safe point: the agent has answered, and nothing is committed or built yet.
         stop.check(runId);
@@ -133,10 +171,18 @@ public class DevelopmentFinish {
                 .orElseThrow(() -> new IllegalStateException("The development artifact was not stored"));
         ChangeSet changes = ChangeSet.from(artifact.content().get("changes"));
         Path product = workspaces.productFolder(runId);
+        Optional<String> committed = workspaces.commitIfChanged(runId, changes, AUTHOR,
+                "development: apply " + changes.files().size() + " file changes for run " + runId);
+        if (committed.isEmpty() && fixing.isPresent()) {
+            // The product is as it was, so the build would give the same result. The attempt counts as failed, the
+            // failed check stays the latest one, and the next attempt is a fix attempt again. The attempt number is the
+            // version of the answer, which counts the answers of this stage.
+            unchangedAnswers.add(runId);
+            log.info("event=fix_attempt_unchanged runId={} stage={} attempt={}", runId, STAGE, ref.version());
+            throw new VerificationFailedException(fixing.get().outcome());
+        }
         // A change set that changes nothing leaves the branch where it is, and that commit is checked again.
-        String commit = workspaces.commitIfChanged(runId, changes, AUTHOR,
-                "development: apply " + changes.files().size() + " file changes for run " + runId)
-                .orElseGet(() -> workspaces.head(runId));
+        String commit = committed.orElseGet(() -> workspaces.head(runId));
         stop.check(runId);
         // The sandbox is given the files of the product only, not the repository around them.
         VerificationResult result = verifier.verify(product, commit, () -> stop.requested(runId));

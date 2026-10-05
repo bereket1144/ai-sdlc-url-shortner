@@ -85,9 +85,9 @@ class DevelopmentFinishTest {
     }
 
     @Test
-    @DisplayName("AC-AGT-65.3 a fix attempt that changes no file is checked again on the commit the branch is on, "
-            + "and fails again instead of failing on an empty commit")
-    void anUnchangedFixAttemptFailsAgain() {
+    @DisplayName("AC-AGT-69.4 an attempt that is not a fix attempt and changes no file is still built, on the commit "
+            + "the branch is on, instead of failing on an empty commit")
+    void anUnchangedPlainAttemptIsStillBuilt() {
         givenAnArtifactAndACommit();
         when(workspaces.commitIfChanged(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(workspaces.head(runId)).thenReturn("abc123");

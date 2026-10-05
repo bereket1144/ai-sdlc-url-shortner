@@ -146,6 +146,16 @@ class RoleCatalogTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-69.3 the development role explains writing a file, deleting a file, and renaming as a write "
+            + "and a delete")
+    void developmentRoleExplainsDeleting() throws IOException {
+        String structure = new RoleCatalog(roleFiles()).get("development").output().structure();
+
+        assertThat(structure).contains("{\"path\":\"...\",\"content\":\"...\"}", "{\"path\":\"...\",\"delete\":true}",
+                "To rename a file, write the new file and delete the old one");
+    }
+
+    @Test
     @DisplayName("AC-AGT-1.5 an unknown input kind fails and names its role and kind")
     void rejectsUnknownInputKind() throws IOException {
         Resource[] resources = replaceRole(roleFiles(), "requirements", "inputs", "UNKNOWN_KIND");

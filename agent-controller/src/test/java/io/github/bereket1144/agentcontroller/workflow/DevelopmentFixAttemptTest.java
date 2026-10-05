@@ -26,7 +26,11 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactRef;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
@@ -57,6 +61,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.mock.env.MockEnvironment;
 import tools.jackson.databind.json.JsonMapper;
@@ -64,7 +69,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * The development stage over the whole graph, with the real answer service, workspace (real git, in a temporary
  * platform repository) and stage wrapper. The model, the artifact store, the verification records and the container are
- * stand-ins: the first change set is broken and fails its test, the second is fixed and passes.
+ * stand-ins: by default the first change set is broken and fails its test, the second is fixed and passes. A test may
+ * script the answers of the model and the rule of the container before it runs the graph.
  */
 class DevelopmentFixAttemptTest {
 
@@ -85,6 +91,12 @@ class DevelopmentFixAttemptTest {
     private final List<NewArtifact> stored = Collections.synchronizedList(new ArrayList<>());
     private final AtomicReference<VerificationResult> latest = new AtomicReference<>();
     private final VerificationRecords records = mock(VerificationRecords.class);
+    private final AtomicInteger builds = new AtomicInteger();
+    /** The changes that the stand-in model answers with, one list for each call of the development agent. */
+    private List<List<Map<String, Object>>> script = List.of(
+            List.of(write("app.py", BROKEN)), List.of(write("app.py", FIXED)));
+    /** Tells whether the build of the product folder passes, for the stand-in container. */
+    private Predicate<Path> buildPasses = product -> read(product.resolve("app.py")).contains("FIXED_VERSION");
     private Path platform;
     private WorkflowRunner runner;
 
@@ -115,9 +127,8 @@ class DevelopmentFixAttemptTest {
         AtomicInteger developmentCalls = new AtomicInteger();
         ModelClient model = (role, modelProfile, system, user) -> {
             developmentPrompts.add(user);
-            String code = developmentCalls.incrementAndGet() == 1 ? BROKEN : FIXED;
             return new ModelResult(JsonMapper.shared().writeValueAsString(Map.of(
-                    "changes", List.of(Map.of("path", "app.py", "content", code)),
+                    "changes", script.get(developmentCalls.getAndIncrement()),
                     "rationale", "why", "affectedCriteria", List.of(), "errorHandling", "how",
                     "verificationNotes", List.of())), FinishReason.COMPLETE, null, null, null);
         };
@@ -129,10 +140,10 @@ class DevelopmentFixAttemptTest {
                 mock(ModelCallRecords.class), budget, 2, Duration.ZERO);
         AgentStages stages = new AgentStages(new MockEnvironment().withProperty("agent.stages.development", "agent"),
                 roles, stageInputs, answers, store, Optional.empty());
-        // The container is given the product folder and reads the committed file: the broken one fails its test, the
-        // fixed one passes.
+        // The container is given the product folder and decides from the committed files whether the build passes.
         VerificationRunner container = (workspace, commitId, cancelled) -> {
-            boolean fixed = read(workspace.resolve("app.py")).contains("FIXED_VERSION");
+            builds.incrementAndGet();
+            boolean fixed = buildPasses.test(workspace);
             return fixed ? new VerificationResult(Outcome.PASSED, 1, 1, 0, List.of(), "", commitId)
                     : new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of(FAILING_TEST), REPORT, commitId);
         };
@@ -175,6 +186,82 @@ class DevelopmentFixAttemptTest {
         assertThat(result.<ArtifactRef>value("development")).get()
                 .extracting(ArtifactRef::kind, ArtifactRef::version).containsExactly("development", 2);
         verify(budget, times(2)).reserve(eq(runId), eq("development"), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.3 the task of a fix attempt explains deleting a file, and renaming as a write and a delete")
+    void theFixTaskExplainsDeleting() {
+        runner.run(runId, "Build a task tracker", RunKind.GREENFIELD);
+
+        assertThat(developmentPrompts.get(1)).contains("{\"path\": \"...\", \"delete\": true}",
+                "write it under the new name and delete the old one");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.4 a fix attempt that changes nothing runs no build and fails the attempt, the stage is "
+            + "attempted again, and the next attempt is told that its previous answer changed nothing")
+    void anUnchangedFixAttemptRunsNoBuild() {
+        // The second answer repeats the broken file; the third is the repair.
+        script = List.of(List.of(write("app.py", BROKEN)), List.of(write("app.py", BROKEN)),
+                List.of(write("app.py", FIXED)));
+        Logger logger = (Logger) LoggerFactory.getLogger(DevelopmentFinish.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.list = Collections.synchronizedList(new ArrayList<>());
+        appender.start();
+        logger.addAppender(appender);
+
+        AgentState result;
+        try {
+            result = runner.run(runId, "Build a task tracker", RunKind.GREENFIELD);
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        // Three answers, but only two builds: the unchanged answer was not built, and it was not recorded.
+        assertThat(developmentPrompts).hasSize(3);
+        assertThat(builds).hasValue(2);
+        verify(records, times(2)).record(eq(runId), any());
+        assertThat(result.<String>value("verification")).contains("PASSED");
+        // The note comes with the attempt right after the unchanged one, and with no other.
+        String note = "Your previous answer changed nothing. At least one file must change or be deleted.";
+        assertThat(developmentPrompts.get(1)).doesNotContain(note);
+        assertThat(developmentPrompts.get(2)).contains("FIX attempt", note);
+        assertThat(appender.list.stream().map(ILoggingEvent::getFormattedMessage))
+                .contains("event=fix_attempt_unchanged runId=" + runId + " stage=development attempt=2");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-69.5 a module named like a standard library module is repaired by one change set that writes "
+            + "it under a new name, rewrites the import and deletes the old file, and the second build passes")
+    void aBadlyNamedModuleIsRenamedByAFixAttempt() throws Exception {
+        script = List.of(
+                List.of(write("http.py", "def get():\n    return 1\n"),
+                        write("test_http.py", "import http\n\n\ndef test_get():\n    assert http.get() == 1\n")),
+                List.of(write("http_api.py", "def get():\n    return 1\n"),
+                        write("test_http.py",
+                                "import http_api\n\n\ndef test_get():\n    assert http_api.get() == 1\n"),
+                        deletion("http.py")));
+        // As in practice, the tests cannot run while a file hides the standard library module of the same name.
+        buildPasses = product -> !Files.exists(product.resolve("http.py"));
+
+        AgentState result = runner.run(runId, "Build a task tracker", RunKind.GREENFIELD);
+
+        Path workspace = temp.resolve("workspaces").resolve(runId.toString());
+        assertThat(builds).hasValue(2);
+        assertThat(latest.get().passed()).isTrue();
+        assertThat(git(workspace, "diff", "--no-renames", "--name-status", "HEAD~1", "HEAD").lines())
+                .containsExactlyInAnyOrder("A\t" + PRODUCT + "/http_api.py", "M\t" + PRODUCT + "/test_http.py",
+                        "D\t" + PRODUCT + "/http.py");
+        assertThat(result.<String>value("commit")).contains(git(workspace, "rev-parse", "HEAD"));
+    }
+
+    private static Map<String, Object> write(String path, String content) {
+        return Map.of("path", path, "content", content);
+    }
+
+    private static Map<String, Object> deletion(String path) {
+        return Map.of("path", path, "delete", true);
     }
 
     private static String read(Path file) {
