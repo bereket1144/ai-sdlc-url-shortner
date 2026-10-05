@@ -29,7 +29,7 @@ Integration tests use Testcontainers PostgreSQL. They do not require the develop
 
 The coverage target remains 100%. The enforced line and branch minimum is temporarily 85%, approved in step 89. A later coverage sweep is intended to restore 95% and work toward the target. The functional coverage table and review index predate recent pipeline work; they are not evidence of complete current feature coverage or review. Exact current percentages must come from the generated report, not the minimum gate.
 
-The handoff records `./mvnw verify` passing at baseline `91be0a3` with 417 tests and 4 skipped opt-in live checks. This is the last recorded full build, not a result for subsequent changes. AGT-64 adds nine focused tests in `RequirementsClarificationTest`, covering its batch flow and a fresh application instance on the same database; test sources compile, but this new suite has not been executed.
+The last recorded full build is `./mvnw clean verify` on commit `88e9450` (step 108): 440 tests passing and 4 skipped opt-in live checks, line coverage 2092/2196 and branch coverage 748/839, above the temporary 85% gate. `RequirementsClarificationTest` covers the clarification batch flow and a fresh application instance on the same database.
 
 ## Live and generated-product evidence
 

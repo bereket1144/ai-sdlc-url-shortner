@@ -2,7 +2,7 @@
 
 Date: 2026-10-05
 
-Status: accepted for AGT-64; implementation written, test execution pending.
+Status: accepted for AGT-64, partly superseded by ADR 0007 (question and answer only: no assumptions to confirm and no second batch). The build passes with its tests.
 
 ## Context
 

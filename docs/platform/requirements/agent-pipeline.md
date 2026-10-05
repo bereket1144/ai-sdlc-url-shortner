@@ -312,7 +312,7 @@ E. Run read operations (what Postman calls)
 
 F. End to end
 
-- AC-AGT-62.15 A scripted end-to-end test in `./mvnw verify` posts a requirement through the HTTP API with a scripted model and a fake container port, waits for the run, and checks: status SUCCEEDED, an artifact of every stage, a commit on `run/<run-id>` that contains the files of the scripted change set, and a stored passing verification result. A second case with a failing scripted build ends FAILED with `VERIFICATION_FAILED`.
+- AC-AGT-62.15 A scripted end-to-end test in `./mvnw verify` posts a requirement through the HTTP API with a scripted model and a fake container port, waits for the run, and checks: status SUCCEEDED, an artifact of every stage, a commit on `main` of the run's repository that contains the files of the scripted change set, and a stored passing verification result. A second case with a failing scripted build ends FAILED with `VERIFICATION_FAILED`.
 - AC-AGT-62.16 An opt-in end-to-end test, enabled by a property and the key in the environment, runs the real model and the real container on the requirement in `scenarios/walking-skeleton.md`. That file asks for a small link-shortening service and pins the language and test tool (Python, the standard library, SQLite and pytest). The platform code contains neither. The test asserts structure only: the run ends SUCCEEDED, or FAILED with a reason; an artifact exists for every stage that ran; the commit and the verification result exist when the run got that far. It never asserts wording. `./mvnw verify` skips it.
 
 ### AGT-63 Call an OpenAI-compatible model API such as OpenRouter
@@ -758,7 +758,7 @@ As a reviewer, I want every action of a run recorded in an append-only trail, so
 
 ### AGT-46 Measure how reliably the platform runs
 
-Status: open
+Status: coded
 
 Depends on: none. The numbers come from data the platform already stores (runs, model calls, verification results).
 
@@ -771,7 +771,7 @@ As the platform owner, I want reliability numbers computed from what the platfor
 
 ### AGT-47 Trace any change back to its requirement
 
-Status: open
+Status: coded
 
 Depends on: AGT-11.
 
@@ -1014,6 +1014,6 @@ Still required by the project, but belonging to other files or documents:
 
 Stretch, only after everything above is complete: retrieval over standards and code, tool calling and an MCP connection to an outside tool, a second execution profile, and a run on an unrelated requirement.
 
-Cut from scope (user decisions, 2026-10-04): the Java profile (AGT-42), operation identities (AGT-38), the audit anchor and hash chain (AGT-45, and the chain of AGT-44), the evaluation framework (AGT-59), lease-based crash recovery (replaced by AGT-39's restart rule), account management and role hierarchies (AGT-48), a metrics dashboard and summary operation (AGT-46), and distributed scale (one controller instance, documented).
+Cut from scope (user decisions, 2026-10-04): the Java profile (AGT-42), operation identities (AGT-38), the audit anchor and hash chain (AGT-45, and the chain of AGT-44), the evaluation framework (AGT-59), lease-based crash recovery (replaced by AGT-39's restart rule), account management and role hierarchies (AGT-48), and distributed scale (one controller instance, documented).
 
 Not planned: training or fine-tuning models, a front end, and a real cloud deployment.
