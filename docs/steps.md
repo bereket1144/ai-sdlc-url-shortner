@@ -237,3 +237,7 @@ The record of the work done in this repository, one entry per step, in the order
 - [ ] 88. AGT-62 Run the whole pipeline once, from Postman, on a real model.
   Done when: story AGT-62 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test (the opt-in live checks of 62.1 and 62.16 are written and skipped by default).
   Criterion update (user approval, 2026-10-04): the criteria of AGT-62 as drafted in step 87, including the updates to AC-SWAG-1.3 and AC-SWAG-1.4. (main agent, direct)
+- [x] 89. Lower the JaCoCo gate to 85% until the coverage sweep.
+  Done when: the line and branch minimums in agent-controller/pom.xml are 0.85, a design note says to restore 0.95 at the sweep, and the 100% target is unchanged.
+  Criterion update (user decision, 2026-10-04): the build gate drops from 95% to 85% temporarily so that light tests do not fail the build; the reported numbers and the named gaps stay. (main agent, direct)
+  Result: the line and branch minimums in `pom.xml` are 0.85; a design note says to restore 0.95 at the sweep; the 100% target in AGENTS.md is unchanged. (main agent, direct)
