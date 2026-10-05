@@ -1,0 +1,79 @@
+# Review results
+
+## reviewedFiles
+
+- app.py
+- link_store.py
+
+## findings
+
+- **1**
+  - **id**: F-1
+  - **severity**: high
+  - **location**: link_store.py:__init__ (sqlite3.connect(..., check_same_thread=False))
+  - **issue**: A single sqlite3 connection is shared across ThreadingHTTPServer request threads. check_same_thread=False only disables the guard; it does not make the connection thread-safe. Concurrent execute() calls on one connection can interleave and raise sqlite3.ProgrammingError or corrupt cursor state, dropping the connection mid-response.
+  - **evidence**: link_store.py opens one connection in __init__ and reuses self._conn in insert/lookup/count; app.py build_server wraps it in ThreadingHTTPServer, which serves each request on a new thread.
+  - **resolutionStatus**: open
+  - **needsVerification**: true
+- **2**
+  - **id**: F-2
+  - **severity**: medium
+  - **location**: app.py:do_POST (length = int(self.headers.get('Content-Length') or 0))
+  - **issue**: A missing Content-Length is treated as 0, so a chunked or bodyless POST is parsed as an empty body and returns 400 rather than a clear error; also a negative length is rejected but a non-numeric value is caught. Behaviour is acceptable but the 0-default silently masks malformed requests.
+  - **evidence**: app.py do_POST: length defaults to 0 when header absent; body read only when length truthy.
+  - **resolutionStatus**: open
+  - **needsVerification**: false
+- **3**
+  - **id**: F-3
+  - **severity**: medium
+  - **location**: app.py:build_short_url(host, code)
+  - **issue**: host parameter is accepted but unused; the function always returns a path. This is allowed by assumptions (path-only is permitted), but the unused parameter is dead code and the docstring says 'copyable short URL path' while the signature implies host-based absolute URLs.
+  - **evidence**: app.py build_short_url returns '/' + code and ignores host.
+  - **resolutionStatus**: open
+  - **needsVerification**: false
+- **4**
+  - **id**: F-4
+  - **severity**: medium
+  - **location**: app.py:do_GET (code = path.lstrip('/'))
+  - **issue**: No validation that the code is 7 base62 characters before lookup. Any path segment is passed to store.lookup. This is not a correctness defect for 404 semantics, but it widens the lookup surface and diverges from the design interface 'GET /{code} with 7-char base62 code'.
+  - **evidence**: app.py do_GET strips leading slash and only rejects empty or containing '/'.
+  - **resolutionStatus**: open
+  - **needsVerification**: false
+- **5**
+  - **id**: F-5
+  - **severity**: low
+  - **location**: app.py:do_POST / do_GET
+  - **issue**: No handling for unexpected exceptions from store.insert/lookup (e.g. sqlite3.OperationalError). Such errors propagate and the client sees a dropped connection instead of a 5xx.
+  - **evidence**: Only CodeGenerationError is caught in do_POST; do_GET has no try/except around service.follow.
+  - **resolutionStatus**: open
+  - **needsVerification**: false
+- **6**
+  - **id**: F-6
+  - **severity**: low
+  - **location**: app.py:make_handler.Handler._send
+  - **issue**: HTTP/1.1 keep-alive is enabled but there is no Connection: close handling and no read timeout; a slow or idle client can hold a thread. Acceptable for the offline test scope but worth noting.
+  - **evidence**: protocol_version = 'HTTP/1.1'; no timeout set on the server or handler.
+  - **resolutionStatus**: open
+  - **needsVerification**: false
+- **7**
+  - **id**: F-7
+  - **severity**: low
+  - **location**: link_store.py:SCHEMA
+  - **issue**: code is declared both PRIMARY KEY and UNIQUE, which is redundant (PRIMARY KEY already implies uniqueness in SQLite). Harmless but noisy.
+  - **evidence**: SCHEMA string: 'code TEXT PRIMARY KEY NOT NULL UNIQUE'.
+  - **resolutionStatus**: open
+  - **needsVerification**: false
+
+## evidence
+
+- app.py: protocol_version='HTTP/1.1' with explicit Content-Length on every response addresses the reported RemoteDisconnected symptom.
+- app.py: follow path calls service.follow -> store.lookup only; no INSERT/UPDATE on GET, satisfying S-2-4.
+- app.py: invalid URL returns None from create_link -> 400 with no insert, satisfying S-1-4/S-1-5.
+- link_store.py: UNIQUE/PRIMARY KEY on code plus IntegrityError -> CodeCollision supports S-3-1/S-3-2.
+- link_store.py: file-backed sqlite3 connection with idempotent CREATE TABLE IF NOT EXISTS supports S-3-3/S-4-2/S-4-3.
+- No test files were supplied, so the claimed passing suite and the restart test could not be inspected; verificationNotes are assertions, not observed results.
+
+## resolutionStatus
+
+open
+

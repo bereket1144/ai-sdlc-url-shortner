@@ -1,0 +1,115 @@
+# Plan
+
+## tasks
+
+- **1**
+  - **id**: T-1
+  - **title**: Project skeleton and SQLite schema bootstrap
+  - **dependsOn**
+  - **areas**
+    - service entrypoint
+    - Link store (SQLite)
+  - **acceptanceCriteria**
+    - Service starts with stdlib only and no network access.
+    - On start against a fresh SQLite file, the code->long_url table with UNIQUE(code) is created idempotently.
+    - Starting twice against the same file does not error.
+  - **completionChecks**
+    - Run start twice on same file; second start succeeds.
+    - Inspect schema: UNIQUE constraint on code present.
+- **2**
+  - **id**: T-2
+  - **title**: URL validator (pure function)
+  - **dependsOn**
+  - **areas**
+    - URL validator
+  - **acceptanceCriteria**
+    - Accepts absolute http and https URLs.
+    - Rejects missing, empty, non-absolute, and non-http(s) schemes.
+  - **completionChecks**
+    - Unit tests cover S-1-4 and S-1-5 cases; no network calls made.
+- **3**
+  - **id**: T-3
+  - **title**: Code generator with collision retry
+  - **dependsOn**
+  - **areas**
+    - Code generator
+  - **acceptanceCriteria**
+    - Produces 7-character base62 codes.
+    - On store uniqueness violation, regenerates and retries; returns 5xx on retry-limit exhaustion.
+  - **completionChecks**
+    - Unit test: forced collision yields a different code.
+    - Unit test: retry limit exhaustion returns error, not infinite loop.
+- **4**
+  - **id**: T-4
+  - **title**: LinkStore insert and lookup
+  - **dependsOn**
+    - T-1
+  - **areas**
+    - Link store (SQLite)
+  - **acceptanceCriteria**
+    - insert(code, long_url) succeeds or reports uniqueness violation.
+    - lookup(code) returns long_url or not-found.
+    - Data survives process restart.
+  - **completionChecks**
+    - Unit tests: insert, duplicate insert, lookup hit, lookup miss.
+    - Restart test: insert, restart, lookup returns same long_url (S-3-3, S-4-3).
+- **5**
+  - **id**: T-5
+  - **title**: POST /links create endpoint
+  - **dependsOn**
+    - T-2
+    - T-3
+    - T-4
+  - **areas**
+    - HTTP handler layer
+    - Response builder
+  - **acceptanceCriteria**
+    - Valid absolute http/https URL returns 200 with a copyable short URL (absolute or path).
+    - Missing/empty URL returns 400 and creates no link.
+    - Non-absolute or non-http(s) URL returns 400 and creates no link.
+    - Same long URL submitted twice yields two distinct short URLs, each redirecting to it.
+  - **completionChecks**
+    - Integration tests cover S-1-1, S-1-2, S-1-3, S-1-4, S-1-5.
+    - After 400 cases, store contains no new row.
+- **6**
+  - **id**: T-6
+  - **title**: GET /{code} follow endpoint
+  - **dependsOn**
+    - T-4
+  - **areas**
+    - HTTP handler layer
+    - Response builder
+  - **acceptanceCriteria**
+    - Known code returns 302 with Location equal to stored long URL.
+    - Unknown code returns 404 with no redirect.
+    - No click or usage data is written or read on follow.
+  - **completionChecks**
+    - Integration tests cover S-2-1, S-2-2, S-2-4.
+    - Confirm no write statements execute on follow path.
+- **7**
+  - **id**: T-7
+  - **title**: End-to-end offline and persistence test suite
+  - **dependsOn**
+    - T-5
+    - T-6
+  - **areas**
+    - test suite
+  - **acceptanceCriteria**
+    - Full create+follow suite passes with no outbound network access.
+    - Links created in run 1 redirect correctly in run 2 against the same SQLite file.
+    - Links do not expire and have no click limit.
+  - **completionChecks**
+    - Run suite in offline container; all pass (S-4-1).
+    - Two-run restart test passes (S-4-3).
+    - Repeated follow of an old link still redirects (S-2-3).
+
+## assumptions
+
+- Request body shape (form field vs JSON) is implementer choice per requirements assumptions; T-5 tests will target whichever is chosen.
+- Short URL return form (absolute from request host vs path) is implementer choice; T-5 accepts either.
+- Base62 alphabet and retry limit are implementer choices; T-3 fixes only the 7-char length and bounded retry.
+- SQLite file path is an implementer choice; tests use a configurable path.
+- No auth, rate limiting, aliases, expiry, click tracking, or listing endpoints are in scope.
+- Error bodies have no required format; only status codes are asserted.
+- Concurrent same-code creation is delegated to the SQLite UNIQUE constraint; no application-level lock is planned.
+
