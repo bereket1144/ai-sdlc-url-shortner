@@ -194,3 +194,6 @@ The record of the work done in this repository, one entry per step, in the order
   Done when: docs/platform/requirements/agent-pipeline.md again requires fallback after exhausted retries, dependent criteria agree, and the superseded retry-only ADR is removed.
   Criterion update (user decision, 2026-10-04): the retry-only criteria changed in step 74 are reverted to their original fallback wording; step 74 remains as history. (main agent, direct)
   Result: AGT-6 again retries the primary, then calls the configured fallback once; AGT-2, AGT-7, AGT-8, AGT-10, AGT-44, AGT-46 and AGT-56 again describe fallback, and the uncommitted retry-only ADR 0003 was removed. (main agent, direct)
+- [x] 81. AGT-61 Run the checks in CI.
+  Done when: story AGT-61 in docs/platform/requirements/agent-pipeline.md is coded: every criterion is met by the workflow.
+  Result: `.github/workflows/verify.yml` runs `./mvnw verify` from `agent-controller/` on every push and pull request on a Docker-equipped runner, so a failing test or the JaCoCo gate in `pom.xml` fails the job, and uploads `target/site/jacoco/` as the `jacoco-report` artifact even when the build fails; both criteria are proven by the workflow itself and have no unit test; the workflow was not run here. (development-agent)

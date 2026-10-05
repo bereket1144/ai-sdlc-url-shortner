@@ -1,0 +1,36 @@
+name: verify
+
+# Runs the full build on every push and every pull request.
+# The ubuntu runner has Docker, which the integration tests (Testcontainers) need.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Fails when a test fails or when coverage is below the gate in pom.xml (jacoco check).
+      - name: Build, test and check coverage
+        working-directory: agent-controller
+        run: ./mvnw --batch-mode verify
+
+      # Kept even when the build fails, so a coverage failure can be read.
+      - name: Keep the unit coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: agent-controller/target/site/jacoco/
+          if-no-files-found: warn
