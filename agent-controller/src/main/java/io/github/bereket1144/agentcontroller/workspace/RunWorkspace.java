@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -31,10 +32,7 @@ public class RunWorkspace {
 
     private static final Logger log = LoggerFactory.getLogger(RunWorkspace.class);
     private static final Duration GIT_TIMEOUT = Duration.ofSeconds(60);
-    /** The development role is the author; the address is a fixed placeholder and never the user's own. */
-    private static final Map<String, String> AUTHOR = Map.of(
-            "GIT_AUTHOR_NAME", "development", "GIT_AUTHOR_EMAIL", "development@agent.invalid",
-            "GIT_COMMITTER_NAME", "development", "GIT_COMMITTER_EMAIL", "development@agent.invalid");
+    private static final String DEVELOPMENT = "development";
 
     private final Path base;
 
@@ -64,13 +62,37 @@ public class RunWorkspace {
     }
 
     /**
-     * Writes every file of the change set into the run's workspace and makes one commit. Nothing is written unless
-     * every file is allowed.
+     * Writes every file of the change set into the run's workspace and makes one commit by the development role.
+     * Nothing is written unless every file is allowed.
      *
      * @return the id of the new commit
      * @throws IllegalArgumentException when a path is not allowed or goes through a link; names the change by number
      */
     public String commit(UUID runId, ChangeSet changes) {
+        Path root = stage(runId, changes);
+        return commitStaged(runId, root, changes.files().size(), DEVELOPMENT,
+                "development: apply " + changes.files().size() + " file changes for run " + runId);
+    }
+
+    /**
+     * Writes every file of the change set, replacing a file that is already at its path, and makes one commit by the
+     * given author, unless every file already holds this content. Nothing is written unless every file is allowed.
+     *
+     * @param author the author and committer name; the address is a fixed placeholder built from it
+     * @return the id of the new commit, or empty when the files were unchanged and so nothing was committed
+     * @throws IllegalArgumentException when a path is not allowed or goes through a link; names the change by number
+     */
+    public Optional<String> commitIfChanged(UUID runId, ChangeSet changes, String author, String message) {
+        Path root = stage(runId, changes);
+        if (git(root, Map.of(), "diff", "--cached", "--name-only").isEmpty()) {
+            log.info("event=change_set_unchanged runId={} files={} author={}", runId, changes.files().size(), author);
+            return Optional.empty();
+        }
+        return Optional.of(commitStaged(runId, root, changes.files().size(), author, message));
+    }
+
+    /** Checks every path, then writes the files and adds them to the index of the run's repository. */
+    private Path stage(UUID runId, ChangeSet changes) {
         Path root = create(runId);
         List<FileChange> files = changes.files();
         for (int index = 0; index < files.size(); index++) {
@@ -91,11 +113,21 @@ public class RunWorkspace {
         }
         // A path is a literal name, never a pattern: "*.py" must add only a file called "*.py".
         git(root, Map.of("GIT_LITERAL_PATHSPECS", "1"), add.toArray(String[]::new));
-        git(root, AUTHOR, "commit", "--quiet", "--no-gpg-sign", "-m",
-                "development: apply " + files.size() + " file changes for run " + runId);
+        return root;
+    }
+
+    private static String commitStaged(UUID runId, Path root, int fileCount, String author, String message) {
+        git(root, identity(author), "commit", "--quiet", "--no-gpg-sign", "-m", message);
         String commitId = git(root, Map.of(), "rev-parse", "HEAD");
-        log.info("event=change_set_committed runId={} files={} commit={}", runId, files.size(), commitId);
+        log.info("event=change_set_committed runId={} files={} commit={} author={}", runId, fileCount, commitId, author);
         return commitId;
+    }
+
+    /** The role is the author and the committer; the address is a fixed placeholder and never the user's own. */
+    private static Map<String, String> identity(String name) {
+        String address = name + "@agent.invalid";
+        return Map.of("GIT_AUTHOR_NAME", name, "GIT_AUTHOR_EMAIL", address,
+                "GIT_COMMITTER_NAME", name, "GIT_COMMITTER_EMAIL", address);
     }
 
     /** True when the file or any folder on the way to it is a link, which could lead out of the workspace. */

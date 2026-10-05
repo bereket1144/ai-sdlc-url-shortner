@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import io.github.bereket1144.agentcontroller.document.RunDocuments;
 import io.github.bereket1144.agentcontroller.run.RunKind;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
@@ -58,14 +59,18 @@ public class WorkflowRunner {
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish)
             throws GraphStateException {
-        this(nodes, requirementsAgent, agentStages, developmentFinish, Optional.empty());
+        this(nodes, requirementsAgent, agentStages, developmentFinish, Optional.empty(), Optional.empty());
     }
 
-    /** With a progress recorder, every stage writes when it starts and when it finishes. */
+    /**
+     * With a progress recorder, every stage writes when it starts and when it finishes. With the run documents, a last
+     * step after the join writes them into the run's repository; they exist only when the development agent is on.
+     */
     @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
-                          Optional<StageProgress> progress) throws GraphStateException {
+                          Optional<StageProgress> progress, Optional<RunDocuments> runDocuments)
+            throws GraphStateException {
         Map<String, NodeAction<AgentState>> agents = new HashMap<>();
         requirementsAgent.ifPresent(node -> agents.put("requirements", node::requirements));
         agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role, node::execute)));
@@ -78,7 +83,7 @@ public class WorkflowRunner {
         this.progress = progress;
         this.requirementsAgent = requirementsAgent;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
-        this.graph = new StateGraph<>(AgentState::new)
+        StateGraph<AgentState> route = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))
                 .addNode("requirements", node_async(stage(agents, "requirements", nodes::requirements)))
                 .addNode("impactAnalysis", node_async(stage(agents, "impactAnalysis", nodes::impactAnalysis)))
@@ -101,9 +106,24 @@ public class WorkflowRunner {
                 .addEdge("development", "documentation")
                 .addEdge("qa", "collect")
                 .addEdge("review", "collect")
-                .addEdge("documentation", "collect")
-                .addEdge("collect", END)
-                .compile();
+                .addEdge("documentation", "collect");
+        if (runDocuments.isPresent()) {
+            // The step is after the join, so a run that failed on the way to it writes none of the documents.
+            route.addNode("documents", node_async(documents(runDocuments.get())))
+                    .addEdge("collect", "documents")
+                    .addEdge("documents", END);
+        } else {
+            route.addEdge("collect", END);
+        }
+        this.graph = route.compile();
+    }
+
+    private static NodeAction<AgentState> documents(RunDocuments runDocuments) {
+        return state -> {
+            runDocuments.write(state.<UUID>value("runId")
+                    .orElseThrow(() -> new IllegalStateException("Missing workflow state: runId")));
+            return Map.of();
+        };
     }
 
     private NodeAction<AgentState> stage(Map<String, NodeAction<AgentState>> agents, String role,

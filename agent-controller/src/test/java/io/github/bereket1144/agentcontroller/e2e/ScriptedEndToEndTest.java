@@ -128,7 +128,7 @@ class ScriptedEndToEndTest {
     }
 
     @Test
-    @DisplayName("AC-AGT-62.15 a posted requirement goes through every stage and ends SUCCEEDED with artifacts, a commit and a passing result")
+    @DisplayName("AC-AGT-62.15, AC-AGT-21.1, AC-AGT-21.3 a posted requirement goes through every stage and ends SUCCEEDED with artifacts, a commit, a passing result and the documents in a second commit by the controller")
     void aRequirementEndsSucceeded() throws Exception {
         UUID id = postRequirement();
 
@@ -150,15 +150,21 @@ class ScriptedEndToEndTest {
         Path workspace = BASE.resolve(id.toString());
         String commit = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()
                 .getContentAsString(), "$.commit");
-        assertThat(git(workspace, "rev-parse", "main")).isEqualTo(commit);
+        assertThat(git(workspace, "rev-parse", "main~1")).isEqualTo(commit);
         assertThat(git(workspace, "show", "--name-only", "--format=", commit))
                 .contains("app.py", "tests/test_app.py");
+        // The second commit, after the stages joined, holds the README and the design document, by the controller.
+        assertThat(git(workspace, "rev-list", "--count", "main")).isEqualTo("2");
+        assertThat(git(workspace, "show", "--name-only", "--format=", "main"))
+                .contains("README.md", "docs/design.md");
+        assertThat(git(workspace, "log", "-1", "--format=%an <%ae>", "main"))
+                .isEqualTo("controller <controller@agent.invalid>");
         assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development", "qa",
                 "review", "documentation");
     }
 
     @Test
-    @DisplayName("AC-AGT-62.15 a failing build ends the run FAILED with VERIFICATION_FAILED")
+    @DisplayName("AC-AGT-62.15, AC-AGT-21.5 a failing build ends the run FAILED with VERIFICATION_FAILED and no document is written")
     void aFailingBuildEndsFailed() throws Exception {
         BUILD_OUTCOME.set(Outcome.FAILED);
         UUID id = postRequirement();
@@ -171,6 +177,9 @@ class ScriptedEndToEndTest {
                 .andExpect(jsonPath("$.verification.outcome").value("FAILED"));
         // The stages after development never ran.
         assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development");
+        // The repository holds the development commit and nothing else: no README and no document.
+        assertThat(git(BASE.resolve(id.toString()), "ls-tree", "-r", "--name-only", "main"))
+                .isEqualTo("app.py\ntests/test_app.py");
     }
 
     private UUID postRequirement() throws Exception {
