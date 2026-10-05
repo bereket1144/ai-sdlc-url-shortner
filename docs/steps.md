@@ -299,3 +299,6 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 105. Bring the documents in line with steps 102 to 104.
   Done when: the README, architecture overview, testing note, engineering summary, ADR 0003 and the walking-skeleton scenario describe the per-run git repository and the question-and-answer flow and no longer mention the sparse checkout, the run branch or the assumption confirmation.
   Result: those six files were edited for the two changes; the limitations note needed no change. (main agent, direct)
+- [ ] 106. UI-1 Follow a run in one page.
+  Done when: story UI-1 in docs/platform/requirements/reviewer-ui.md is coded: every criterion has a passing test or, for the page's own behaviour in a browser, is named as checked by hand.
+  Criterion update (user decision, 2026-10-05): a front end moves from "not planned" to a small reviewer page of plain HTML, CSS and JavaScript. (main agent, direct)
