@@ -108,7 +108,7 @@ As the platform owner, I want each stage's agent defined by a versioned instruct
 
 ### AGT-2 Describe models in configuration and give each role one
 
-Status: open
+Status: coded
 
 Depends on: none.
 
