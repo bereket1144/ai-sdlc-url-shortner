@@ -15,8 +15,8 @@ This prototype demonstrates one live end-to-end skeleton. It is not ready to ope
 | Audit and metrics | Model attempts, artifacts, commits, stage progress and verification results provide traceability. A complete append-only event trail and reliability metrics report are unfinished. |
 | Access control | APIs are unauthenticated and can expose requirements and artifact contents. Use the prototype in a trusted local environment; do not expose it as a public service. |
 | Secrets | The model key comes from the environment and is not deliberately injected into the sandbox. Compose still contains fixed local database credentials. No comprehensive secret scanning or compliance gate is implemented. |
-| Sandbox | No network, non-root execution and resource limits reduce exposure. The trusted controller has Docker daemon access and containers share the host kernel; this is not VM isolation. Each run's repository is created with `git init`, so it holds no history of this repository. |
-| Retention | Containers are normally removed after verification, but run clones and database artifacts remain. No automated retention policy exists. |
+| Sandbox | No network, non-root execution and resource limits reduce exposure. The trusted controller has Docker daemon access and containers share the host kernel; this is not VM isolation. The container is given only the product folder of the run's worktree, not the repository around it. |
+| Retention | Containers are normally removed after verification, but run branches, worktrees and database artifacts remain; the controller deletes no branch and no worktree. No automated retention policy exists. |
 | Evidence | One small live trial passed. The three required scenarios and failure drill, current feature review and complete functional coverage are still missing. |
 
 ## Deliberate scope reductions

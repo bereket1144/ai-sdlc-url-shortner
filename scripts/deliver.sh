@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Deliver one finished run into this repository.
 #
+# Only for runs made before runs became worktrees of this repository (ADR 0010): those runs are separate repositories.
+# A run made since then is already the branch run/<run-id> of this repository; merge it with
+# "git merge --no-ff run/<run-id>" (see "Review and take a run's work" in the README).
+#
 #   scripts/deliver.sh <run-id> [<name>]
 #
 # 1. fetches the run's whole git history into this repository as the branch run/<run-id>

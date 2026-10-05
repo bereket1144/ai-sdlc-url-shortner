@@ -40,7 +40,7 @@ flowchart LR
     end
 
     Live --> Models["Model API: Ollama, Anthropic messages or OpenAI-style such as OpenRouter"]
-    Workspace --> Repo[("Per-run git repository")]
+    Workspace --> Repo[("Per-run git worktree of this repository")]
     Verifier --> Cli["docker command line"]
     Cli --> Box["Disposable test container"]
     RunSvc --> DB[("PostgreSQL")]
@@ -61,7 +61,7 @@ Packages, all under `io.github.bereket1144.agentcontroller`:
 | `model` | The `ModelClient` port; `ModelProfile`, `ModelProperties` and `ModelProfiles`; `PromptBuilder`; `OutputValidator` and the role checks; `StructuredAnswerService`; `ModelCallBudget`; `LiveModelClient`, which sends a call to `OllamaModelClient`, `HostedModelClient` (Anthropic messages API) or `OpenAiCompatibleModelClient` by the profile's API style |
 | `modelcall` | `ModelCallRecords` (one row per attempt), `InputFingerprint`, `Recording` and `ReplayModelClient` |
 | `artifact` | `ArtifactStore` (immutable, versioned outputs), `ArtifactRef` and `StageInputs` (what a role may read) |
-| `workspace` | `RunWorkspace` (`git init`, write, commit), `ChangeSet` and `ChangeSetCheck` (path and size rules) |
+| `workspace` | `RunWorkspace` (`git worktree add` on `run/<run-id>`, sparse checkout, write, commit), `ChangeSet` and `ChangeSetCheck` (path and size rules) |
 | `sandbox` | The `VerificationRunner` port, `DockerVerificationRunner`, the `DockerCommand` port, `JunitReportParser`, the verification result and its records, `SandboxProperties` |
 | `document` | `MarkdownRenderer` and `RunDocuments` (the README and `docs/` written from artifacts) |
 | `checkpoint` | `CheckpointSaverFactory` for the LangGraph4j PostgreSQL saver. Only tests use it; the running graph has no saver |
@@ -75,7 +75,10 @@ Settings that choose behaviour:
 | `agent.models.profiles.<name>.*`, `agent.models.primary`, `.fallback`, `.roles.<role>` | The model profiles (model, address, window, answer limit, timeout, call slots, retries, key, `api-style`, `reasoning`), the default profile, an optional fallback and a profile per role |
 | `agent.model-client.mode` | `live` (the default) or `replay` with a recording file |
 | `agent.budget.*`, `agent.output.repair-limit`, `agent.models.retry-delay` | The call and token limits, the repair limit and the first retry wait |
-| `workspace.base` | The folder that holds one repository per run; required when development is on an agent |
+| `workspace.base` | The folder that holds one worktree per run, outside the checkout; required when development is on an agent |
+| `workspace.repository` | The root of this repository, which the worktrees belong to; required when development is on an agent (`..` in the live profile) |
+| `workspace.base-ref` | The commit that a run's branch is cut from; default `HEAD` |
+| `workspace.product-folder` | The product folder, relative to the repository root (`apps/url-shortener`): the agents' files are written there and the sandbox is given only this folder |
 | `sandbox.verify.*` | The image, the test command, the report path and the container limits |
 | `run.dispatch.*` | Whether the scheduler runs and how long it waits between polls |
 
@@ -180,7 +183,7 @@ sequenceDiagram
     S->>P: store the requirements artifact
     G->>S: design, then planning, then development
     S->>P: each stage stores its artifact and its stage state
-    G->>W: check the paths, git init, write the files, commit as development
+    G->>W: add the worktree, check the paths, write the files under the product folder, commit as development
     G->>X: docker create, copy in, start, copy the report out, remove
     X-->>G: JUnit report, read as PASSED, FAILED or NO_RESULT
     G->>P: store the verification result
@@ -192,7 +195,7 @@ sequenceDiagram
         G->>S: documentation
     end
     S->>P: each stores its artifact
-    G->>W: write README.md and docs, commit as controller
+    G->>W: write README.md, docs and the evidence, commit as controller
     G-->>D: graph finished
     D->>P: set SUCCEEDED
     C->>A: GET the run: status, stages, artifacts, commit and verification
@@ -204,19 +207,22 @@ In words:
 2. **Claim.** `RunScheduler` polls on a fixed delay (5 seconds by default) and drains the queue. `RunService.claimNextRun` selects the oldest `CREATED` run under a pessimistic row lock, sets `RUNNING` and commits before any work starts, so no transaction stays open during model calls.
 3. **Clarify.** The requirements agent may ask at most four questions. If it does, the run waits (section 2) and later returns to step 2 with the answers.
 4. **Specify and plan.** Requirements (stories), design and planning each read their allowed inputs, call the model, store a versioned artifact and record their stage state.
-5. **Develop and verify.** The development agent returns the complete content of every file in one answer. `DevelopmentFinish` creates the run's repository with `git init`, writes the files only after every path passes the checks, and commits them as `development`. `DockerVerificationRunner` copies that workspace into a new container, runs the configured test command, copies the JUnit report out and removes the container. The outcome and the test counts are stored with the commit id. Only `PASSED` lets the run go on.
+5. **Develop and verify.** The development agent returns the complete content of every file in one answer. `DevelopmentFinish` makes the run's workspace, a git worktree of this repository on the branch `run/<run-id>` with only the product folder checked out, writes the files under the product folder only after every path passes the checks, and commits them as `development`. `DockerVerificationRunner` copies the product folder (the files, not the repository around them) into a new container, runs the configured test command, copies the JUnit report out and removes the container. The outcome and the test counts are stored with the commit id. Only `PASSED` lets the run go on.
 6. **Review in parallel.** QA, review and documentation run side by side and join at `collect`. QA and review are handed the requirements, design and plan and the full development artifact; documentation is handed the requirements, design and plan and an outline of the development artifact with the file contents removed. The three branches start from the same state, so none of them reads another's artifact in this run.
-7. **Export.** After the join, `RunDocuments` commits `README.md`, `docs/requirements.md`, `docs/design.md`, `docs/plan.md`, `docs/qa.md`, `docs/review.md` and `docs/diagrams/<n>.mmd` as `controller`.
+7. **Export.** After the join, `RunDocuments` commits `README.md`, `docs/requirements.md`, `docs/design.md`, `docs/plan.md`, `docs/qa.md`, `docs/review.md` and `docs/diagrams/<n>.mmd` under the product folder, and the evidence under `runs/<run-id>/` (`artifacts/<kind>-v<version>.json` for the latest version of each artifact, and `lineage.json`), in one commit as `controller`.
 8. **Finish.** `RunDispatcher` sets `SUCCEEDED`. A client reads the run, then any artifact with `GET /v1/runs/{id}/artifacts/{kind}/{version}`.
 
-The run's repository at the end, in `<workspace.base>/<run-id>` on branch `main`:
+The run's branch at the end, `run/<run-id>` of this repository, checked out in `<workspace.base>/<run-id>`. Its commits sit on top of the commit it was cut from (or on the base run's branch, for a change run):
 
 ```text
-<files the development agent wrote: modules and tests>     commit 1, author development
-README.md                                                   commit 2, author controller
-docs/requirements.md, design.md, plan.md, qa.md, review.md
-docs/diagrams/1.mmd ...
+apps/url-shortener/<files the development agent wrote>      commit 1, author development
+apps/url-shortener/README.md                                commit 2, author controller
+apps/url-shortener/docs/requirements.md, design.md, plan.md, qa.md, review.md
+apps/url-shortener/docs/diagrams/1.mmd ...
+runs/<run-id>/artifacts/<kind>-v<version>.json, runs/<run-id>/lineage.json
 ```
+
+The controller never merges, pushes or deletes the branch. A reviewer reads it with `git log --graph run/<run-id>` and takes it with `git merge --no-ff run/<run-id>` (see the README).
 
 **Failure path.** Any exception in a stage, in the commit, in the build or in the export is caught by `RunDispatcher`. It records `FAILED` in its own transaction with a fixed reason chosen from the cause chain (`OUTPUT_INVALID`, `MODEL_UNAVAILABLE`, `CONTEXT_TOO_LARGE`, `BUDGET_EXHAUSTED`, `ACCESS_DENIED`, `VERIFICATION_FAILED`, otherwise `UNEXPECTED`), then rethrows the original exception. The API shows the fixed code and message and never the exception text. A verification that is not `PASSED` ends the run with `VERIFICATION_FAILED` before QA, review and documentation start, so no documents are written; the failed stage stays `RUNNING`, and the workspace with the first commit stays on disk.
 
@@ -235,7 +241,7 @@ Flyway owns the schema (migrations `V1` to `V12`); Hibernate only validates it.
 | `clarification_batch` | One row per question batch of a run: the artifact version that holds the questions, the answers as JSON text and the time they were given |
 | `LG4JThread`, `LG4JCheckpoint` | The tables of the LangGraph4j PostgreSQL saver, created by migration `V5`. The running graph has no saver, so a normal run leaves them empty; tests that prove pause and restart use them |
 
-Not in the database: the generated product and the documents (they are in the run's git repository), the JUnit report copied out of the container (a temporary folder, deleted after reading) and the logs. The stored model calls hold full prompts and answers, so the database may contain the requirement and generated content.
+Not in the database: the generated product and the documents (they are on the run's branch `run/<run-id>`), the JUnit report copied out of the container (a temporary folder, deleted after reading) and the logs. The stored model calls hold full prompts and answers, so the database may contain the requirement and generated content.
 
 ## 5. Guardrails that exist
 
@@ -264,7 +270,7 @@ The controls below are required by the project but are not in the code. Do not r
 - **Stop and rollback.** There is no stop operation and no rollback or safe stop (AGT-43). The failure reasons `STOPPED_BY_REVIEWER`, `STAGE_TIMEOUT` and `RECOVERY_FAILED` exist in the fixed list, but nothing produces them. A change set is written file by file before the commit, so a failure in between leaves files in the workspace.
 - **Audit trail.** There is no append-only event trail (AGT-44). The records that exist are the run's status, the model calls, the artifacts with their consumed versions, the verification results, the stage states, the commits and the log lines.
 - **Re-planning.** A changed requirement cannot be applied to a run that is going, and a stale result is not refused. Each run goes through the graph once.
-- **Brownfield, partly.** `POST /v1/runs` takes `kind` and `baseRunId`; the run's workspace is a clone of the base run's repository, and the impact analysis, design, planning and development agents are shown its existing files (bounded in size). Impact analysis is not checked against the real files by plain code, and a base run's workspace folder must still exist.
+- **Brownfield, partly.** `POST /v1/runs` takes `kind` and `baseRunId`; the run's branch is cut from the base run's branch `run/<baseRunId>`, and the impact analysis, design, planning and development agents are shown the existing files of the product folder (bounded in size). Impact analysis is not checked against the real files by plain code, and the base run's branch must still exist.
 
 Also not built:
 
@@ -285,7 +291,7 @@ See [limitations and trade-offs](limitations.md) for the consequences and [testi
 | Clarify before writing stories, with questions and answers only | [ADR 0003](../adr/0003-clarify-requirements-before-generating-stories.md), [ADR 0007](../adr/0007-clarify-with-questions-and-answers-only.md) | The assumptions in the stories are confirmed by nobody. The pause is outside the graph |
 | Thin end-to-end skeleton first, governance after | [ADR 0004](../adr/0004-build-a-thin-end-to-end-skeleton-first.md) | Section 6 is the price |
 | One disposable container per build, started with the docker command line | [ADR 0005](../adr/0005-run-builds-and-tests-in-one-disposable-container.md) | The controller holds Docker daemon access, and containers share the host kernel |
-| A fresh git repository per run, cloned from the base run for a change | [ADR 0006](../adr/0006-give-each-run-its-own-git-repository.md) | The product is outside this repository; a change run clones the base run's workspace |
+| A git worktree of this repository per run, on the branch `run/<run-id>`, cut from the base run's branch for a change | [ADR 0010](../adr/0010-work-in-a-git-worktree-of-this-repository.md), which supersedes [ADR 0006](../adr/0006-give-each-run-its-own-git-repository.md) | The run's branches and worktree entries live in this repository's `.git`; the controller removes none of them |
 | Light tests, coverage gate at 85% for now | [ADR 0008](../adr/0008-keep-tests-light-and-gate-coverage-at-85-percent-for-now.md) | Coverage is below the 100% target until a sweep |
 
 Decisions without a record of their own:

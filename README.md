@@ -83,25 +83,33 @@ Waiting batches and answers survive a controller restart. This continuation happ
 
 Use the kind and version returned by the run response. Artifact kinds include `requirements`, `design`, `plan`, `development`, `qa`, `review` and `documentation`. The planning stage produces kind `plan`. Unknown artifacts return `404`.
 
-In the live profile, workspaces are created under `../../agentic-sdlc-workspaces/<run-id>`, relative to `agent-controller/`. Each workspace is its own fresh git repository on branch `main`, with the generated product at its root and one commit per change set; nothing is pushed anywhere. A change run (`kind` BROWNFIELD with a `baseRunId`) starts as a git clone of the base run's own workspace, so its history extends the base's; the base is never changed. Inspect the generated commit there using Git. Agents' other outputs are stored in PostgreSQL and read through the artifact API, not automatically exported as files.
+In the live profile, each run works in a git worktree of this repository, in `../../agentic-sdlc-workspaces/<run-id>` (relative to `agent-controller/`, so outside your checkout), on a new branch `run/<run-id>` cut from the commit that is checked out (`workspace.base-ref`, default `HEAD`). Only the product folder `apps/url-shortener/` (`workspace.product-folder`) and `runs/<run-id>/` are checked out there. The generated product is committed under `apps/url-shortener/`, one commit per change set by `development`. After the documents are exported, one commit by `controller` adds the README and `docs/` there and the run's evidence under `runs/<run-id>/`: the latest version of each artifact as JSON and the lineage. A change run (`kind` BROWNFIELD with a `baseRunId`) is cut from the base run's branch `run/<baseRunId>`, so its history extends the base's; the base's branch is never changed. The controller never changes the branch you have checked out, its index or its files, and never merges, pushes or deletes a branch. `workspace.repository` names this repository (the live profile sets it to `..`). Agents' other outputs are stored in PostgreSQL and read through the artifact API.
 
 `SUCCEEDED` in a live skeleton run means that the selected stages returned, the generated commit was tested successfully and the graph completed. It does not mean a person approved the work or that review findings were resolved. `impactAnalysis` remains `NOT_STARTED` on the greenfield route.
 
-## Deliver a finished run into this repository
+## Review and take a run's work
 
-A run lives in its own repository under `agentic-sdlc-workspaces/<run-id>/`. To put its result into this repository for submission, from the repository root with a clean working tree:
+A run's work is the branch `run/<run-id>` of this repository, so you read it with Git from the repository root.
+
+To see it:
 
 ```bash
-scripts/deliver.sh <run-id>
+git log --graph --oneline run/<run-id>        # the run's commits on top of the commit it was cut from
+git log --author=development --oneline run/<run-id>   # the commits of the development agent (the export is by "controller")
+git log --first-parent --oneline              # after a merge: one line for each run you took, and your own commits
 ```
 
-The script:
-1. fetches the run's whole commit history into this repository as the branch `run/<run-id>` (original authors, messages and order);
-2. replaces `apps/url-shortener/` with the files of the run's last commit (pass a second argument to use another folder name);
-3. saves the evidence under `runs/<run-id>/`: the run, its lineage, the latest version of every artifact and the metrics (these need the controller running at `http://localhost:8080`, or set `API`), and the commit list and history;
-4. stages `apps/url-shortener/` and `runs/<run-id>/` and commits nothing, so you review and commit yourself.
+To take it, merge the branch. `--no-ff` always makes a merge commit, so the agents' commits stay visible next to yours:
 
-A change run (`kind` BROWNFIELD) started from an earlier run is a clone of it, so its branch holds both runs' history. Deliver the latest run to get the final product. Publishing the branches is up to you.
+```bash
+git merge --no-ff run/<run-id>
+```
+
+The product is then at `apps/url-shortener/`, beside `agent-controller/`, and the run's evidence is at `runs/<run-id>/`.
+
+To publish, remember that the branches are local until you push them. Push the branches with the usual command, for example `git push origin run/<run-id>`, and your own branch after the merge. The controller never pushes. While the run's worktree exists, git does not let you check out `run/<run-id>` in your own checkout; merge it, or read it with `git show run/<run-id>:apps/url-shortener/<file>`.
+
+Runs made before this arrangement are separate repositories under `agentic-sdlc-workspaces/<run-id>/`. `scripts/deliver.sh <run-id>`, run from the repository root with a clean working tree, imports one: it fetches the run's history as the branch `run/<run-id>`, replaces `apps/url-shortener/` with the files of the run's last commit, saves the evidence under `runs/<run-id>/` (the controller must be running at `http://localhost:8080`, or set `API`), and stages `apps/url-shortener/` and `runs/<run-id>/` without committing, so you review and commit yourself. The script is kept only for those runs.
 
 ## Verify the controller
 

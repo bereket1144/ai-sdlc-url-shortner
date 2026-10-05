@@ -49,6 +49,7 @@ import io.github.bereket1144.agentcontroller.sandbox.VerificationRecords;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult.Outcome;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRunner;
+import io.github.bereket1144.agentcontroller.workspace.PlatformRepository;
 import io.github.bereket1144.agentcontroller.workspace.RunWorkspace;
 import io.github.bereket1144.agentcontroller.workspace.WorkspaceFiles;
 import org.bsc.langgraph4j.state.AgentState;
@@ -61,9 +62,9 @@ import org.springframework.mock.env.MockEnvironment;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The development stage over the whole graph, with the real answer service, workspace (real git) and stage wrapper.
- * The model, the artifact store, the verification records and the container are stand-ins: the first change set is
- * broken and fails its test, the second is fixed and passes.
+ * The development stage over the whole graph, with the real answer service, workspace (real git, in a temporary
+ * platform repository) and stage wrapper. The model, the artifact store, the verification records and the container are
+ * stand-ins: the first change set is broken and fails its test, the second is fixed and passes.
  */
 class DevelopmentFixAttemptTest {
 
@@ -71,6 +72,7 @@ class DevelopmentFixAttemptTest {
     private static final String REPORT = "<testsuite>REPORT_EXCERPT_TEXT</testsuite>";
     private static final String BROKEN = "def shorten(url):\n    return None  # BROKEN_VERSION\n";
     private static final String FIXED = "def shorten(url):\n    return url[:5]  # FIXED_VERSION\n";
+    private static final String PRODUCT = "apps/demo";
 
     @TempDir
     Path temp;
@@ -83,6 +85,7 @@ class DevelopmentFixAttemptTest {
     private final List<NewArtifact> stored = Collections.synchronizedList(new ArrayList<>());
     private final AtomicReference<VerificationResult> latest = new AtomicReference<>();
     private final VerificationRecords records = mock(VerificationRecords.class);
+    private Path platform;
     private WorkflowRunner runner;
 
     @BeforeEach
@@ -126,14 +129,17 @@ class DevelopmentFixAttemptTest {
                 mock(ModelCallRecords.class), budget, 2, Duration.ZERO);
         AgentStages stages = new AgentStages(new MockEnvironment().withProperty("agent.stages.development", "agent"),
                 roles, stageInputs, answers, store, Optional.empty());
-        // The container reads the committed file: the broken one fails its test, the fixed one passes.
+        // The container is given the product folder and reads the committed file: the broken one fails its test, the
+        // fixed one passes.
         VerificationRunner container = (workspace, commitId) -> {
             boolean fixed = read(workspace.resolve("app.py")).contains("FIXED_VERSION");
             return fixed ? new VerificationResult(Outcome.PASSED, 1, 1, 0, List.of(), "", commitId)
                     : new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of(FAILING_TEST), REPORT, commitId);
         };
-        DevelopmentFinish finish = new DevelopmentFinish(store, new RunWorkspace(temp.resolve("workspaces").toString()),
-                container, records, new WorkspaceFiles());
+        platform = PlatformRepository.create(temp.resolve("platform"));
+        RunWorkspace workspaces = new RunWorkspace(temp.resolve("workspaces").toString(), platform.toString(), "HEAD",
+                PRODUCT);
+        DevelopmentFinish finish = new DevelopmentFinish(store, workspaces, container, records, new WorkspaceFiles());
         runner = new WorkflowRunner(new DummySdlcNodes(), Optional.empty(), Optional.of(stages), Optional.of(finish),
                 Optional.of(mock(StageProgress.class)), Optional.empty(), 2);
     }
@@ -150,10 +156,11 @@ class DevelopmentFixAttemptTest {
                 "[INPUT kind=SELECTED_WORKSPACE_FILES", "[FILE path=app.py]", "BROKEN_VERSION");
         verify(records, times(2)).record(eq(runId), any());
         assertThat(latest.get().passed()).isTrue();
-        // Two commits, the second on top of the first and holding the fixed file; the run goes on with that commit.
+        // Two commits on the run's branch, the second on top of the first and holding the fixed file; the run goes on
+        // with that commit.
         Path workspace = temp.resolve("workspaces").resolve(runId.toString());
-        assertThat(git(workspace, "rev-list", "--count", "HEAD")).isEqualTo("2");
-        assertThat(git(workspace, "show", "HEAD:app.py")).contains("FIXED_VERSION");
+        assertThat(git(workspace, "rev-list", "--count", git(platform, "rev-parse", "main") + "..HEAD")).isEqualTo("2");
+        assertThat(git(workspace, "show", "HEAD:" + PRODUCT + "/app.py")).contains("FIXED_VERSION");
         assertThat(result.<String>value("commit")).contains(git(workspace, "rev-parse", "HEAD"));
     }
 

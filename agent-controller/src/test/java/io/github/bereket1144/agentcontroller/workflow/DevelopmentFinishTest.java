@@ -42,28 +42,31 @@ class DevelopmentFinishTest {
     private final DevelopmentFinish finish = new DevelopmentFinish(artifacts, workspaces, verifier, records,
             new WorkspaceFiles());
     private final AgentState state = new AgentState(Map.of("runId", runId));
-    private final Path workspace = Path.of("workspace");
+    private final Path product = Path.of("workspace", "apps", "demo");
 
     private void givenAnArtifactAndACommit() {
         when(artifacts.find(runId, "development", 1)).thenReturn(Optional.of(new StoredArtifact(runId, "development",
                 1, JsonMapper.shared().readTree(
-                "{\"changes\":[{\"path\":\"apps/url-shortener/app.py\",\"content\":\"print(1)\"}]}"),
+                "{\"changes\":[{\"path\":\"app.py\",\"content\":\"print(1)\"}]}"),
                 "changes 1", ref.fingerprint(), "development", "1", "local", "m", List.of())));
-        when(workspaces.create(runId)).thenReturn(workspace);
+        when(workspaces.productFolder(runId)).thenReturn(product);
         when(workspaces.commitIfChanged(any(), any(), any(), any())).thenReturn(Optional.of("abc123"));
     }
 
     @Test
-    @DisplayName("AC-AGT-62.10 a passing build and test leaves the commit and the outcome for the next stages")
+    @DisplayName("AC-AGT-62.10, AC-AGT-67.4 a passing build and test of the product folder leaves the commit and the "
+            + "outcome for the next stages")
     void aPassingResultGoesOn() {
         givenAnArtifactAndACommit();
         VerificationResult passed = new VerificationResult(Outcome.PASSED, 2, 2, 0, List.of(), "", "abc123");
-        when(verifier.verify(workspace, "abc123")).thenReturn(passed);
+        when(verifier.verify(product, "abc123")).thenReturn(passed);
 
         Map<String, Object> update = finish.finish(state, Map.of("development", ref));
 
         assertThat(update).containsEntry("development", ref).containsEntry("commit", "abc123")
                 .containsEntry("verification", "PASSED");
+        // The sandbox is given the product folder, not the root of the workspace.
+        verify(verifier).verify(product, "abc123");
         verify(records).record(runId, passed);
     }
 
@@ -72,7 +75,7 @@ class DevelopmentFinishTest {
     void aFailedResultEndsTheStage() {
         givenAnArtifactAndACommit();
         VerificationResult noResult = VerificationResult.noResult("abc123");
-        when(verifier.verify(workspace, "abc123")).thenReturn(noResult);
+        when(verifier.verify(product, "abc123")).thenReturn(noResult);
 
         assertThatThrownBy(() -> finish.finish(state, Map.of("development", ref)))
                 .isInstanceOf(VerificationFailedException.class);
@@ -87,7 +90,7 @@ class DevelopmentFinishTest {
         when(workspaces.commitIfChanged(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(workspaces.head(runId)).thenReturn("abc123");
         VerificationResult failed = new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of("test_x"), "", "abc123");
-        when(verifier.verify(workspace, "abc123")).thenReturn(failed);
+        when(verifier.verify(product, "abc123")).thenReturn(failed);
 
         assertThatThrownBy(() -> finish.finish(state, Map.of("development", ref)))
                 .isInstanceOf(VerificationFailedException.class);
@@ -101,7 +104,7 @@ class DevelopmentFinishTest {
         givenAnArtifactAndACommit();
         VerificationResult before = new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of("test_x"), "", "old");
         when(records.latest(runId)).thenReturn(Optional.of(before));
-        when(verifier.verify(workspace, "abc123"))
+        when(verifier.verify(product, "abc123"))
                 .thenReturn(new VerificationResult(Outcome.PASSED, 2, 2, 0, List.of(), "", "abc123"));
         AgentStageNode node = mock(AgentStageNode.class);
         AgentState restarted = new AgentState(Map.of("runId", runId, DevelopmentFinish.PREVIOUS_ATTEMPT_COMMIT, "old"));
