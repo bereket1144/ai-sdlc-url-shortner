@@ -59,7 +59,7 @@ The first model is a small local one, so the agents must work unchanged on a lar
 
 ### Control
 
-- **Requirements clarification precedes stories (AGT-64, agreed 2026-10-05).** At most four priority questions are presented with optional product assumptions. Every question needs an answer; assumptions may be left as unconfirmed proposals. Python, the standard library, SQLite and pytest are fixed execution choices for this version, supplied as context rather than questions.
+- **Requirements clarification precedes stories (AGT-64, agreed 2026-10-05).** The agent asks at most four priority questions in one batch, once, and asks no assumptions for the requester to confirm. Every question needs an answer. After the reply the run goes straight to the stories, and the assumptions the agent makes are written into the stories artifact. Python, the standard library, SQLite and pytest are fixed execution choices for this version, supplied as context rather than questions.
 - **Plain code decides pass or fail.** A model never decides whether something is valid, approved or done. "The stories are done" means: every acceptance criterion has a passing test, every gate passes, and a person approved the exact commit.
 - **Clarification goes to the human reviewer only,** through the API. Any role may ask. The requirements role is the first that does.
 - **`WAITING_FOR_INPUT` is a new run status.** It covers both unanswered questions and open approvals. The run read response shows what the run waits for.
@@ -953,25 +953,25 @@ As the platform owner, I want every change checked automatically, so that tests 
 
 ## Requirements clarification before stories
 
-### AGT-64 Resolve questions and assumptions in one batch before generating stories
+### AGT-64 Ask the requirements questions in one batch before generating stories
 
 Status: open
 
 Depends on: AGT-5, AGT-8, AGT-11, AGT-12, AGT-34.
 
-As a requester, I want to answer the four most important requirements questions together and optionally correct proposed assumptions before stories, so that clarification is manageable and later stages distinguish my decisions from assumptions.
+As a requester, I want to answer the (at most four) most important requirements questions together before stories, so that clarification is manageable and the stories are built on my decisions.
 
-Scope and precedence: this story delivers requirements-stage clarification, including the pause, read operation and batch reply needed for it. It takes precedence over AC-AGT-12.1's combined stories-and-questions output, AC-AGT-13.6's continuation on unanswered assumptions, AC-AGT-14.1's allowance for missing replies where defaults exist, and AC-AGT-62.4's assumption-only continuation for the requirements stage. AGT-13 and AGT-14 retain the generalisation to other roles; they do not require implementing this same behaviour twice. Existing artifact versions remain historical records. Approval of the generated stories remains AGT-15, separate from answering clarification items.
+Scope and precedence: this story delivers requirements-stage clarification, including the pause, read operation and batch reply needed for it. It takes precedence over AC-AGT-12.1's combined stories-and-questions output, AC-AGT-13.6's continuation on unanswered assumptions, AC-AGT-14.1's allowance for missing replies where defaults exist, and AC-AGT-62.4's assumption-only continuation for the requirements stage. AGT-13 and AGT-14 retain the generalisation to other roles; they do not require implementing this same behaviour twice. Existing artifact versions remain historical records. Approval of the generated stories remains AGT-15, separate from answering the questions.
 
-- AC-AGT-64.1 Before stories, the real requirements stage stores `questions` and `assumptions` arrays. The prompt asks for at most four material questions ordered by importance; the controller keeps at most the first four if the model exceeds the limit. Minor choices are proposed as optional assumptions. Each question has id, text, why and an optional proposed default; each assumption has id, text and why. IDs use `Q-1`, `Q-2` and so on, unique across both arrays and all batches of the run. Empty `stories` and `openQuestions` fields in clarification output are ignored and removed, while nonempty fields remain invalid. Python, the standard library, SQLite and pytest are fixed execution context rather than choices to clarify.
-- AC-AGT-64.2 When `questions` has items, the run becomes `WAITING_FOR_INPUT`. Assumptions alone do not pause. While waiting, stories and downstream stages do not run, dispatch records neither success nor failure, and waiting makes no model calls and holds no execution thread.
-- AC-AGT-64.3 `GET /v1/runs/{id}/questions` returns stored questions and assumptions, artifact versions, a `required` flag (true only for questions), `OPEN`, `ANSWERED` or `ASSUMED` status and saved replies. An omitted assumption becomes `ASSUMED` when its batch completes, without a fabricated answer or human submission time. Before a batch exists it returns empty arrays; unknown runs return 404 in the RUN-4 format. `GET /v1/runs/{id}` identifies the clarification wait and current artifact version.
-- AC-AGT-64.4 `POST /v1/runs/{id}/replies` accepts one `answers` array with exactly one `{questionId, answer}` per current question and optional entries for current assumptions. A missing question, duplicate or unknown item, blank supplied answer, or supplied answer over 5,000 characters returns 400 in the RUN-4 format and leaves the run unchanged. Omitted assumptions are allowed; omitted questions never accept their defaults.
-- AC-AGT-64.5 An accepted reply returns `202 Accepted` with the run ID and message `Answers submitted.` and queues continuation. Supplied answers have their item, artifact version and submission time recorded and become `ANSWERED`; omitted assumptions become `ASSUMED`. A reply when not waiting for that batch, including a repeated submission, returns 409 in the RUN-4 format and changes nothing.
-- AC-AGT-64.6 After an accepted reply, processing continues automatically with the original requirement, all saved answers and optional assumptions. A material ambiguity in a reply may produce another batch of at most four questions before stories. Otherwise stories and numbered criteria use the saved decisions, with assumption corrections overriding proposals and omitted assumptions labelled unconfirmed. Unanswered questions never become accepted decisions, and model-call budgets continue across rounds. Empty fields from the other output phase are accepted and normalised away.
-- AC-AGT-64.7 When the initial `questions` array is empty, stories are generated without a human wait, including when optional assumptions exist. Those proposals reach story generation and the final requirements artifact as unconfirmed assumptions. The requirements reference then passes through the existing flow. Dummy-stage routing is unchanged.
-- AC-AGT-64.8 After a process restart on the same database, a waiting run retains its batches, answers and item statuses. It does not regenerate the batch or run downstream work while waiting; submitting its complete reply allows continuation without rerunning finished stages.
-- AC-AGT-64.9 The OpenAPI document describes the questions and replies operations, batch payloads, clarification wait and `WAITING_FOR_INPUT` status. Stage logs contain only identifiers, versions, statuses and counts, never requirement, question, assumption or answer text.
+- AC-AGT-64.1 Before stories, the real requirements stage asks its questions in one batch and stores them as a `questions` array. The prompt asks for at most four material questions ordered by importance and tells the agent not to ask the requester to confirm assumptions; the controller keeps at most the first four if the model exceeds the limit. Each question has id, text, why and an optional proposed default. IDs use `Q-1`, `Q-2` and so on and are numbered by the controller. The clarification answer carries an empty `assumptions` array, because the role's output fields are shared with the stories phase. Empty `stories`, `openQuestions` and `assumptions` fields in clarification output are ignored and removed, while nonempty fields remain invalid. Python, the standard library, SQLite and pytest are fixed execution context rather than choices to clarify.
+- AC-AGT-64.2 When `questions` has items, the run becomes `WAITING_FOR_INPUT`. While waiting, stories and downstream stages do not run, dispatch records neither success nor failure, and waiting makes no model calls and holds no execution thread.
+- AC-AGT-64.3 `GET /v1/runs/{id}/questions` returns `{"questions": [...]}`: the stored questions with their artifact version, `OPEN` or `ANSWERED` status, and the saved answer and its submission time. Before the batch exists it returns an empty array; unknown runs return 404 in the RUN-4 format. `GET /v1/runs/{id}` identifies the clarification wait and current artifact version.
+- AC-AGT-64.4 `POST /v1/runs/{id}/replies` accepts one `answers` array with exactly one `{questionId, answer}` per question. A missing question, a duplicate or unknown question ID, a blank answer, or an answer over 5,000 characters returns 400 in the RUN-4 format and leaves the run unchanged. A question never accepts its proposed default as an answer.
+- AC-AGT-64.5 An accepted reply returns `202 Accepted` with the run ID and message `Answers submitted.` and queues continuation. Each answer has its question, artifact version and submission time recorded and the question becomes `ANSWERED`. A reply when not waiting for the batch, including a repeated submission, returns 409 in the RUN-4 format and changes nothing.
+- AC-AGT-64.6 After an accepted reply, processing continues automatically with the original requirement and all saved answers, and goes straight to the stories: there is no second round of questions and no further clarification artifact, so the stories are the next artifact version after the batch. The stories use the answers as decisions, and every choice that no answer decided is written by the agent as a plain-text statement in the `assumptions` array of the stories artifact. Unanswered questions never become accepted decisions, and model-call budgets continue across both phases. Empty fields from the other output phase are accepted and normalised away.
+- AC-AGT-64.7 When the clarification answer has no questions, no clarification artifact is stored, the run does not wait, and stories are generated at once. The stories artifact is then the first requirements artifact version and carries the agent's assumptions. The requirements reference then passes through the existing flow. Dummy-stage routing is unchanged.
+- AC-AGT-64.8 After a process restart on the same database, a waiting run retains its batch, answers and question statuses. It does not regenerate the batch or run downstream work while waiting; submitting its complete reply allows continuation without rerunning finished stages.
+- AC-AGT-64.9 The OpenAPI document describes the questions and replies operations, the question payload, clarification wait and `WAITING_FOR_INPUT` status. Stage logs contain only identifiers, versions, statuses and counts, never requirement, question, assumption or answer text.
 
 Batch reply example:
 
@@ -979,14 +979,14 @@ Batch reply example:
 {
   "answers": [
     {"questionId": "Q-1", "answer": "Reuse the existing code for duplicate URLs."},
-    {"questionId": "Q-2", "answer": "Confirmed."}
+    {"questionId": "Q-2", "answer": "Codes never expire."}
   ]
 }
 ```
 
-Assumption entries in the reply example are optional; answering questions alone is sufficient.
+Every question needs exactly one answer.
 
-Out of scope for this story: clarification from other roles, story approval or rejection, brownfield changes, alternative language profiles, authentication, and automatic acceptance of unanswered question defaults. No live model is needed for the basic acceptance tests; they use scripted answers.
+Out of scope for this story: clarification from other roles, a second round of questions after the reply, asking the requester to confirm assumptions, story approval or rejection, brownfield changes, alternative language profiles, authentication, and automatic acceptance of unanswered question defaults. No live model is needed for the basic acceptance tests; they use scripted answers.
 
 ## Open questions for the design step
 
