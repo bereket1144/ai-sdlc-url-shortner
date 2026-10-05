@@ -281,7 +281,7 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 
 ### AGT-69 Delete files in a change set, and do not re-check unchanged code
 
-Status: open
+Status: coded
 
 Depends on: AGT-62, AGT-65.
 
