@@ -21,7 +21,7 @@ As a requester, I want one page where I can start a run, answer its questions an
 
 ## UI-2 Ask for a change on a finished run
 
-Status: open
+Status: coded
 
 As a requester, I want to type a change request under a finished run and watch the change get built on top of it, so that I can keep improving a product in one conversation.
 
