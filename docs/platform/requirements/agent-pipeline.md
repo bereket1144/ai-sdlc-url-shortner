@@ -287,7 +287,7 @@ As a requester, I want the requirements stage to turn my text into user stories 
 
 ### AGT-34 Store checkpoints in a readable form owned by migrations
 
-Status: open
+Status: coded
 
 Depends on: none.
 

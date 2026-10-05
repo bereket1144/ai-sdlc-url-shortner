@@ -4,7 +4,6 @@ import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
-import java.sql.SQLException;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -13,7 +12,6 @@ import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.checkpoint.PostgresSaver;
-import org.bsc.langgraph4j.serializer.std.ObjectStreamStateSerializer;
 import org.bsc.langgraph4j.state.AgentState;
 
 /**
@@ -53,19 +51,5 @@ final class ApprovalGraph {
                         .checkpointSaver(saver)
                         .interruptBefore(GATE)
                         .build());
-    }
-
-    /** A new saver on the given PostgreSQL; it creates the checkpoint tables if they are missing. */
-    static PostgresSaver saver(String host, int port, String database, String user, String password)
-            throws SQLException {
-        return PostgresSaver.builder()
-                .host(host)
-                .port(port)
-                .database(database)
-                .user(user)
-                .password(password)
-                .stateSerializer(new ObjectStreamStateSerializer<>(AgentState::new))
-                .createTables(true)
-                .build();
     }
 }

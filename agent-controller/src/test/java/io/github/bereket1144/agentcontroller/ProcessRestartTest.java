@@ -14,6 +14,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -36,7 +39,17 @@ class ProcessRestartTest {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(DockerImageName.parse("postgres:17"));
 
+    /** The tables come from the migrations, as in production: the saver in each JVM does not create them. */
+    @BeforeAll
+    static void migrate() {
+        Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .load()
+                .migrate();
+    }
+
     @Test
+    @DisplayName("AC-AGT-34.4 a run paused in one JVM is found at the gate by another after the first is killed")
     void aRunPausedInOneJvmIsFoundAtTheGateByAnotherAfterTheFirstIsKilled() throws Exception {
         String runId = "run-" + UUID.randomUUID();
 

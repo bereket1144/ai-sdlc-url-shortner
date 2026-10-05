@@ -5,6 +5,8 @@ import java.util.Map;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.state.AgentState;
 
+import io.github.bereket1144.agentcontroller.checkpoint.CheckpointSaverFactory;
+
 /**
  * The program {@link ProcessRestartTest} starts as its own JVM. It talks to the test only through
  * its arguments and the lines it prints, so nothing in memory is shared with the test or with
@@ -28,7 +30,7 @@ public final class ApprovalRunProcess {
         String mode = args[0];
         RunnableConfig config = RunnableConfig.builder().threadId(args[1]).build();
         var graph = ApprovalGraph.build(
-                ApprovalGraph.saver(args[2], Integer.parseInt(args[3]), args[4], args[5], args[6]),
+                CheckpointSaverFactory.create(args[2], Integer.parseInt(args[3]), args[4], args[5], args[6]),
                 task -> System.out.println("EXECUTED " + task));
 
         System.out.println("PID " + ProcessHandle.current().pid());
