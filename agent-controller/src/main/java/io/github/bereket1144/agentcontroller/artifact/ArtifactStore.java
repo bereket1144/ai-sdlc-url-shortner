@@ -17,8 +17,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The versioned store of what each stage produced. Storing a kind again adds the next version; a stored version is
- * never changed, so {@link #store}, {@link #find} and {@link #forRun} are the only operations and there is no update or
- * delete. The kind comes from the producing role's declared output, so a role cannot store a kind it does not own.
+ * never changed, so {@link #store} and the reads {@link #find}, {@link #latest} and {@link #forRun} are the only operations
+ * and there is no update or delete. The kind comes from the producing role's declared output, so a role cannot store a kind it does not own.
  */
 @Service
 public class ArtifactStore {
@@ -61,6 +61,12 @@ public class ArtifactStore {
     /** One version of a kind for a run; empty when the run, the kind or the version is unknown. */
     public Optional<StoredArtifact> find(UUID runId, String kind, int version) {
         return repository.findByRunIdAndKindAndVersion(runId, kind, version)
+                .map(entity -> entity.toStoredArtifact(mapper));
+    }
+
+    /** The highest version of a kind for a run; empty when the run has none of it. */
+    public Optional<StoredArtifact> latest(UUID runId, String kind) {
+        return repository.findFirstByRunIdAndKindOrderByVersionDesc(runId, kind)
                 .map(entity -> entity.toStoredArtifact(mapper));
     }
 

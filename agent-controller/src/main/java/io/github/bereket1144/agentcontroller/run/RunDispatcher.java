@@ -40,7 +40,8 @@ public class RunDispatcher {
                     : workflowRunner.retry(runId, run.getRequirement(), run.getKind(), run.getBaseRunId(),
                             run.getResumedFrom());
             if (result.<Boolean>value("waitingForInput").orElse(false)) {
-                log.info("event=run_dispatch_waiting runId={} stage=requirements", runId);
+                // The graph stopped to wait for answers or for a reviewer's decision: neither a success nor a failure.
+                log.info("event=run_dispatch_waiting runId={}", runId);
                 return true;
             }
         } catch (RuntimeException | Error workflowFailure) {

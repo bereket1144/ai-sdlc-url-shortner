@@ -22,12 +22,14 @@ public record RunResponse(UUID id, String requirement,
         int attempt,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         @Schema(description = "Where the latest attempt started: a stage name, or START for the beginning. Left out "
-                + "until the run is retried.")
+                + "until the run is retried or is queued again after a reviewer's decision.")
         String resumedFrom,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         Failure failureReason,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         ClarificationService.Awaiting awaiting,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        ApprovalService.Approval approval,
         List<StageState> stages,
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         List<ArtifactSummary> artifacts,
@@ -37,12 +39,13 @@ public record RunResponse(UUID id, String requirement,
         Verification verification) {
 
     static RunResponse from(Run run, List<StageState> stages, List<ArtifactSummary> artifacts,
-                            Optional<VerificationResult> verification, ClarificationService.Awaiting awaiting) {
+                            Optional<VerificationResult> verification, ClarificationService.Awaiting awaiting,
+                            ApprovalService.Approval approval) {
         return new RunResponse(run.getId(), run.getRequirement(), run.getKind(), run.getBaseRunId(), run.getStatus(),
                 run.getCreatedAt(), run.getUpdatedAt(), run.getVersion(), run.getAttempt(), run.getResumedFrom(),
                 run.getStatus() == RunStatus.FAILED
                         ? new Failure(run.getFailureReason(), run.getFailureReason().message()) : null,
-                awaiting, stages, artifacts, verification.map(VerificationResult::commitId).orElse(null),
+                awaiting, approval, stages, artifacts, verification.map(VerificationResult::commitId).orElse(null),
                 verification.map(result -> new Verification(result.outcome().name(), result.testsRun(),
                         result.testsPassed(), result.testsFailed())).orElse(null));
     }

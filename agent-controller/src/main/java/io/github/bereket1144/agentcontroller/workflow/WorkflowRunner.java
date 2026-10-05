@@ -7,6 +7,7 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -16,7 +17,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 
+import io.github.bereket1144.agentcontroller.artifact.ArtifactRef;
 import io.github.bereket1144.agentcontroller.document.RunDocuments;
+import io.github.bereket1144.agentcontroller.run.ApprovalService;
 import io.github.bereket1144.agentcontroller.run.RunFailureReason;
 import io.github.bereket1144.agentcontroller.run.RunKind;
 import org.bsc.langgraph4j.CompiledGraph;
@@ -47,11 +50,16 @@ public class WorkflowRunner {
     private static final String INITIALIZE = "initialize";
     /** A node that starts QA, review and documentation together, for an attempt that resumes at one of them. */
     private static final String RESUME_GROUP = "resumeGroup";
+    /** The graph state key that marks an attempt that stopped to wait for answers or for a reviewer's decision. */
+    private static final String WAITING = "waitingForInput";
+    /** The answer of the edge after a stage that is held for a decision: the attempt ends there. */
+    private static final String WAIT_FOR_DECISION = "waitForDecision";
 
     private final CompiledGraph<AgentState> graph;
     private final Optional<StageProgress> progress;
     private final Optional<RequirementsAgentNode> requirementsAgent;
     private final Optional<RunResume> resume;
+    private final Optional<ApprovalService> approvals;
     private final int maxRetries;
 
     /** Every stage on its dummy node. */
@@ -109,19 +117,34 @@ public class WorkflowRunner {
      * As above. With the run resume, the runner can also attempt a failed run again from where an earlier attempt
      * stopped ({@link #retry}); it is optional for the same reason as the agent stages.
      */
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
+                          Optional<StageProgress> progress, Optional<RunDocuments> runDocuments, int maxRetries,
+                          Optional<RunResume> resume)
+            throws GraphStateException {
+        this(nodes, requirementsAgent, agentStages, developmentFinish, progress, runDocuments, maxRetries, resume,
+                Optional.empty());
+    }
+
+    /**
+     * As above. With the approvals, a stage that {@code agent.approval.required-for} lists ends the attempt after it has
+     * stored its artifact, and waits for a reviewer's decision; when the reviewer rejected it before, the agent is given
+     * the comments. It is optional for the same reason as the agent stages.
+     */
     @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
                           Optional<StageProgress> progress, Optional<RunDocuments> runDocuments,
                           @Value("${agent.stage.max-retries:" + DEFAULT_MAX_RETRIES + "}") int maxRetries,
-                          Optional<RunResume> resume)
+                          Optional<RunResume> resume, Optional<ApprovalService> approvals)
             throws GraphStateException {
         if (maxRetries < 0) {
             throw new IllegalArgumentException("agent.stage.max-retries must not be negative");
         }
         Map<String, Function<AgentState, Map<String, Object>>> agents = new HashMap<>();
         requirementsAgent.ifPresent(node -> agents.put("requirements", node::requirements));
-        agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role, node::execute)));
+        agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role,
+                state -> node.execute(state, reviewerFeedback(approvals, state, role), List.of()))));
         developmentFinish.ifPresent(finish -> {
             AgentStageNode development = agentStages.map(stages -> stages.nodes().get("development")).orElse(null);
             if (development != null) {
@@ -131,6 +154,7 @@ public class WorkflowRunner {
         this.progress = progress;
         this.requirementsAgent = requirementsAgent;
         this.resume = resume;
+        this.approvals = approvals;
         this.maxRetries = maxRetries;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         StateGraph<AgentState> route = new StateGraph<>(AgentState::new)
@@ -151,8 +175,11 @@ public class WorkflowRunner {
                 .addConditionalEdges("requirements", edge_async(this::afterRequirements),
                         Map.of("impactAnalysis", "impactAnalysis", "design", "design"))
                 .addEdge("impactAnalysis", "design")
-                .addEdge("design", "planning")
-                .addEdge("planning", "development")
+                // A stage that a reviewer has to decide about marks the state as waiting; the attempt then ends.
+                .addConditionalEdges("design", edge_async(state -> after(state, "planning")),
+                        Map.of("planning", "planning", WAIT_FOR_DECISION, END))
+                .addConditionalEdges("planning", edge_async(state -> after(state, "development")),
+                        Map.of("development", "development", WAIT_FOR_DECISION, END))
                 .addEdge("development", "qa")
                 .addEdge("development", "review")
                 .addEdge("development", "documentation")
@@ -195,8 +222,35 @@ public class WorkflowRunner {
             UUID runId = state.<UUID>value("runId").orElseThrow();
             Map<String, Object> update = attempts(runId, role, action, state);
             progress.ifPresent(recorder -> recorder.finished(runId, role));
-            return update;
+            return waitForDecision(runId, role, update);
         };
+    }
+
+    /**
+     * After a stage has stored its artifact and is finished: when a reviewer has to decide about it first, the run starts
+     * to wait and the update marks the state as waiting, so that the edge after the stage ends the attempt. A stage on its
+     * dummy node stores no artifact, so there is nothing to decide about.
+     */
+    private Map<String, Object> waitForDecision(UUID runId, String role, Map<String, Object> update) {
+        if (approvals.isPresent() && update.get(role) instanceof ArtifactRef artifact
+                && approvals.get().waitForDecision(runId, role, artifact)) {
+            Map<String, Object> waiting = new HashMap<>(update);
+            waiting.put(WAITING, true);
+            return waiting;
+        }
+        return update;
+    }
+
+    /** The comments of a reviewer who rejected earlier results of this stage, as text for the task; empty when none. */
+    private static String reviewerFeedback(Optional<ApprovalService> approvals, AgentState state, String role) {
+        UUID runId = state.<UUID>value("runId").orElseThrow();
+        return approvals.map(service -> AgentStageNode.reviewerFeedback(service.rejectionComments(runId, role)))
+                .orElse("");
+    }
+
+    /** The node after a stage that may be held for a decision: the next stage, or the end of an attempt that waits. */
+    private static String after(AgentState state, String next) {
+        return state.<Boolean>value(WAITING).orElse(false) ? WAIT_FOR_DECISION : next;
     }
 
     /**
@@ -298,7 +352,7 @@ public class WorkflowRunner {
             Map<String, Object> prepared = attempts(runId, "requirements", requirementsAgent.get()::prepare,
                     new AgentState(input));
             input.putAll(prepared);
-            if (Boolean.TRUE.equals(prepared.get("waitingForInput"))) {
+            if (Boolean.TRUE.equals(prepared.get(WAITING))) {
                 log.info("event=workflow_waiting runId={} stage=requirements", runId);
                 return new AgentState(input);
             }
