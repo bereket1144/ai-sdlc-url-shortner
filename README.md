@@ -4,6 +4,8 @@ Describe what you want to build, answer the agents' questions, and review their 
 
 The controller is a Java 21 Spring Boot application. The current generated product uses Python, the standard library, SQLite and pytest. Each run has its own Git branch and workspace. In the live profile, completed work is automatically merged into the clean controller checkout, putting the generated product under `apps/url-shortener/`.
 
+Looking for the generator code, a run's artifacts or the commit history? See [Where to find the code, the artifacts and the history](#where-to-find-the-code-the-artifacts-and-the-history).
+
 ## 1. Prepare your machine
 
 You need:
@@ -282,6 +284,57 @@ Database data, artifacts and run workspaces remain available. Finish or stop act
 | Run waits indefinitely | Open its questions or approval card; a human wait requires your response |
 | Run is marked failed | Read the failure reason and controller logs before retrying |
 | Run remains RUNNING after a crash | There is no automatic startup reconciliation; inspect its stored state and workspace |
+
+## Where to find the code, the artifacts and the history
+
+### The generator code
+
+Everything that turns a requirement into a product is the controller, in `agent-controller/src/main/java/io/github/bereket1144/agentcontroller/`:
+
+| Package | What it holds |
+| --- | --- |
+| `workflow` | The SDLC graph (`WorkflowRunner`): sequential and parallel stages and the join, the generic agent stage (`AgentStageNode`, `AgentStages`), the development step that commits and verifies (`DevelopmentFinish`), stage retry, resume and stage progress |
+| `agent` and `src/main/resources/agent-roles/*.properties` | The eight agents as data: each role's identity, standards, inputs, output fields and boundaries (requirements, impactAnalysis, design, planning, development, qa, review, documentation) |
+| `model`, `modelcall` | Prompt building inside the context window, the model clients (local, Anthropic style, OpenAI style such as OpenRouter), output validation and repair, retries and fallback, the call budget, call records and replay |
+| `artifact` | Versioned artifacts, what each was built from, and the input access rules |
+| `workspace` | The per-run branch and worktree, change-set path checks, deleting and writing files, commits, and the merge into the checkout (`WorkspaceMerge`) |
+| `sandbox` | Building and testing generated code in a Docker container (`DockerVerificationRunner`) |
+| `document` | Exporting the README, `docs/` and the evidence into the run's branch |
+| `run` | The run API and state: clarification, approvals, retry, stop and resume, lineage |
+| `metrics` | The metrics report |
+
+The page is in `agent-controller/src/main/resources/static/`, database migrations in `src/main/resources/db/migration/`, and settings in `application.properties` and `application-live.properties`. Tests are in `agent-controller/src/test/java/`.
+
+How this project itself was built with AI assistants is also in the repository: the five coding-agent definitions in `.claude/agents/`, every step with its done-when and result in [docs/steps.md](docs/steps.md), the stories and criteria in [docs/platform/requirements/](docs/platform/requirements/), the code review findings and their resolutions in [reports/review/index.md](reports/review/index.md), and the [decision records](docs/adr/).
+
+### The run artifacts
+
+- **While and after a run:** in PostgreSQL, read through the page, Swagger or the API (`GET /v1/runs/<run-id>/artifacts/<kind>/<version>`, `GET /v1/runs/<run-id>/lineage`).
+- **As files:** after a successful run the controller commits them to the run's branch, and with automatic delivery they appear in this checkout. `runs/<run-id>/artifacts/<kind>-v<version>.json` and `runs/<run-id>/lineage.json` hold the evidence, and the generated product's own README and documents are in `apps/url-shortener/` (`README.md`, `docs/requirements.md`, `docs/design.md`, `docs/plan.md`, `docs/qa.md`, `docs/review.md` and `docs/diagrams/`).
+- **Call records** (every model call, its retries and token counts) are in the `model_call` table and are summarised by `GET /v1/metrics`.
+
+### The commit history
+
+Three authors write to this repository, and they are easy to tell apart:
+
+| Author | What they commit |
+| --- | --- |
+| `bereket1144` | The platform code and docs. The subject ends with the coding assistant that did the work, for example `[development-agent]` or `[main agent]` |
+| `development` | The generated product's code and tests, one commit per change set |
+| `controller` | The generated documents and evidence, and the merge of a finished run |
+
+From the repository root:
+
+```sh
+git log --graph --oneline                         # everything, with each run as a side branch
+git log --first-parent --oneline                  # the platform's own line, one entry per merged run
+git log --author=development --stat              # the code the agents generated
+git log --author=controller --oneline             # document exports and merges
+git log --oneline -- apps/url-shortener           # the generated product's history
+git branch --list 'run/*'                         # one branch per run
+git log --oneline run/<run-id>                    # one run's commits
+git log --oneline --grep='development-agent'      # work done by a coding assistant, by its tag
+```
 
 ## Current limits and project documents
 
