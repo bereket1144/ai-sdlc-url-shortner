@@ -18,3 +18,16 @@ As a requester, I want one page where I can start a run, answer its questions an
 - AC-UI-1.8 The QA, review and documentation results are shown when they exist: a short readable section for each, built from the artifact content in the same bullet form.
 - AC-UI-1.9 Text that comes from the run or a model is always shown as text and never as HTML, so that nothing a model writes can run in the page.
 - AC-UI-1.10 A test shows that `GET /` answers 200 with an HTML page that loads the page's own script and style files, and that those files are served too.
+
+## UI-2 Ask for a change on a finished run
+
+Status: open
+
+As a requester, I want to type a change request under a finished run and watch the change get built on top of it, so that I can keep improving a product in one conversation.
+
+- AC-UI-2.1 When the run being followed is SUCCEEDED and has a commit, the conversation ends with a "Request a change" box: a text area and a button. Sending it posts `{requirement, kind: "BROWNFIELD", baseRunId: <this run's id>}` to `POST /v1/runs` and then follows the new run in the same conversation view, without a reload.
+- AC-UI-2.2 The box is not shown for a run that is not SUCCEEDED, has no commit, or is still being followed. A refusal from the server (a 400) shows its message under the box and keeps what was typed.
+- AC-UI-2.3 The view of a change run says which run it changes ("Change to run <first 8 characters>") with a link that opens the base run, and the base run's view offers the change runs this page started, as links, from the browser's own memory. Both are optional text when nothing is known.
+- AC-UI-2.4 The existing "Change an existing run" choice in the start box keeps working.
+- AC-UI-2.5 Everything is built with `createElement` and `textContent` only. The behaviour is checked by hand.
+

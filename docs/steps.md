@@ -342,3 +342,6 @@ The record of the work done in this repository, one entry per step, in the order
 - [ ] 116. AGT-67 Work on a branch of this repository.
   Done when: story AGT-67 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test or, for documents, is named as checked by hand.
   Criterion update (user decision, 2026-10-05): a run's workspace is a git worktree of this repository on a branch run/<run-id> instead of a separate git repository, so the agents' commits live in this repository; this replaces step 102's fresh repository per run and the delivery script for new runs. (main agent, direct)
+- [ ] 117. UI-2 Ask for a change on a finished run.
+  Done when: story UI-2 in docs/platform/requirements/reviewer-ui.md is coded and its criteria are named as checked by hand (the page has no browser test).
+  Criterion update (user decision, 2026-10-05): the page lets the user type a change request under a finished run and follow the resulting change run in the same conversation. (main agent, direct)
