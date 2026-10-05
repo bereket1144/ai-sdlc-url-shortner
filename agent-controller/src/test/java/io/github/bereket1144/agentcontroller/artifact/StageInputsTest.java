@@ -2,6 +2,8 @@ package io.github.bereket1144.agentcontroller.artifact;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.time.Duration;
@@ -16,6 +18,10 @@ import io.github.bereket1144.agentcontroller.artifact.ArtifactStore.NewArtifact;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore.StoredArtifact;
 import io.github.bereket1144.agentcontroller.artifact.StageInputs.Resolved;
 import io.github.bereket1144.agentcontroller.model.ModelProfile;
+import io.github.bereket1144.agentcontroller.model.ModelProfiles;
+import io.github.bereket1144.agentcontroller.model.PromptBuilder;
+import io.github.bereket1144.agentcontroller.model.PromptBuilder.Prompt;
+import io.github.bereket1144.agentcontroller.model.PromptBuilder.PromptInput;
 import io.github.bereket1144.agentcontroller.run.Run;
 import io.github.bereket1144.agentcontroller.run.RunRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -84,6 +90,28 @@ class StageInputsTest {
                 InputKind.REQUIREMENTS_ARTIFACT, InputKind.PLAN_ARTIFACT);
         assertThat(store.find(runId, "development", developed.version()).orElseThrow().consumed())
                 .containsExactly(requirements, plan);
+    }
+
+    @Test
+    @DisplayName("STEP-104.1, 104.3 the documentation prompt holds the plan and the paths and rationale of the development work, and no file content")
+    void documentationGetsThePlanAndThePathsButNoFileContents() {
+        UUID runId = newRun();
+        ArtifactRef plan = store.store(artifact(runId, "planning", "{\"tasks\":[\"PLAN_TASK_TEXT\"]}"));
+        ArtifactRef development = store.store(artifact(runId, "development", """
+                {"changes":[{"path":"src/app.py","content":"FILE_BODY_ONE"},
+                            {"path":"docs/notes.md","content":"FILE_BODY_TWO"}],
+                 "rationale":"RATIONALE_TEXT"}"""));
+        ModelProfiles profiles = mock(ModelProfiles.class);
+        when(profiles.safetyMarginPercent()).thenReturn(10);
+
+        Resolved resolved = stageInputs.resolve(runId, "documentation", List.of(plan, development));
+        Prompt prompt = new PromptBuilder(profiles, roles, 3).build("documentation", PROFILE, "Document the run.",
+                resolved.inputs());
+
+        assertThat(resolved.inputs()).extracting(PromptInput::kind)
+                .containsExactly(InputKind.PLAN_ARTIFACT, InputKind.DEVELOPMENT_OUTLINE);
+        assertThat(prompt.userText()).contains("PLAN_TASK_TEXT", "src/app.py", "docs/notes.md", "RATIONALE_TEXT")
+                .doesNotContain("FILE_BODY_ONE", "FILE_BODY_TWO");
     }
 
     @Test

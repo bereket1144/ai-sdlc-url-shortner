@@ -13,7 +13,9 @@ import io.github.bereket1144.agentcontroller.model.PromptBuilder.PromptInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Turns the artifact versions a stage is handed into the prompt inputs of one role. The caller names the exact
@@ -44,23 +46,44 @@ public class StageInputs {
         RoleDefinition role = roles.get(roleId);
         List<ArtifactRef> wanted = List.copyOf(refs);
         for (ArtifactRef ref : wanted) {
-            InputKind kind = inputKind(ref.kind());
+            InputKind kind = inputKind(role, ref.kind());
             if (!role.inputs().contains(kind)) {
                 log.info("event=input_access_denied runId={} role={} kind={}", runId, roleId, kind);
                 throw new InputAccessDeniedException(roleId, kind);
             }
         }
-        List<PromptInput> inputs = wanted.stream().map(ref -> read(runId, ref)).toList();
+        List<PromptInput> inputs = wanted.stream().map(ref -> read(runId, role, ref)).toList();
         log.info("event=stage_inputs_resolved runId={} role={} inputCount={}", runId, roleId, inputs.size());
         return new Resolved(inputs, wanted);
     }
 
-    private PromptInput read(UUID runId, ArtifactRef ref) {
+    private PromptInput read(UUID runId, RoleDefinition role, ArtifactRef ref) {
         StoredArtifact artifact = store.find(runId, ref.kind(), ref.version()).orElseThrow(
                 () -> new IllegalArgumentException("No artifact " + ref.kind() + " version " + ref.version()
                         + " for run " + runId));
-        return new PromptInput(inputKind(ref.kind()), String.valueOf(ref.version()),
-                mapper.writeValueAsString(artifact.content()), artifact.summary(), false);
+        InputKind kind = inputKind(role, ref.kind());
+        JsonNode content = kind == InputKind.DEVELOPMENT_OUTLINE
+                ? withoutFileContents(artifact.content()) : artifact.content();
+        return new PromptInput(kind, String.valueOf(ref.version()), mapper.writeValueAsString(content),
+                artifact.summary(), false);
+    }
+
+    /** A copy of the development artifact in which each change keeps its path and loses its content. */
+    private static JsonNode withoutFileContents(JsonNode development) {
+        // A validated development artifact is a JSON object whose changes are all objects; copy it so the stored
+        // artifact is not changed.
+        ObjectNode outline = (ObjectNode) development.deepCopy();
+        for (JsonNode change : outline.path("changes")) {
+            ((ObjectNode) change).remove("content");
+        }
+        return outline;
+    }
+
+    /** A role that lists the outline of the development artifact is handed the outline and not the artifact. */
+    private static InputKind inputKind(RoleDefinition role, String artifactKind) {
+        InputKind kind = inputKind(artifactKind);
+        return kind == InputKind.DEVELOPMENT_ARTIFACT && role.inputs().contains(InputKind.DEVELOPMENT_OUTLINE)
+                ? InputKind.DEVELOPMENT_OUTLINE : kind;
     }
 
     /** The artifact kind "impactAnalysis" is the input kind IMPACT_ANALYSIS_ARTIFACT, and so on for every kind. */

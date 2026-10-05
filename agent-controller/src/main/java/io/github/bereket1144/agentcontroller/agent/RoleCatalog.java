@@ -178,6 +178,8 @@ public class RoleCatalog {
         DESIGN_ARTIFACT,
         PLAN_ARTIFACT,
         DEVELOPMENT_ARTIFACT,
+        /** The development artifact with the content text of every change removed: a change keeps only its path. */
+        DEVELOPMENT_OUTLINE,
         QA_ARTIFACT,
         REVIEW_ARTIFACT,
         DOCUMENTATION_ARTIFACT

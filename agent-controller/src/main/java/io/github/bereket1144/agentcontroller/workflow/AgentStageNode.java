@@ -44,6 +44,7 @@ public class AgentStageNode {
             InputKind.DESIGN_ARTIFACT, "design",
             InputKind.PLAN_ARTIFACT, "planning",
             InputKind.DEVELOPMENT_ARTIFACT, "development",
+            InputKind.DEVELOPMENT_OUTLINE, "development",
             InputKind.QA_ARTIFACT, "qa",
             InputKind.REVIEW_ARTIFACT, "review",
             InputKind.DOCUMENTATION_ARTIFACT, "documentation");
