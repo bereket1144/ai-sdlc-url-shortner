@@ -829,32 +829,36 @@ As the platform owner, I want decisions to come from known people with the right
 
 Shown when: a change to existing code is analysed before design, and a requirement that changes mid-run triggers a re-plan with new approvals.
 
-### AGT-50 Choose the run kind and name the existing code
+### AGT-50 Choose the run kind and name the base run
 
 Status: open
 
 Depends on: AGT-20.
 
-As a requester, I want to say that a run changes existing code and which code, so that the platform starts from the right base.
+As a requester, I want to say that a run changes the result of an earlier run, so that the platform starts from that code and not from nothing.
 
-- AC-AGT-50.1 `POST /v1/runs` accepts an optional kind (GREENFIELD by default, or BROWNFIELD) and, for BROWNFIELD, the base to start from (a configured source and a revision). An invalid kind or base is refused with 400 in the RUN-4 format.
-- AC-AGT-50.2 A request without a kind behaves as before.
-- AC-AGT-50.3 The workspace of a brownfield run starts from the named base.
-- AC-AGT-50.4 The API document and the read response show the kind. This updates AC-SWAG-1.3 and AC-SWAG-1.4 and the "request body unchanged" clause of AC-FLOW-1.6, with the user's approval noted in the steps log.
+- AC-AGT-50.1 `POST /v1/runs` accepts an optional `kind` (`GREENFIELD` by default, or `BROWNFIELD`) and an optional `baseRunId`. A BROWNFIELD run needs a `baseRunId`, and a GREENFIELD run must not have one. A kind that is neither, a `baseRunId` that is not a UUID, a missing `baseRunId` for BROWNFIELD and one given for GREENFIELD are each refused with 400 in the RUN-4 format, and nothing is stored.
+- AC-AGT-50.2 The base run must exist, be SUCCEEDED and have a stored commit. Otherwise the request is refused with 400 in the RUN-4 format and nothing is stored. A path or a repository address is never accepted as a base.
+- AC-AGT-50.3 A request without `kind` behaves exactly as before and creates a GREENFIELD run. This updates the "request body unchanged" clause of AC-FLOW-1.6 with the user's approval, noted in the steps log.
+- AC-AGT-50.4 The run stores its kind and base run id. The run read response shows `kind` and, for BROWNFIELD, `baseRunId`. The API document lists both request fields and both response fields (this updates AC-SWAG-1.3 and AC-SWAG-1.4).
+- AC-AGT-50.5 The workspace of a BROWNFIELD run is a git clone of the base run's workspace repository, so it starts with the base's files and history and new commits stack on top. The base run's repository is never changed. When the base run's workspace no longer exists the run fails with the reason UNEXPECTED and nothing is written.
+- AC-AGT-50.6 The reviewer page's start box offers "change an existing run": a choice of the runs the page remembers, or a pasted run id, sent as `baseRunId` with the kind BROWNFIELD. This is checked by hand.
+
 
 ### AGT-49 Understand existing code before changing it
 
 Status: open
 
-Depends on: AGT-16, AGT-20, AGT-50.
+Depends on: AGT-16, AGT-50, AGT-65.
 
-As a reviewer, I want the impact of a change on existing code analysed and approved before any design, so that a brownfield change starts from what is really there.
+As a requester, I want the agents of a change to see the existing code, so that the impact is analysed and the change fits what is there.
 
-- AC-AGT-49.1 For a brownfield run the impact node is given a read-only snapshot of the workspace (the file list with sizes and the content of selected files, sized by AGT-4) and returns an impact report: the modules, APIs and data flows affected with reasons, a change risk, and questions.
-- AC-AGT-49.2 Reference check: every file, class or endpoint the report names exists in the snapshot, or the answer is invalid and goes to repair.
-- AC-AGT-49.3 The report needs approval before design starts (AGT-15). A greenfield run does not run the node (AC-FLOW-1.2).
-- AC-AGT-49.4 The snapshot is read-only and leaves out protected and secret paths.
-- AC-AGT-49.5 The stage has the same agent or dummy switch as AGT-12.
+- AC-AGT-49.1 For a BROWNFIELD run the impact analysis, design, planning and development agents also receive the existing files of the workspace (`SELECTED_WORKSPACE_FILES`), bounded in file count and total size as in AGT-65, before the other inputs they already get. A GREENFIELD run is unchanged.
+- AC-AGT-49.2 A BROWNFIELD run goes through the impact analysis stage after the requirements and before the design, and the design and planning agents receive its artifact.
+- AC-AGT-49.3 Development changes existing files with whole-file rewrites and adds new ones. The committed change set is built and tested as before, running the whole test suite including the base's tests.
+- AC-AGT-49.4 A scripted end-to-end test runs a GREENFIELD run to SUCCEEDED and then a BROWNFIELD run on it: it ends SUCCEEDED, the impact stage ran, the second repository's history holds the first run's commits and new ones, the base run's repository is unchanged, and the development prompt contained the existing file text.
+- AC-AGT-49.5 `scenarios/brownfield.md` holds a requirement that changes the product built by an earlier run (for example link expiry), with the way to start it.
+
 
 ### AGT-51 Change the requirement of a running run
 
