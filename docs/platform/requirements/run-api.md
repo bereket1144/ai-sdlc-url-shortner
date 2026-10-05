@@ -1,5 +1,11 @@
 # Run API requirements
 
+## Backlog status reconciliation (2026-10-05)
+
+At the user's request, the reviewed stories use `stale` for historical criteria awaiting reconciliation with the current implementation and scope, and `deferred` for postponed work. Neither status means the behaviour is absent: existing code and known verification gaps are preserved.
+
+Stories explicitly closed in this cleanup have `Status: done` and a dated disposition. This is a user-directed backlog closure, including superseded work, not a claim that a new QA or code review pass occurred or that every historical criterion was verified. Existing acceptance criteria are retained for reference. Other pre-existing statuses keep their meaning. See [ADR 0012](../../adr/0012-reconcile-platform-backlog-statuses.md).
+
 ## Request
 
 The controller needs an HTTP API through which a requester starts a run from a written requirement and reads it back. It creates a run, refuses a bad request, and is fit for production use: a versioned path, one error format, bounded input, a recorded run state, and a way to read a run back.
@@ -100,7 +106,9 @@ Depends on RUN-3 (the path) and RUN-6 (the fields).
 
 ### BUG-1 A very large request body is read in full before the length limit applies
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Early rejection of oversized request bodies is postponed as already intended by this story. The existing requirement-length validation remains in place.
 
 As the platform owner, I want an oversized text refused before the whole of it is held in memory, so that one request cannot exhaust memory (RUN-5 only checks the length after the body is read). To be picked up much later; the exact maximum is decided then.
 

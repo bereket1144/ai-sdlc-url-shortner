@@ -1,10 +1,16 @@
 # Reviewer page
 
+## Backlog status reconciliation (2026-10-05)
+
+At the user's request, the reviewed stories use `stale` for historical criteria awaiting reconciliation with the current implementation and scope, and `deferred` for postponed work. Neither status means the behaviour is absent: existing code and known verification gaps are preserved.
+
+Stories explicitly closed in this cleanup have `Status: done` and a dated disposition. This is a user-directed backlog closure, including superseded work, not a claim that a new QA or code review pass occurred or that every historical criterion was verified. Existing acceptance criteria are retained for reference. Other pre-existing statuses keep their meaning. See [ADR 0012](../../adr/0012-reconcile-platform-backlog-statuses.md).
+
 A small web page served by the controller, so that a person can start a run, answer the agent's questions and watch the run go from the requirement to the generated code, without Postman. It only calls the controller's existing HTTP operations; it reads nothing from the database.
 
 ## UI-1 Follow a run in one page
 
-Status: open
+Status: stale
 
 As a requester, I want one page where I can start a run, answer its questions and see each stage's result as it appears, so that I can follow and judge the run without reading JSON.
 
@@ -21,7 +27,9 @@ As a requester, I want one page where I can start a run, answer its questions an
 
 ## UI-2 Ask for a change on a finished run
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as superseded by the implemented UI-3 chat bar. The old change-request card does not need to be implemented again.
 
 As a requester, I want to type a change request under a finished run and watch the change get built on top of it, so that I can keep improving a product in one conversation.
 
@@ -33,7 +41,7 @@ As a requester, I want to type a change request under a finished run and watch t
 
 ## UI-3 A chat bar pinned at the bottom, and approvals
 
-Status: open
+Status: stale
 
 As a requester, I want a chat bar that is always at the bottom of the page and the approve and reject buttons when the run asks for them, so that I can steer a run from the conversation.
 

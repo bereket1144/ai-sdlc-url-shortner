@@ -1,18 +1,31 @@
 # Agentic SDLC
 
-A Java controller takes a written requirement through requirements, design, planning, development, QA, code review and documentation. Agents return structured answers; the controller validates them, stores artifacts, writes generated files into a separate Git workspace and runs their tests in a disposable Docker container.
+Describe what you want to build, answer the agents' questions, and review their design and implementation plan. The controller then generates code and tests, verifies them in a Docker sandbox, and produces QA, review and documentation artifacts.
 
-The current deliverable is a thin end-to-end prototype, not a completed governed release pipeline. One real-model run generated a small Python service and passed its sandbox tests. Human approvals, repair gates and the brownfield scenario remain unfinished. See [limitations and trade-offs](docs/platform/limitations.md).
+The controller is a Java 21 Spring Boot application. The current generated product uses Python, the standard library, SQLite and pytest. Each run has its own Git branch and workspace, so you can inspect the result before bringing it into your checkout.
 
-## Prerequisites
+## 1. Prepare your machine
 
-- Java 21, Git, Docker with Compose, and a running Docker daemon.
-- Internet access for the initial Maven dependencies and sandbox image build.
-- For a real agent run, access to the configured model API. The supplied `live` profile uses OpenRouter and reads its key from `OPENROUTER_API_KEY`.
+You need:
 
-The controller is a Spring Boot application using PostgreSQL, JPA, Flyway and LangGraph4j 1.8.27. The generated product currently uses Python, the standard library, SQLite and pytest. Python is supplied by the sandbox image; a host Python installation is not needed to verify generated code.
+- Java 21.
+- Git.
+- Docker with Compose, with the Docker daemon running.
+- An OpenRouter API key for real agent runs.
+- Internet access to download Maven dependencies, build the sandbox image and call the model.
 
-## Start the database and prepare the sandbox
+Maven is supplied through the wrapper. Python and pytest are supplied by the sandbox image; you do not need host Python to run the controller's generated-code verification.
+
+From the repository root, check the tools:
+
+```sh
+java -version
+git --version
+docker info
+docker compose version
+```
+
+## 2. Start PostgreSQL and build the sandbox
 
 From the repository root:
 
@@ -22,115 +35,260 @@ docker compose ps
 docker build -t agent-sandbox-python docker/sandbox-python
 ```
 
-Wait for PostgreSQL to report healthy. Compose starts PostgreSQL only, on host port `5433`, and keeps its data in a named volume. The Compose credentials are local development defaults, not a production configuration. The sandbox image installs pytest during image creation; generated tests run without network access.
+Wait until PostgreSQL reports `healthy`. It listens on host port `5433` and stores its data in a named Docker volume. Compose starts the database only; the controller runs locally.
 
-## Start the controller
+Build the sandbox image once, and rebuild it when its Dockerfile changes. The image contains the Python test tools. Generated tests run in a fresh container with no network access, as a non-root user, with resource and time limits. Product files are copied into the container; no host directory is mounted.
 
-From `agent-controller/`, with `OPENROUTER_API_KEY` already set in the process environment:
+## 3. Start the controller
+
+In the terminal where you will start the controller, set your model key:
 
 ```sh
+export OPENROUTER_API_KEY='your-api-key'
+cd agent-controller
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=live
 ```
 
-Do not store the key in properties files, scenario files or Git. The settings are in [application-live.properties](agent-controller/src/main/resources/application-live.properties). `OPENROUTER_MODEL` optionally overrides the configured model identifier; when changing models, also review the context window, answer limit and reasoning setting for compatibility.
+Keep this terminal running. The `live` profile enables the main agent stages and requires human approval of the design and implementation plan. Database migrations run automatically at startup.
 
-Flyway applies database migrations at startup, and Hibernate validates the resulting schema. The controller listens on port `8080` by default:
+The key is read from the environment. Keep it out of source files and Git. Model and workspace settings are in [application-live.properties](agent-controller/src/main/resources/application-live.properties). You can override the model with `OPENROUTER_MODEL`; review its context window, answer limit and reasoning settings when changing it.
 
-- Health: `http://localhost:8080/actuator/health`
-- Swagger: `http://localhost:8080/swagger-ui/index.html`
-- OpenAPI document for Postman: `http://localhost:8080/v3/api-docs`
+## 4. Open the UI
 
-Without the `live` profile, all stages default to dummy nodes. `./mvnw spring-boot:run` can demonstrate routing without a model, but does not generate or verify product code. A dummy run's success has this narrower meaning.
+Open **[http://localhost:8080/](http://localhost:8080/)**.
 
-## Submit and inspect a real run
+| Page | Address | Purpose |
+| --- | --- | --- |
+| Reviewer UI | [Open UI](http://localhost:8080/) | Start a run, answer questions, approve results and inspect artifacts |
+| Metrics | [Open metrics](http://localhost:8080/#metrics) | View aggregate run, model-call and verification statistics |
+| Swagger UI | [Open Swagger](http://localhost:8080/swagger-ui/index.html) | Explore and call the HTTP API |
+| OpenAPI JSON | [Open API document](http://localhost:8080/v3/api-docs) | Import the API into Postman |
+| Health | [Check health](http://localhost:8080/actuator/health) | Confirm the controller and database are available |
 
-Keep the initial requirement small: development currently produces all files in one answer. In Postman, send `POST http://localhost:8080/v1/runs`, with `Content-Type: application/json` and this body:
+The reviewer UI is served by the controller. There is no separate frontend server or frontend build command.
 
-```json
-{
-  "requirement": "Build a small Python link-shortening service using only the standard library, SQLite and pytest. Use at most 3 stories, no open questions, and two endpoints: POST /links accepts a JSON url and returns 201 with a code; GET /{code} redirects with 302 or returns 404 for an unknown code. Reject URLs outside http and https with 400. Put complete code and tests directly under apps/url-shortener so python -m pytest runs them offline."
-}
-```
+## 5. Start your first run
 
-This reduced input follows the successful manual trial described in the [engineering summary](docs/platform/engineering-summary.md). The broader scenario input, including analytics, is in [walking-skeleton.md](scenarios/walking-skeleton.md); the reduced trial does not prove those extra requirements.
+On the start page, enter a small request in **Requirement**, then click **Start run**. For example:
 
-The API returns `201`, an `id`, and a `Location` header. Background polling claims and executes the run automatically. Read `GET /v1/runs/{id}` until it reaches `SUCCEEDED` or `FAILED`. It shows stage progress, artifact summaries and, when available, the generated commit and verification counts. Failures include a fixed reason code and message.
+> Build a small Python link-shortening service using the standard library, SQLite and pytest. POST /links accepts a JSON url and returns 201 with a code. GET /{code} redirects with 302, or returns 404 for an unknown code. Reject URLs outside http and https with 400. Include code and tests. Keep the scope to at most three stories.
 
-Read a specific artifact with:
+Keep the first request small. Development currently generates the complete change in one answer rather than executing each planned task separately.
+
+The controller creates the run and starts it through background polling. The UI follows its progress automatically. Its address contains the run ID, so you can bookmark it, reload it or share the address with someone who can access the same controller:
 
 ```text
-GET /v1/runs/{id}/artifacts/{kind}/{version}
+http://localhost:8080/#run=<run-id>
 ```
 
-### Resolve requirements clarification
+**Recent runs** remembers runs in that browser. Save the run URL or ID if you want to reopen it from another browser.
 
-The requirements agent first returns at most four questions, with no assumptions to confirm, before the stories. Python, the standard library, SQLite and pytest are fixed execution context. When there are questions the run pauses at `WAITING_FOR_INPUT`; a run with no questions goes straight to the stories.
+### Answer clarification questions
 
-Read `GET /v1/runs/{id}/questions`. Items have unique `Q-*` IDs, the artifact version, `OPEN` or `ANSWERED` status and the saved reply. Submit an answer for every current question together to `POST /v1/runs/{id}/replies`:
+If the agent needs decisions before writing stories, the run becomes `WAITING_FOR_INPUT`. The UI shows up to four questions together. Answer every question and submit the batch.
 
-```json
-{
-  "answers": [
-    {"questionId": "Q-1", "answer": "Reuse the existing code for duplicate URLs."},
-    {"questionId": "Q-2", "answer": "Yes."}
-  ]
-}
+Processing then continues automatically with your answers. There is one requirements clarification batch; the resulting stories also list the agent's assumptions. Questions and answers are persisted in PostgreSQL.
+
+### Review and approve the design and implementation plan
+
+The live run pauses after the design and again after planning. Open the corresponding artifact, inspect it, and use the approval card:
+
+- **Approve** continues to the next stage.
+- **Reject** requires a comment and asks the same stage to revise its output with your feedback.
+
+Enter your name so the decision is recorded. Rejections are bounded; repeatedly rejecting a stage eventually ends the run as failed. Answering clarification questions is separate from approving these artifacts.
+
+### Follow development and verification
+
+After planning approval, development returns code and tests. The controller validates the file paths, writes the files into the run's workspace, commits them and runs the tests in the sandbox.
+
+A failing verification can trigger another bounded development attempt with the failing-test evidence. After development passes, QA, review and documentation run in parallel. The controller then exports the generated documents and evidence into the run's branch.
+
+The UI shows stage progress, generated files, the tested commit and verification counts. Impact analysis is skipped for a new greenfield run, so its `NOT_STARTED` state is expected.
+
+| Status | What to do |
+| --- | --- |
+| `CREATED` | Wait for the scheduler to pick up the run |
+| `RUNNING` | Follow stage progress and results |
+| `WAITING_FOR_INPUT` | Answer the questions or decide the pending approval |
+| `SUCCEEDED` | Inspect the code, verification, review and documents |
+| `FAILED` | Read the failure details; use Retry if another attempt is available |
+| `STOPPED` | Resume if you want to continue; see the verification caveat below |
+
+## 6. Read the artifacts and generated documents
+
+### In the UI
+
+Use the artifact links beside the stage timeline, or the **View** buttons in the conversation. On a narrow screen, open **Stages & artifacts**.
+
+You can inspect the stories and criteria, design and diagrams, task plan, generated file contents, QA results, review findings and documentation. Generated code has copy controls. **View lineage** shows which artifact versions each result consumed and the recorded file-to-criterion links.
+
+### Through the API
+
+Read the run first to get its artifact kinds and versions:
+
+```text
+GET /v1/runs/<run-id>
+GET /v1/runs/<run-id>/artifacts/<kind>/<version>
+GET /v1/runs/<run-id>/lineage
 ```
 
-Use the actual IDs returned for your run. Every question needs one answer; answers must be nonblank and at most 5,000 characters. An accepted reply returns `202` with `{"runId":"...","message":"Answers submitted."}` and queues processing for the next scheduler poll. An invalid batch returns `400` without changing anything; a reply to an already answered batch returns `409`. After the reply the run goes straight to the stories, which carry the agent's own assumptions as plain text.
+Kinds include `requirements`, `design`, `plan`, `development`, `qa`, `review` and `documentation`. A change run may also have `impactAnalysis`. Use the returned version rather than assuming it is `1`; clarification, rejection and retries can produce additional versions.
 
-Waiting batches and answers survive a controller restart. This continuation happens before the downstream graph starts; it does not provide recovery of interrupted development or builds. Answering clarification also does not approve the resulting stories; story approval remains unfinished.
+For example, save one design artifact locally:
 
-Use the kind and version returned by the run response. Artifact kinds include `requirements`, `design`, `plan`, `development`, `qa`, `review` and `documentation`. The planning stage produces kind `plan`. Unknown artifacts return `404`.
-
-In the live profile, each run works in a git worktree of this repository, in `../../agentic-sdlc-workspaces/<run-id>` (relative to `agent-controller/`, so outside your checkout), on a new branch `run/<run-id>` cut from the commit that is checked out (`workspace.base-ref`, default `HEAD`). Only the product folder `apps/url-shortener/` (`workspace.product-folder`) and `runs/<run-id>/` are checked out there. The generated product is committed under `apps/url-shortener/`, one commit per change set by `development`. After the documents are exported, one commit by `controller` adds the README and `docs/` there and the run's evidence under `runs/<run-id>/`: the latest version of each artifact as JSON and the lineage. A change run (`kind` BROWNFIELD with a `baseRunId`) is cut from the base run's branch `run/<baseRunId>`, so its history extends the base's; the base's branch is never changed. The controller never changes the branch you have checked out, its index or its files, and never merges, pushes or deletes a branch. `workspace.repository` names this repository (the live profile sets it to `..`). Agents' other outputs are stored in PostgreSQL and read through the artifact API.
-
-`SUCCEEDED` in a live skeleton run means that the selected stages returned, the generated commit was tested successfully and the graph completed. It does not mean a person approved the work or that review findings were resolved. `impactAnalysis` remains `NOT_STARTED` on the greenfield route.
-
-## Review and take a run's work
-
-A run's work is the branch `run/<run-id>` of this repository, so you read it with Git from the repository root.
-
-To see it:
-
-```bash
-git log --graph --oneline run/<run-id>        # the run's commits on top of the commit it was cut from
-git log --author=development --oneline run/<run-id>   # the commits of the development agent (the export is by "controller")
-git log --first-parent --oneline              # after a merge: one line for each run you took, and your own commits
+```sh
+curl --fail http://localhost:8080/v1/runs/<run-id>/artifacts/design/<version> \
+  -o design-artifact.json
 ```
 
-To take it, merge the branch. `--no-ff` always makes a merge commit, so the agents' commits stay visible next to yours:
+Replace the angle-bracket placeholders before running commands.
 
-```bash
+### On disk
+
+With the supplied live configuration, the workspace is next to this repository:
+
+```text
+<parent-directory>/
+├── agentic-sdlc/
+└── agentic-sdlc-workspaces/
+    └── <run-id>/
+        ├── apps/url-shortener/
+        │   ├── generated Python modules and tests
+        │   ├── README.md
+        │   └── docs/
+        └── runs/<run-id>/
+            ├── artifacts/<kind>-v<version>.json
+            └── lineage.json
+```
+
+The generated product README contains setup and usage instructions. Its `docs/` directory contains the readable requirements, design, task plan, QA and review documents, plus diagram sources under `docs/diagrams/`.
+
+Documents and JSON evidence are exported after the final stages join. A failed run may have database artifacts without a completed document export. The export contains the latest version of each artifact kind; PostgreSQL retains the stored version history.
+
+**The controller verifies the generated product but does not start its application server.** To try the product itself, inspect its generated README and follow its setup and usage instructions.
+
+## 7. Inspect or take the generated work
+
+Each run is a Git worktree on branch `run/<run-id>`. From the repository root, inspect it without changing your checked-out branch:
+
+```sh
+git log --graph --oneline run/<run-id>
+git diff HEAD...run/<run-id> -- apps/url-shortener/
+git ls-tree -r --name-only run/<run-id> -- apps/url-shortener/ runs/<run-id>/
+git show run/<run-id>:apps/url-shortener/README.md
+```
+
+The `development` author identifies generated-code commits; `controller` identifies the document and evidence export. The run response's tested commit can precede the later document-export commit.
+
+When you have reviewed the result and are ready to bring it into your checkout, merge from a clean working tree:
+
+```sh
 git merge --no-ff run/<run-id>
 ```
 
-The product is then at `apps/url-shortener/`, beside `agent-controller/`, and the run's evidence is at `runs/<run-id>/`.
+The product appears under `apps/url-shortener/` and its evidence under `runs/<run-id>/`. Publishing is a separate manual action. The controller does not merge or push branches, or delete run worktrees.
 
-To publish, remember that the branches are local until you push them. Push the branches with the usual command, for example `git push origin run/<run-id>`, and your own branch after the merge. The controller never pushes. While the run's worktree exists, git does not let you check out `run/<run-id>` in your own checkout; merge it, or read it with `git show run/<run-id>:apps/url-shortener/<file>`.
+### Request a change to an existing result
 
-Runs made before this arrangement are separate repositories under `agentic-sdlc-workspaces/<run-id>/`. `scripts/deliver.sh <run-id>`, run from the repository root with a clean working tree, imports one: it fetches the run's history as the branch `run/<run-id>`, replaces `apps/url-shortener/` with the files of the run's last commit, saves the evidence under `runs/<run-id>/` (the controller must be running at `http://localhost:8080`, or set `API`), and stages `apps/url-shortener/` and `runs/<run-id>/` without committing, so you review and commit yourself. The script is kept only for those runs.
+After a successful run with a generated commit, enter your change in the bottom chat bar and send it. Alternatively, use **New run**, select **Change an existing run**, and choose a remembered run or paste its ID.
+
+The controller creates a new `BROWNFIELD` run whose branch starts from the successful base run's branch. The existing files are supplied to the change agents and the generated product's whole test suite is run again. The base branch is retained.
+
+The supplied live profile does not enable the impact-analysis agent. To include real impact analysis in a change run, start the controller with:
+
+```sh
+./mvnw spring-boot:run -Dspring-boot.run.profiles=live \
+  -Dspring-boot.run.arguments="--agent.stages.impactAnalysis=agent"
+```
+
+## Retry, stop and resume
+
+A failed run's **Retry** button queues it again within its attempt limit. The first retry resumes from the earliest unfinished stage; the next retry restarts from the beginning. Stored evidence remains available.
+
+**Stop** and **Resume** controls have a backend implementation in the current working tree, but their acceptance tests and browser checks have not been executed and further work is deferred. Stop is cooperative: an in-flight model call may finish, and the run stops at a safe point. An active sandbox build is cancelled. The branch, workspace and stored evidence are retained. Resume returns to unfinished work or the same question/approval wait.
+
+These controls do not provide automatic recovery after a controller process crash.
+
+## Use the API instead of the UI
+
+Swagger and Postman use the same operations as the reviewer page:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/runs` | Create a run from `{ "requirement": "..." }` |
+| `GET` | `/v1/runs/{id}` | Read status, stages, artifacts and verification |
+| `GET` | `/v1/runs/{id}/questions` | Read the clarification batch |
+| `POST` | `/v1/runs/{id}/replies` | Submit `{ "answers": [{ "questionId": "Q-1", "answer": "..." }] }` for every question |
+| `POST` | `/v1/runs/{id}/decisions` | Submit `{ "decision": "APPROVE", "approver": "Your name", "comment": "" }`; rejection uses `REJECT` and requires a comment |
+| `GET` | `/v1/runs/{id}/artifacts/{kind}/{version}` | Read a versioned artifact |
+| `GET` | `/v1/runs/{id}/lineage` | Read artifact and code lineage |
+| `POST` | `/v1/runs/{id}/retry` | Retry a failed run, with no body |
+| `POST` | `/v1/runs/{id}/stop` | Request a cooperative stop, with no body |
+| `POST` | `/v1/runs/{id}/resume` | Resume a stopped run, with no body |
+| `GET` | `/v1/metrics` | Read aggregate metrics |
+
+Creating a run returns `201`, its ID and a `Location` header. Accepted replies, decisions and retry requests return `202`; continuation happens through background polling. Errors use `application/problem+json`. See Swagger for the full payloads and response codes.
+
+## Run without a model
+
+For a UI and routing demonstration, start from `agent-controller/` without the live profile:
+
+```sh
+./mvnw spring-boot:run
+```
+
+Stages default to dummy nodes. This needs PostgreSQL but no model key or generated-code sandbox run. A successful dummy run demonstrates routing, not generated code or passing product tests.
+
+A replay model client also exists, but a ready-to-run recording package is not supplied. Replay is not the default startup mode.
 
 ## Verify the controller
 
-With Java 21 and Docker available, from `agent-controller/`:
+From `agent-controller/`, with Java 21 and Docker available:
 
 ```sh
 ./mvnw verify
 ```
 
-The normal suite uses scripted model answers and stub servers, never a live model. PostgreSQL integration tests use Testcontainers. Reports are written to `target/surefire-reports/` and `target/site/jacoco/index.html`. See [testing approach](docs/platform/testing.md) for evidence and current gaps.
+The normal suite uses scripted model responses and stub servers, not live model calls. Database integration tests use Testcontainers.
 
-Stop the controller with Ctrl+C and stop the database with `docker compose stop`. Existing run workspaces and database data remain available for inspection.
+| Report | Location relative to `agent-controller/` |
+| --- | --- |
+| Test results | `target/surefire-reports/` |
+| Controller unit coverage | `target/site/jacoco/index.html` |
 
-## Documentation
+Controller coverage is separate from coverage of the generated product. See [testing approach](docs/platform/testing.md) for the recorded evidence and gaps.
+
+## Shutdown and troubleshooting
+
+Stop the controller with **Ctrl+C**. From the repository root, stop PostgreSQL with:
+
+```sh
+docker compose stop
+```
+
+Database data, artifacts and run workspaces remain available. Finish or stop active work before shutting down; automatic recovery of a run interrupted by a process crash is not implemented.
+
+| Problem | Check |
+| --- | --- |
+| Controller cannot connect to PostgreSQL | Run `docker compose ps`; confirm health and host port `5433` |
+| UI is unavailable | Confirm the controller started and open `http://localhost:8080/` |
+| Model calls fail | Check the key in the controller's environment, provider access and configured model |
+| Verification fails before tests run | Check Docker is running and `agent-sandbox-python:latest` exists |
+| Run waits indefinitely | Open its questions or approval card; a human wait requires your response |
+| Run is marked failed | Read the failure reason and controller logs before retrying |
+| Run remains RUNNING after a crash | There is no automatic startup reconciliation; inspect its stored state and workspace |
+
+## Current limits and project documents
+
+This is an end-to-end prototype. A live `SUCCEEDED` run has completed the selected stages and passed generated-code verification, with design and plan approvals enabled by the live profile. It does not certify that review findings were resolved, every acceptance criterion was tested, coverage met a release threshold or a person approved the final commit. QA and review artifacts currently report evidence without enforcing the complete release gate.
+
+The UI and API are intended for a trusted local environment. Generated work remains subject to human review.
 
 - [Architecture and control flow](docs/platform/architecture.md)
 - [Testing approach and evidence](docs/platform/testing.md)
 - [Limitations and trade-offs](docs/platform/limitations.md)
 - [Engineering summary](docs/platform/engineering-summary.md)
-- [Platform requirements](docs/platform/requirements/agent-pipeline.md)
+- [Platform stories and statuses](docs/platform/requirements/agent-pipeline.md)
 - [Work history](docs/steps.md)
 - [Architecture decisions](docs/adr/)
-
-If startup fails, check database health and host port `5433`. If verification fails, check that Docker is running and the sandbox image exists. Inspect the run's failure reason and controller logs before retrying. A new API submission creates a new run; automatic recovery of interrupted running work is not implemented in this live skeleton.

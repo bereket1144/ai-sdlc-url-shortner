@@ -1,5 +1,11 @@
 # Agent pipeline requirements
 
+## Backlog status reconciliation (2026-10-05)
+
+At the user's request, the reviewed stories use `stale` for historical criteria awaiting reconciliation with the current implementation and scope, and `deferred` for postponed work. Neither status means the behaviour is absent: existing code and known verification gaps are preserved.
+
+Stories explicitly closed in this cleanup have `Status: done` and a dated disposition. This is a user-directed backlog closure, including superseded work, not a claim that a new QA or code review pass occurred or that every historical criterion was verified. Existing acceptance criteria are retained for reference. Other pre-existing statuses keep their meaning. See [ADR 0012](../../adr/0012-reconcile-platform-backlog-statuses.md).
+
 ## Request
 
 The SDLC graph in `sdlc-flow.md` runs eight stage nodes that do dummy work. This feature replaces the dummy work with real agents. Each agent is a senior expert with a written identity. It calls an AI model, asks the reviewer when something is unclear, and hands a versioned, checked result to the next stage.
@@ -241,7 +247,9 @@ As a reviewer without a model, I want a run to replay recorded model answers, so
 
 ### AGT-36 Stop a stage that runs too long
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): The additional stage-wide timer and cancellation mechanism are postponed. Existing model-call and sandbox timeouts and bounded retries remain in place.
 
 Depends on: AGT-5.
 
@@ -273,7 +281,9 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 
 ### AGT-65 Retry a failed stage, with fix feedback for a failed build
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as already built: bounded stage retries and build-failure feedback to development have tests.
 
 Depends on: AGT-5 to AGT-9, AGT-62.
 
@@ -290,7 +300,9 @@ As the platform owner, I want a stage that fails to be attempted again, and a fa
 
 ### AGT-66 Retry a failed run, resuming first and then restarting once
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as already built: failed-run retry resumes first and restarts once within the configured attempt limit, with tests.
 
 Depends on: AGT-65.
 
@@ -321,7 +333,7 @@ As a reviewer, I want each run's generated product and the agents' commits to be
 
 ### AGT-62 Run the whole pipeline once, from Postman, on a real model
 
-Status: open
+Status: stale
 
 Depends on: AGT-6 to AGT-12, AGT-16.
 
@@ -396,7 +408,9 @@ As a requester, I want the requirements stage to turn my text into user stories 
 
 ### AGT-34 Store checkpoints in a readable form owned by migrations
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as already built. The checkpoint factory, migration and tests exist; the production workflow does not attach the saver. No additional checkpoint integration is scheduled by this closure.
 
 Depends on: none.
 
@@ -409,7 +423,9 @@ As the platform owner, I want graph checkpoints stored as readable text in table
 
 ### AGT-13 Pause the run when an agent has questions
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Clarification from every role and multiple rounds are postponed. Requirements-stage clarification remains implemented under AGT-64.
 
 Depends on: AGT-12, AGT-34.
 
@@ -425,7 +441,9 @@ As a requester, I want the run to stop and wait when an agent has questions, so 
 
 ### AGT-14 Answer the questions and resume
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Generalised replies and continuation for every role are postponed. The requirements-stage batch reply under AGT-64 remains in place.
 
 Depends on: AGT-13.
 
@@ -439,7 +457,9 @@ As a requester, I want to answer the agent's questions and have the run carry on
 
 ### AGT-15 Approve the design and the plan before the next stage
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as already built: design and plan approval, rejection feedback and persisted decisions have integration tests. Final commit approval remains separate.
 
 Depends on: AGT-12, AGT-64, AGT-66.
 
@@ -456,7 +476,9 @@ As a reviewer, I want to approve or reject the design and the plan before the ru
 
 ### AGT-35 Run several runs side by side within a limit
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Concurrent runs are postponed; the current scheduler executes runs sequentially.
 
 Depends on: AGT-14.
 
@@ -488,7 +510,7 @@ As the platform owner, I want each agent to receive only the artifacts its role 
 
 ### AGT-17 Design from the approved spec
 
-Status: open
+Status: stale
 
 Depends on: AGT-12, AGT-15, AGT-16.
 
@@ -501,7 +523,7 @@ As a reviewer, I want a design document with diagrams made from the approved sto
 
 ### AGT-18 Plan the work as a checked task graph
 
-Status: open
+Status: stale
 
 Depends on: AGT-17.
 
@@ -515,7 +537,9 @@ As the platform, I want the planner to break the approved design into tasks with
 
 ### AGT-19 Take a requirement to an approved plan on a scripted model
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): The separate requirements-to-plan proof is postponed for consolidation into the main end-to-end acceptance tests. Its full historical criteria are not claimed as verified.
 
 Depends on: AGT-14 to AGT-18.
 
@@ -534,7 +558,9 @@ Shown when: the tasks of the trial requirement become committed files in the run
 
 ### AGT-20 Give each run its own workspace and branch
 
-Status: open
+Status: done
+
+Disposition (2026-10-05): Closed as superseded by AGT-67 and ADR 0010. The implemented worktree arrangement replaces the clone-based workspace and deletion criteria; those historical criteria are retained below, not scheduled for implementation.
 
 Depends on: AGT-19.
 
@@ -562,7 +588,7 @@ As a reviewer, I want the README, the stories, the design, the plan and the QA a
 
 ### AGT-22 Let the development agent propose file changes
 
-Status: open
+Status: stale
 
 Depends on: AGT-18, AGT-20.
 
@@ -576,7 +602,7 @@ As the platform, I want the development agent to return file changes for one tas
 
 ### AGT-23 Apply and commit a change set
 
-Status: open
+Status: stale
 
 Depends on: AGT-22.
 
@@ -590,7 +616,7 @@ As the platform, I want the controller to apply a valid change set to the run's 
 
 ### AGT-24 Work through the tasks in dependency order
 
-Status: open
+Status: stale
 
 Depends on: AGT-18, AGT-23.
 
@@ -605,7 +631,9 @@ As the platform, I want the development stage to work through the plan's tasks i
 
 ### AGT-37 Run independent tasks side by side
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Concurrent development tasks are postponed. Parallel QA, review and documentation remain in place.
 
 Depends on: AGT-24, AGT-35.
 
@@ -623,7 +651,9 @@ Shown when: the trial requirement ends with tests, a review, documentation, pass
 
 ### AGT-25 Write the tests as a change set
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): The separate QA-only test-writing mechanism and exclusive test ownership are postponed. Development continues to generate code and tests together; QA assessment and coverage evidence are still required.
 
 Depends on: AGT-22, AGT-24.
 
@@ -637,7 +667,7 @@ As the platform, I want the QA agent to write the tests for every criterion, so 
 
 ### AGT-26 Review the work and report findings
 
-Status: open
+Status: stale
 
 Depends on: AGT-24.
 
@@ -650,7 +680,7 @@ As a reviewer, I want a review of the code with each issue ranked and located, s
 
 ### AGT-27 Document the work
 
-Status: open
+Status: stale
 
 Depends on: AGT-24.
 
@@ -662,7 +692,7 @@ As a reader of the result, I want documentation that matches the code, so that I
 
 ### AGT-28 Assemble and freeze one candidate
 
-Status: open
+Status: stale
 
 Depends on: AGT-25 to AGT-27.
 
@@ -675,7 +705,7 @@ As the platform, I want the reviewed work, the tests and the documentation combi
 
 ### AGT-29 Build and test the candidate through an execution profile
 
-Status: open
+Status: stale
 
 Depends on: AGT-28.
 
@@ -688,7 +718,7 @@ As the platform, I want builds and tests to run through a profile that returns o
 
 ### AGT-30 Decide with plain-code gates
 
-Status: open
+Status: stale
 
 Depends on: AGT-29.
 
@@ -700,7 +730,7 @@ As the platform, I want the decision to accept, repair or stop to come from plai
 
 ### AGT-31 Repair within limits, then ask a person
 
-Status: open
+Status: stale
 
 Depends on: AGT-30.
 
@@ -713,7 +743,7 @@ As a reviewer, I want failing checks to go back to the development agent a limit
 
 ### AGT-32 Approve the merge of the exact commit
 
-Status: open
+Status: stale
 
 Depends on: AGT-31.
 
@@ -726,7 +756,7 @@ As a reviewer, I want to approve one exact commit with its evidence in front of 
 
 ### AGT-33 Run builds and tests in a sandbox container
 
-Status: open
+Status: stale
 
 Depends on: AGT-29. The user approved (2026-10-04) that the controller starts containers by calling the `docker` command line behind a small port, with no Docker client library. The design step names the image and its contents.
 
@@ -741,7 +771,7 @@ As the platform owner, I want builds and tests to run in a disposable container 
 
 ### AGT-40 Show how every review finding was settled and that all changed code was reviewed
 
-Status: open
+Status: stale
 
 Depends on: AGT-26, AGT-28, AGT-31.
 
@@ -754,7 +784,7 @@ As a reviewer, I want every changed file reviewed and every finding settled in t
 
 ### AGT-41 Report unit and functional coverage and name every gap
 
-Status: open
+Status: stale
 
 Depends on: AGT-25, AGT-29.
 
@@ -767,7 +797,9 @@ As a reviewer, I want the unit and functional coverage reports with every shortf
 
 ### AGT-43 Stop a run at any point and resume it from where it stopped
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Further Stop/Resume work and acceptance verification are postponed. Partial uncommitted backend code, migration, tests and existing UI controls are retained; this status does not claim they pass acceptance checks or remove safe termination.
 
 Depends on: AGT-15, AGT-66.
 
@@ -786,7 +818,7 @@ Shown when: a run left behind by a crash ends failed with a reason, every action
 
 ### AGT-39 End runs left behind by a crash
 
-Status: open
+Status: stale
 
 Depends on: AGT-35, AGT-33.
 
@@ -798,7 +830,7 @@ As a reviewer, I want a run that was running when the controller died to end cle
 - AC-AGT-39.4 The documentation states the limitation: one controller instance, and a crash during code generation or a build ends the run.
 ### AGT-44 Keep an append-only audit trail
 
-Status: open
+Status: stale
 
 Depends on: AGT-28.
 
@@ -835,7 +867,9 @@ As a reviewer, I want to ask why a run's output exists and be told which artifac
 
 ### AGT-48 Know who approves
 
-Status: open
+Status: deferred
+
+Disposition (2026-10-05): Authenticated approval identities and API permissions are postponed for the local prototype. Named, recorded approvals remain in place.
 
 Depends on: AGT-15. A small request filter is assumed; Spring Security is added only with the user's go-ahead (AGENTS.md).
 
@@ -851,7 +885,9 @@ Shown when: a change to existing code is analysed before design, and a requireme
 
 ### AGT-50 Choose the run kind and name the base run
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as already built: run kind, validated base-run selection and worktree inheritance exist. Brownfield support is retained.
 
 Depends on: AGT-20.
 
@@ -867,7 +903,9 @@ As a requester, I want to say that a run changes the result of an earlier run, s
 
 ### AGT-49 Understand existing code before changing it
 
-Status: coded
+Status: done
+
+Disposition (2026-10-05): Closed as already built: existing-code context, impact analysis and the scripted brownfield end-to-end test exist. Brownfield support is retained.
 
 Depends on: AGT-16, AGT-50, AGT-65.
 
@@ -882,7 +920,7 @@ As a requester, I want the agents of a change to see the existing code, so that 
 
 ### AGT-51 Change the requirement of a running run
 
-Status: open
+Status: stale
 
 Depends on: AGT-11, AGT-15.
 
@@ -895,7 +933,7 @@ As a requester, I want to change the requirement of a run in progress, so that t
 
 ### AGT-52 Refuse stale results
 
-Status: open
+Status: stale
 
 Depends on: AGT-36, AGT-51.
 
@@ -907,7 +945,7 @@ As the platform, I want results built on old versions refused, so that late or s
 
 ### AGT-53 Re-plan after a change
 
-Status: open
+Status: stale
 
 Depends on: AGT-24, AGT-52.
 
@@ -924,7 +962,7 @@ Shown when: the three scenarios and the failure drill have been run and recorded
 
 ### AGT-54 Run the greenfield scenario for the product
 
-Status: open
+Status: stale
 
 Depends on: AGT-32, AGT-41, AGT-44, AGT-46.
 
@@ -938,7 +976,7 @@ As the platform owner, I want one complete run that builds the product from a wr
 
 ### AGT-55 Run the brownfield scenario
 
-Status: open
+Status: stale
 
 Depends on: AGT-49, AGT-50, AGT-53, AGT-54.
 
@@ -951,7 +989,7 @@ As the platform owner, I want a run that changes the existing product, so that b
 
 ### AGT-56 Run the ambiguous scenario
 
-Status: open
+Status: stale
 
 Depends on: AGT-6, AGT-15, AGT-54.
 
@@ -963,7 +1001,7 @@ As the platform owner, I want a run that starts from a vague requirement, so tha
 
 ### AGT-57 Run the failure drill
 
-Status: open
+Status: stale
 
 Depends on: AGT-31, AGT-43, AGT-54.
 
@@ -975,7 +1013,7 @@ As the platform owner, I want a run that cannot succeed to end safely, so that t
 
 ### AGT-58 Replay a recorded run with everything else real
 
-Status: open
+Status: stale
 
 Depends on: AGT-10, AGT-54 to AGT-57.
 
@@ -987,7 +1025,7 @@ As a reviewer without a model, I want to replay a recorded scenario with everyth
 
 ### AGT-60 Start the database with `docker compose up` and run the controller locally
 
-Status: open
+Status: stale
 
 Depends on: AGT-10.
 
@@ -1013,7 +1051,7 @@ As the platform owner, I want every change checked automatically, so that tests 
 
 ### AGT-64 Ask the requirements questions in one batch before generating stories
 
-Status: open
+Status: stale
 
 Depends on: AGT-5, AGT-8, AGT-11, AGT-12, AGT-34.
 
