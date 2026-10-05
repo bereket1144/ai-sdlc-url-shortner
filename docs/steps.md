@@ -380,4 +380,7 @@ The record of the work done in this repository, one entry per step, in the order
 - [x] 124. Stop the agent from naming a module like a standard library module.
   Done when: `sandbox.verify.file-layout` tells the development agent never to give a module the name of a Python standard library module, and the tests that read that setting pass.
   Result: run cc76f61d failed VERIFICATION_FAILED on nine identical checks of one commit (7dd4fd6) because the agent wrote `http.py`, which hides Python's `http` package, so pytest could not import its tests; the layout text now says never to use names such as http, json, logging, queue, random, string, types or test and to use a specific name such as `http_api`; `ShippedModelConfigurationTest`, `AgentStageNodeTest` and `RequirementsAgentNodeTest` pass; the repair itself needs deletions in a change set and a fail-fast when a fix attempt changes nothing, which the other session planned and are not done here. (main agent, direct)
+- [ ] 125. AGT-69 Delete files in a change set, and do not re-check unchanged code.
+  Done when: story AGT-69 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test.
+  Criterion update (user decision, 2026-10-05): found in run cc76f61d, which failed on nine identical checks of one commit because the agent could not delete a badly named file; the change-set format gains deletions and a fix attempt that changes nothing no longer runs the build. (main agent, direct)
 

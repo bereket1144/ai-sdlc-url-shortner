@@ -279,6 +279,20 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 - AC-AGT-11.5 The graph state holds only artifact references (kind, version, fingerprint), never content, so checkpoints stay small and nothing sensitive sits in graph state or logs.
 - AC-AGT-11.6 A run's artifacts can be listed with their lineage.
 
+### AGT-69 Delete files in a change set, and do not re-check unchanged code
+
+Status: open
+
+Depends on: AGT-62, AGT-65.
+
+As the platform owner, I want the development agent to be able to delete and rename files, and a fix attempt that changes nothing to cost no build, so that a repair such as renaming a badly named file can be made and a run does not check the same broken commit again and again.
+
+- AC-AGT-69.1 A change in the development answer may be `{"path": "<relative path>", "delete": true}` instead of a path with content. The same path rules apply as for a written file, a change set that holds only deletions is valid, and a path may appear only once in a change set (written or deleted, never both). A change that has both `content` and `delete: true`, or that deletes a path ending in `/`, makes the answer invalid and the repair of AGT-5 applies.
+- AC-AGT-69.2 The controller removes a deleted file from the product folder and from the commit. Deleting a file that is not there is not an error and changes nothing. Only files are deleted: a path that is a folder refuses the whole change set and nothing is written.
+- AC-AGT-69.3 The development role's text and the task of a fix attempt explain deleting, and renaming as writing the new file and deleting the old one.
+- AC-AGT-69.4 A fix attempt whose change set leaves the product unchanged (no file differs after it) does not run the build. It counts as an attempt of the stage and is logged as unchanged with the run id, the stage and the attempt number only. The next attempt's task says that the previous answer changed nothing and that at least one file must change or be deleted.
+- AC-AGT-69.5 An example in tests shows the repair that failed in practice: a first commit holds a module named like a standard library module and its failing tests, the fix attempt writes the module under a new name, updates the imports and deletes the old file, and the second build passes.
+
 ### AGT-65 Retry a failed stage, with fix feedback for a failed build
 
 Status: done
