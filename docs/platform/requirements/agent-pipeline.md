@@ -272,7 +272,7 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 
 ### AGT-12 Turn a requirement into stories and criteria
 
-Status: open
+Status: coded
 
 Depends on: AGT-1 to AGT-5, AGT-11.
 

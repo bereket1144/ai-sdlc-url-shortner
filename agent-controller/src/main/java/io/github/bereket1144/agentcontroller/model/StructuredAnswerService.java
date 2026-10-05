@@ -92,7 +92,7 @@ public class StructuredAnswerService {
             if (checked.valid()) {
                 log.info("event=model_output_accepted runId={} role={} profile={} repairs={}",
                         runId, roleId, profile.name(), repairs);
-                return new AcceptedAnswer(checked.value(), repairs);
+                return new AcceptedAnswer(checked.value(), repairs, profile);
             }
             log.info("event=model_output_rejected runId={} role={} profile={} repairs={} issueCount={}",
                     runId, roleId, profile.name(), repairs, checked.messages().size());
@@ -211,7 +211,8 @@ public class StructuredAnswerService {
     private record Invocation(ModelProfile profile, Prompt prompt, AttemptKind kind,
                               ModelResult result, Duration duration, UUID reservationId) { }
 
-    public record AcceptedAnswer(JsonNode value, int repairAttempts) { }
+    /** The validated answer, how many repairs it took, and the profile of the call that gave it. */
+    public record AcceptedAnswer(JsonNode value, int repairAttempts, ModelProfile profile) { }
 
     public static final class ModelUnavailableException extends RuntimeException {
         private final FailureReason lastReason;
