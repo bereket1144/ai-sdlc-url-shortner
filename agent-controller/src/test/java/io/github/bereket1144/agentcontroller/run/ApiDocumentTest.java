@@ -44,12 +44,12 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1 the document lists the run endpoints, the artifact, lineage and metrics endpoints, and no other path")
+    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1, AC-AGT-66.6 the document lists the run endpoints, the artifact, lineage, retry and metrics endpoints, and no other path")
     void documentListsOnlyTheRunEndpoints() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}",
                         "/v1/runs/{id}/artifacts/{kind}/{version}", "/v1/runs/{id}/questions", "/v1/runs/{id}/replies",
-                        "/v1/runs/{id}/lineage", "/v1/metrics")))
+                        "/v1/runs/{id}/lineage", "/v1/runs/{id}/retry", "/v1/metrics")))
                 .andExpect(jsonPath("$.paths['/v1/runs'].keys()", containsInAnyOrder("post")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].keys()", containsInAnyOrder("get")));
     }
@@ -86,8 +86,8 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['200'].content['application/json'].schema.$ref")
                         .value("#/components/schemas/RunResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
-                        "id", "requirement", "status", "createdAt", "updatedAt", "version", "failureReason", "stages",
-                        "artifacts", "commit", "verification", "awaiting")))
+                        "id", "requirement", "status", "createdAt", "updatedAt", "version", "attempt", "resumedFrom",
+                        "failureReason", "stages", "artifacts", "commit", "verification", "awaiting")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
                         containsInAnyOrder("CREATED", "RUNNING", "WAITING_FOR_INPUT", "SUCCEEDED", "FAILED")));
     }
@@ -104,6 +104,23 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.components.schemas.Verification.properties.keys()",
                         containsInAnyOrder("outcome", "testsRun", "testsPassed", "testsFailed")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}/artifacts/{kind}/{version}'].get.responses['404']").exists());
+    }
+
+    @Test
+    @DisplayName("AC-AGT-66.6 the retry operation is documented with its 202, 400, 404 and 409 responses and its body")
+    void retryIsDocumented() throws Exception {
+        String retry = "$.paths['/v1/runs/{id}/retry'].post";
+        mvc.perform(get(DOCS))
+                .andExpect(jsonPath(retry + ".summary").isNotEmpty())
+                .andExpect(jsonPath(retry + ".responses.keys()", containsInAnyOrder("202", "400", "404", "409")))
+                .andExpect(jsonPath(retry + ".responses['202'].content['application/json'].schema.$ref")
+                        .value("#/components/schemas/RetryAccepted"))
+                .andExpect(jsonPath(retry + ".responses['409'].content['application/problem+json'].schema.$ref")
+                        .value("#/components/schemas/Problem"))
+                .andExpect(jsonPath("$.components.schemas.RetryAccepted.properties.keys()",
+                        containsInAnyOrder("id", "attempt")))
+                .andExpect(jsonPath("$.components.schemas.RunResponse.properties.attempt.description").isNotEmpty())
+                .andExpect(jsonPath("$.components.schemas.RunResponse.properties.resumedFrom.description").isNotEmpty());
     }
 
     @Test

@@ -35,6 +35,11 @@ public class StageProgress {
         write(runId, stage, "FAILED");
     }
 
+    /** Forgets every stage of the run, so an attempt that starts from the beginning shows each stage as not started. */
+    void reset(UUID runId) {
+        jdbc.update("delete from run_stage where run_id = ?", runId);
+    }
+
     /** The state of every stage that has one: RUNNING, FINISHED or FAILED. A stage that is absent has not started. */
     public Map<String, String> forRun(UUID runId) {
         Map<String, String> states = new HashMap<>();

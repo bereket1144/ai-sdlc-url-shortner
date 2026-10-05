@@ -14,8 +14,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.jayway.jsonpath.JsonPath;
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
@@ -45,7 +48,7 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * AC-AGT-62.15: a requirement posted through the HTTP API goes through every stage with a scripted model and a fake
  * container, and ends with stored artifacts, a commit and a stored verification result. The workspace and its commit
- * are real git; only the model and the container are stand-ins.
+ * are real git; only the model and the container are stand-ins. AGT-66: a failed run is retried through the API.
  */
 @SpringBootTest(properties = {
         "run.dispatch.polling-enabled=true", "run.dispatch.poll-delay-ms=200",
@@ -80,6 +83,13 @@ class ScriptedEndToEndTest {
                     + "\"knownLimits\":[\"l\"],\"evidenceLinks\":[\"l\"]}");
     private static final ConcurrentLinkedQueue<String> ROLES_CALLED = new ConcurrentLinkedQueue<>();
     private static final AtomicInteger DEVELOPMENT_CALLS = new AtomicInteger();
+    /** The next this many builds fail; after that a build gives BUILD_OUTCOME. */
+    private static final AtomicInteger BUILDS_TO_FAIL = new AtomicInteger();
+    /** Whether the requirements agent asks one question the first time it is asked what to clarify. */
+    private static final AtomicBoolean ASK_A_QUESTION = new AtomicBoolean();
+    private static final AtomicInteger CLARIFICATION_CALLS = new AtomicInteger();
+    private static final ConcurrentLinkedQueue<String> DEVELOPMENT_PROMPTS = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<String> REQUIREMENTS_PROMPTS = new ConcurrentLinkedQueue<>();
 
     @DynamicPropertySource
     static void workspace(DynamicPropertyRegistry registry) {
@@ -95,9 +105,15 @@ class ScriptedEndToEndTest {
             return (role, profile, systemText, userText) -> {
                 ROLES_CALLED.add(role);
                 String text = ANSWERS.get(role);
+                if (role.equals("requirements")) {
+                    REQUIREMENTS_PROMPTS.add(userText);
+                }
                 if (role.equals("requirements") && userText.contains("CLARIFICATION phase")) {
-                    text = "{\"questions\":[],\"assumptions\":[]}";
+                    boolean ask = CLARIFICATION_CALLS.incrementAndGet() == 1 && ASK_A_QUESTION.get();
+                    text = ask ? "{\"questions\":[{\"id\":\"x\",\"text\":\"Which codes?\",\"why\":\"w\"}],"
+                            + "\"assumptions\":[]}" : "{\"questions\":[],\"assumptions\":[]}";
                 } else if (role.equals("development")) {
+                    DEVELOPMENT_PROMPTS.add(userText);
                     // Each attempt changes app.py, so a fix attempt has something new to commit.
                     text = text.replace("print(1)", "print(" + DEVELOPMENT_CALLS.incrementAndGet() + ")");
                 }
@@ -110,7 +126,11 @@ class ScriptedEndToEndTest {
         VerificationRunner fakeContainer() {
             return (workspace, commitId) -> {
                 boolean filesThere = Files.exists(workspace.resolve("app.py"));
-                Outcome outcome = filesThere ? BUILD_OUTCOME.get() : Outcome.NO_RESULT;
+                Outcome outcome = Outcome.NO_RESULT;
+                if (filesThere) {
+                    boolean failing = BUILDS_TO_FAIL.getAndUpdate(left -> Math.max(0, left - 1)) > 0;
+                    outcome = failing ? Outcome.FAILED : BUILD_OUTCOME.get();
+                }
                 return new VerificationResult(outcome, 1, outcome == Outcome.PASSED ? 1 : 0,
                         outcome == Outcome.FAILED ? 1 : 0, outcome == Outcome.FAILED ? List.of("test_x") : List.of(),
                         "", commitId);
@@ -133,6 +153,11 @@ class ScriptedEndToEndTest {
         ROLES_CALLED.clear();
         DEVELOPMENT_CALLS.set(0);
         BUILD_OUTCOME.set(Outcome.PASSED);
+        BUILDS_TO_FAIL.set(0);
+        ASK_A_QUESTION.set(false);
+        CLARIFICATION_CALLS.set(0);
+        DEVELOPMENT_PROMPTS.clear();
+        REQUIREMENTS_PROMPTS.clear();
     }
 
     @Test
@@ -196,6 +221,88 @@ class ScriptedEndToEndTest {
         assertThat(git(workspace, "ls-tree", "-r", "--name-only", "main")).isEqualTo("app.py\ntests/test_app.py");
     }
 
+    @Test
+    @DisplayName("AC-AGT-66.1, 66.2, 66.4 a failed run is retried through the API: it resumes at the stage that failed "
+            + "without calling the model for the stages before it, the failure reason is cleared, and it ends SUCCEEDED")
+    void aFailedRunIsResumedAtTheStageThatFailed() throws Exception {
+        BUILDS_TO_FAIL.set(3);
+        UUID id = postRequirement();
+        awaitEnd(id);
+        mvc.perform(get("/v1/runs/" + id))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.attempt").value(1))
+                .andExpect(jsonPath("$.resumedFrom").doesNotExist());
+
+        mvc.perform(post("/v1/runs/" + id + "/retry"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.attempt").value(2));
+        mvc.perform(get("/v1/runs/" + id)).andExpect(jsonPath("$.failureReason").doesNotExist());
+        awaitEnd(id);
+
+        mvc.perform(get("/v1/runs/" + id))
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.attempt").value(2))
+                .andExpect(jsonPath("$.resumedFrom").value("development"))
+                .andExpect(jsonPath("$.verification.outcome").value("PASSED"));
+        // Requirements, design and planning ran once, in the first attempt. Development ran three times there and once
+        // more in the retry, which found its first check failed and so was a fix attempt.
+        assertThat(callsByRole()).containsExactlyInAnyOrderEntriesOf(Map.of("requirements", 2L, "design", 1L,
+                "planning", 1L, "development", 4L, "qa", 1L, "review", 1L, "documentation", 1L));
+        assertThat(DEVELOPMENT_PROMPTS).element(3).asString().contains("FIX attempt");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-66.3, 66.4, 66.5 when the resumed attempt fails too, the next attempt starts from the beginning "
+            + "with the stored answers and writes its code afresh; the stage retries apply in every attempt and the "
+            + "failure reason is set again each time")
+    void aSecondRetryStartsFromTheBeginning() throws Exception {
+        ASK_A_QUESTION.set(true);
+        BUILDS_TO_FAIL.set(6);
+        UUID id = postRequirement();
+        awaitStatus(id, "WAITING_FOR_INPUT");
+        mvc.perform(post("/v1/runs/" + id + "/replies").contentType("application/json")
+                        .content("{\"answers\":[{\"questionId\":\"Q-1\",\"answer\":\"Use short codes\"}]}"))
+                .andExpect(status().isAccepted());
+        awaitEnd(id);
+
+        mvc.perform(post("/v1/runs/" + id + "/retry")).andExpect(status().isAccepted());
+        awaitEnd(id);
+        mvc.perform(get("/v1/runs/" + id))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.failureReason.code").value("VERIFICATION_FAILED"))
+                .andExpect(jsonPath("$.attempt").value(2))
+                .andExpect(jsonPath("$.resumedFrom").value("development"));
+
+        mvc.perform(post("/v1/runs/" + id + "/retry"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.attempt").value(3));
+        awaitEnd(id);
+
+        mvc.perform(get("/v1/runs/" + id))
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.attempt").value(3))
+                .andExpect(jsonPath("$.resumedFrom").value("START"));
+        List<String> states = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()
+                .getContentAsString(), "$.stages[*].state");
+        assertThat(states).containsExactly("FINISHED", "NOT_STARTED", "FINISHED", "FINISHED", "FINISHED",
+                "FINISHED", "FINISHED", "FINISHED");
+        // The question was asked once, in the first attempt, and the stories of the last attempt were written from its
+        // answer. The stages before development ran again in the last attempt; development was attempted three times
+        // in each of the first two attempts, and once in the last.
+        assertThat(CLARIFICATION_CALLS).hasValue(1);
+        assertThat(REQUIREMENTS_PROMPTS).last().asString().contains("Use short codes");
+        assertThat(callsByRole()).containsExactlyInAnyOrderEntriesOf(Map.of("requirements", 3L, "design", 2L,
+                "planning", 2L, "development", 7L, "qa", 1L, "review", 1L, "documentation", 1L));
+        // Fix attempts: two in the first attempt, three in the resumed one. The restart writes its code afresh.
+        assertThat(DEVELOPMENT_PROMPTS.stream().map(prompt -> prompt.contains("FIX attempt")).toList())
+                .containsExactly(false, true, true, true, true, true, false);
+    }
+
+    private static Map<String, Long> callsByRole() {
+        return ROLES_CALLED.stream().collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+    }
+
     private UUID postRequirement() throws Exception {
         String body = mvc.perform(post("/v1/runs").contentType("application/json")
                         .content("{\"requirement\":\"Build a link shortener.\"}"))
@@ -204,9 +311,13 @@ class ScriptedEndToEndTest {
     }
 
     private void awaitEnd(UUID id) {
+        awaitStatus(id, "SUCCEEDED", "FAILED");
+    }
+
+    private void awaitStatus(UUID id, String... statuses) {
         Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
             String body = mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse().getContentAsString();
-            assertThat((String) JsonPath.read(body, "$.status")).isIn("SUCCEEDED", "FAILED");
+            assertThat((String) JsonPath.read(body, "$.status")).isIn((Object[]) statuses);
         });
     }
 

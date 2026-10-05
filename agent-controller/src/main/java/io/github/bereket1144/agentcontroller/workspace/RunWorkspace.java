@@ -61,6 +61,11 @@ public class RunWorkspace {
         return root;
     }
 
+    /** The id of the commit that the run's branch is on; fails when nothing has been committed yet. */
+    public String head(UUID runId) {
+        return git(create(runId), Map.of(), "rev-parse", "HEAD");
+    }
+
     /**
      * Writes every file of the change set into the run's workspace and makes one commit by the development role.
      * Nothing is written unless every file is allowed.

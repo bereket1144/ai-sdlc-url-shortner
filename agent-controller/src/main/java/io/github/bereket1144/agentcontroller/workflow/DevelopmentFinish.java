@@ -40,6 +40,18 @@ import org.springframework.stereotype.Component;
 public class DevelopmentFinish {
 
     private static final Logger log = LoggerFactory.getLogger(DevelopmentFinish.class);
+    private static final String AUTHOR = "development";
+
+    /** The graph state keys that carry the commit that was built and the outcome of its check to the later stages. */
+    static final String COMMIT = "commit";
+    static final String VERIFICATION = "verification";
+    /**
+     * The graph state key that a restarted attempt carries: the commit of the latest check before the restart. A failed
+     * check of that commit is the earlier attempt's, so it is not a reason for a fix attempt: the restart writes its
+     * code afresh. Without the key the latest failed check always makes a fix attempt. A restarted attempt whose files
+     * change nothing is checked on that same commit, so its failure looks like the earlier one and is not a fix either.
+     */
+    static final String PREVIOUS_ATTEMPT_COMMIT = "previousAttemptCommit";
 
     private final ArtifactStore artifacts;
     private final RunWorkspace workspaces;
@@ -58,14 +70,17 @@ public class DevelopmentFinish {
 
     /**
      * One attempt of the development stage. It is a plain attempt unless the latest build and test of the run did not
-     * pass; then it is a fix attempt, and the agent is told which tests failed and is given the current files.
+     * pass; then it is a fix attempt, and the agent is told which tests failed and is given the current files. The
+     * first try of a restarted attempt is a plain attempt, whatever the earlier attempt left behind.
      *
      * @param node the development agent's node
      * @return what {@link #finish} returns for the answer of the agent
      */
     Map<String, Object> develop(AgentState state, AgentStageNode node) {
         UUID runId = state.<UUID>value("runId").orElseThrow(() -> new IllegalStateException("Missing run id"));
-        Optional<VerificationResult> failed = records.latest(runId).filter(result -> !result.passed());
+        String beforeRestart = state.<String>value(PREVIOUS_ATTEMPT_COMMIT).orElse(null);
+        Optional<VerificationResult> failed = records.latest(runId).filter(result -> !result.passed())
+                .filter(result -> !result.commitId().equals(beforeRestart));
         if (failed.isEmpty()) {
             return finish(state, node.execute(state));
         }
@@ -113,7 +128,10 @@ public class DevelopmentFinish {
                 .orElseThrow(() -> new IllegalStateException("The development artifact was not stored"));
         ChangeSet changes = ChangeSet.from(artifact.content().get("changes"));
         Path workspace = workspaces.create(runId);
-        String commit = workspaces.commit(runId, changes);
+        // A change set that changes nothing leaves the branch where it is, and that commit is checked again.
+        String commit = workspaces.commitIfChanged(runId, changes, AUTHOR,
+                "development: apply " + changes.files().size() + " file changes for run " + runId)
+                .orElseGet(() -> workspaces.head(runId));
         VerificationResult result = verifier.verify(workspace, commit);
         records.record(runId, result);
         log.info("event=development_verified runId={} commit={} outcome={}", runId, commit, result.outcome());
@@ -121,8 +139,8 @@ public class DevelopmentFinish {
             throw new VerificationFailedException(result.outcome());
         }
         Map<String, Object> merged = new HashMap<>(update);
-        merged.put("commit", commit);
-        merged.put("verification", result.outcome().name());
+        merged.put(COMMIT, commit);
+        merged.put(VERIFICATION, result.outcome().name());
         return merged;
     }
 }

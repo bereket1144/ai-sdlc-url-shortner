@@ -12,6 +12,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /** What a client sees when it reads a run. A separate record so that the entity is never serialised. */
 public record RunResponse(UUID id, String requirement, RunStatus status, Instant createdAt, Instant updatedAt,
         Long version,
+        @Schema(description = "How many times the run has been queued: 1 until it is retried.")
+        int attempt,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @Schema(description = "Where the latest attempt started: a stage name, or START for the beginning. Left out "
+                + "until the run is retried.")
+        String resumedFrom,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         Failure failureReason,
         @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -27,7 +33,8 @@ public record RunResponse(UUID id, String requirement, RunStatus status, Instant
     static RunResponse from(Run run, List<StageState> stages, List<ArtifactSummary> artifacts,
                             Optional<VerificationResult> verification, ClarificationService.Awaiting awaiting) {
         return new RunResponse(run.getId(), run.getRequirement(), run.getStatus(), run.getCreatedAt(),
-                run.getUpdatedAt(), run.getVersion(), run.getStatus() == RunStatus.FAILED
+                run.getUpdatedAt(), run.getVersion(), run.getAttempt(), run.getResumedFrom(),
+                run.getStatus() == RunStatus.FAILED
                         ? new Failure(run.getFailureReason(), run.getFailureReason().message()) : null,
                 awaiting, stages, artifacts, verification.map(VerificationResult::commitId).orElse(null),
                 verification.map(result -> new Verification(result.outcome().name(), result.testsRun(),

@@ -38,6 +38,9 @@ class RunReadTest {
     @MockitoBean
     private ClarificationService clarification;
 
+    @MockitoBean
+    private RunRetry retries;
+
     @Autowired
     private MockMvc mvc;
 

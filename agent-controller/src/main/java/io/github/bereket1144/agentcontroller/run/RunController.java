@@ -30,11 +30,14 @@ public class RunController {
     private final RunService runService;
     private final RunDetails details;
     private final ClarificationService clarification;
+    private final RunRetry retries;
 
-    public RunController(RunService runService, RunDetails details, ClarificationService clarification) {
+    public RunController(RunService runService, RunDetails details, ClarificationService clarification,
+                         RunRetry retries) {
         this.runService = runService;
         this.details = details;
         this.clarification = clarification;
+        this.retries = retries;
     }
 
     // The method returns a ResponseEntity, so the library cannot see the 201 status or the body type on its own.
@@ -126,5 +129,28 @@ public class RunController {
                 .body(new ReplyAccepted(id, "Answers submitted."));
     }
 
+    @Operation(summary = "Retry a failed run", description = "Queues a FAILED run again. The first retry resumes at the "
+            + "earliest stage that is not finished, with the stages before it left as they are; a later retry starts "
+            + "from the beginning and reuses the stored clarification answers. A run has at most "
+            + "agent.run.max-attempts attempts in all (3 unless set). The failure reason is cleared and is set again "
+            + "if the attempt fails. A refused request changes nothing.")
+    @ApiResponse(responseCode = "202", description = "The run is queued again and continues automatically; this is "
+            + "its attempt number.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = RetryAccepted.class)))
+    @ApiResponse(responseCode = "400", description = "The id is not a UUID.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "404", description = "No run has this id.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "409", description = "The run is not FAILED, or it has no attempts left.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<RetryAccepted> retry(@PathVariable UUID id) {
+        Run run = retries.retry(id);
+        return ResponseEntity.accepted().location(URI.create(RUNS_PATH + "/" + id))
+                .body(new RetryAccepted(id, run.getAttempt()));
+    }
+
     public record ReplyAccepted(UUID runId, String message) { }
+
+    public record RetryAccepted(UUID id, int attempt) { }
 }

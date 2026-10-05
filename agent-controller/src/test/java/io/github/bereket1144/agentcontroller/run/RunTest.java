@@ -135,4 +135,18 @@ class RunTest {
             assertThat(run.getStatus()).isEqualTo(originalStatus);
         }
     }
+
+    @Test
+    @DisplayName("AC-AGT-66.4 a retry needs a named start point, because a run with none would be taken for a first attempt")
+    void retryNeedsAStartPoint() {
+        Run failed = new Run("Build a task tracker");
+        failed.start();
+        failed.fail();
+
+        assertThatThrownBy(() -> failed.retry(" ", 3)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("startsAt must not be blank");
+        assertThat(failed.getStatus()).isEqualTo(RunStatus.FAILED);
+        assertThat(failed.getAttempt()).isEqualTo(1);
+        assertThat(failed.getResumedFrom()).isNull();
+    }
 }

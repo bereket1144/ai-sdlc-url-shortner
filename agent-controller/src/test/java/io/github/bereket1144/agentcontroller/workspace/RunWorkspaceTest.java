@@ -56,6 +56,7 @@ class RunWorkspaceTest {
         assertThat(Files.readString(root.resolve("tests/test_app.py"))).isEqualTo("def test_x():\n    pass\n");
         assertThat(git(root, "symbolic-ref", "--short", "HEAD")).isEqualTo("main");
         assertThat(git(root, "rev-parse", "HEAD")).isEqualTo(commitId);
+        assertThat(workspace.head(runId)).isEqualTo(commitId);
         assertThat(git(root, "rev-list", "--count", "HEAD")).isEqualTo("1");
         assertThat(git(root, "log", "-1", "--format=%an <%ae>")).isEqualTo("development <development@agent.invalid>");
         assertThat(git(root, "log", "-1", "--format=%B")).contains(runId.toString());

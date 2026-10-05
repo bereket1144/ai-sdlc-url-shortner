@@ -45,6 +45,14 @@ public class Run {
     @Column(length = 32)
     private RunFailureReason failureReason;
 
+    // How many times the run has been queued: 1 until it is retried.
+    @Column(nullable = false)
+    private int attempt = 1;
+
+    // Where the latest attempt starts: a stage name, or START for the beginning. Null until the run is retried.
+    @Column(length = 32)
+    private String resumedFrom;
+
     // Hibernate sets this when the row is first inserted and never writes it again.
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -122,6 +130,29 @@ public class Run {
         }
         this.failureReason = reason;
         this.status = RunStatus.FAILED;
+    }
+
+    /**
+     * Queues a FAILED run again, to be attempted from {@code startsAt}: a stage name, or START for the beginning. The
+     * failure reason is cleared, and set again if this attempt fails. The run is not changed when it is refused.
+     *
+     * @param maxAttempts how many attempts a run may have in all
+     * @throws IllegalStateException when the run is not FAILED or has no attempts left; the message is fixed text
+     */
+    public void retry(String startsAt, int maxAttempts) {
+        if (startsAt == null || startsAt.isBlank()) {
+            throw new IllegalArgumentException("startsAt must not be blank");
+        }
+        if (status != RunStatus.FAILED) {
+            throw new IllegalStateException("Only a failed run can be retried.");
+        }
+        if (attempt >= maxAttempts) {
+            throw new IllegalStateException("The run has no attempts left.");
+        }
+        this.attempt++;
+        this.resumedFrom = startsAt;
+        this.failureReason = null;
+        this.status = RunStatus.CREATED;
     }
 
 }

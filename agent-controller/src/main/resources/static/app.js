@@ -286,6 +286,7 @@
     startMessage: $('start-message'), recent: $('recent'), recentList: $('recent-list'),
     run: $('run'), runId: $('run-id'), runStatus: $('run-status'), notice: $('notice'),
     failure: $('failure'), failureCode: $('failure-code'), failureMessage: $('failure-message'),
+    retryButton: $('retry-button'), retryMessage: $('retry-message'),
     stages: $('stages'), questionsCard: $('questions-card'), questionsForm: $('questions-form'),
     questionList: $('question-list'), questionsMessage: $('questions-message'), questionsSend: $('questions-send'),
     workspace: $('workspace'), sidebarToggle: $('sidebar-toggle'),
@@ -450,6 +451,7 @@
     ui.lineageBody.replaceChildren();
     setMessage(ui.lineageMessage, '');
     setMessage(ui.questionsMessage, '');
+    setMessage(ui.retryMessage, '');
     setText(ui.runStatus, '');
     for (const card of cards) {
       card.root.hidden = true;
@@ -525,6 +527,8 @@
     if (failed) {
       setText(ui.failureCode, asText(run.failureReason.code));
       setText(ui.failureMessage, asText(run.failureReason.message));
+    } else {
+      setMessage(ui.retryMessage, '');
     }
 
     if (run.stages.some(stage => !session.stageItems.has(stage.stage))) {
@@ -833,6 +837,35 @@ ${field.input.value.trim()}`);
       }
     } finally {
       ui.questionsSend.disabled = false;
+    }
+  });
+
+  // ---- Retrying a failed run (AC-AGT-66.6) ---------------------------------------------------------------------
+
+  // The run read does not say how many attempts are left, so the button is there for every failed run and the
+  // controller's refusal (409) is shown as it is. A queued run is followed again: the next read starts the polling.
+  ui.retryButton.addEventListener('click', async () => {
+    const session = current;
+    if (!session) {
+      return;
+    }
+    setMessage(ui.retryMessage, '');
+    ui.retryButton.disabled = true;
+    try {
+      await api(`/v1/runs/${session.id}/retry`, { method: 'POST' });
+      if (session !== current) {
+        return;
+      }
+      ui.failure.hidden = true;
+      schedule(session, 0);
+    } catch (error) {
+      if (session !== current) {
+        return;
+      }
+      console.error(`event=retry_failed runId=${session.id} status=${error.status}`, error);
+      setMessage(ui.retryMessage, error.message);
+    } finally {
+      ui.retryButton.disabled = false;
     }
   });
 

@@ -40,10 +40,16 @@ public class WorkflowRunner {
     /** The reasons after which a stage is attempted again; any other failure ends the run at once. */
     private static final Set<RunFailureReason> RETRYABLE = EnumSet.of(RunFailureReason.OUTPUT_INVALID,
             RunFailureReason.MODEL_UNAVAILABLE, RunFailureReason.VERIFICATION_FAILED, RunFailureReason.UNEXPECTED);
+    /** The graph state key that tells the entry edge where an attempt starts; a fresh run has none. */
+    static final String START_AT = "startAt";
+    private static final String INITIALIZE = "initialize";
+    /** A node that starts QA, review and documentation together, for an attempt that resumes at one of them. */
+    private static final String RESUME_GROUP = "resumeGroup";
 
     private final CompiledGraph<AgentState> graph;
     private final Optional<StageProgress> progress;
     private final Optional<RequirementsAgentNode> requirementsAgent;
+    private final Optional<RunResume> resume;
     private final int maxRetries;
 
     /** Every stage on its dummy node. */
@@ -89,11 +95,24 @@ public class WorkflowRunner {
      *
      * @param maxRetries {@code agent.stage.max-retries}: how many more attempts a failed stage gets; 0 is none
      */
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
+                          Optional<StageProgress> progress, Optional<RunDocuments> runDocuments, int maxRetries)
+            throws GraphStateException {
+        this(nodes, requirementsAgent, agentStages, developmentFinish, progress, runDocuments, maxRetries,
+                Optional.empty());
+    }
+
+    /**
+     * As above. With the run resume, the runner can also attempt a failed run again from where an earlier attempt
+     * stopped ({@link #retry}); it is optional for the same reason as the agent stages.
+     */
     @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
                           Optional<StageProgress> progress, Optional<RunDocuments> runDocuments,
-                          @Value("${agent.stage.max-retries:" + DEFAULT_MAX_RETRIES + "}") int maxRetries)
+                          @Value("${agent.stage.max-retries:" + DEFAULT_MAX_RETRIES + "}") int maxRetries,
+                          Optional<RunResume> resume)
             throws GraphStateException {
         if (maxRetries < 0) {
             throw new IllegalArgumentException("agent.stage.max-retries must not be negative");
@@ -109,10 +128,11 @@ public class WorkflowRunner {
         });
         this.progress = progress;
         this.requirementsAgent = requirementsAgent;
+        this.resume = resume;
         this.maxRetries = maxRetries;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         StateGraph<AgentState> route = new StateGraph<>(AgentState::new)
-                .addNode("initialize", node_async(nodes::initialize))
+                .addNode(INITIALIZE, node_async(nodes::initialize))
                 .addNode("requirements", node_async(stage(agents, "requirements", nodes::requirements)))
                 .addNode("impactAnalysis", node_async(stage(agents, "impactAnalysis", nodes::impactAnalysis)))
                 .addNode("design", node_async(stage(agents, "design", nodes::design)))
@@ -122,8 +142,10 @@ public class WorkflowRunner {
                 .addNode("review", node_async(stage(agents, "review", nodes::review)))
                 .addNode("documentation", node_async(stage(agents, "documentation", nodes::documentation)))
                 .addNode("collect", node_async(nodes::collect))
-                .addEdge(START, "initialize")
-                .addEdge("initialize", "requirements")
+                .addNode(RESUME_GROUP, node_async(WorkflowRunner::startGroup))
+                // A fresh run starts at initialize; a retry starts where its start point says.
+                .addConditionalEdges(START, edge_async(this::entry), entryPoints())
+                .addEdge(INITIALIZE, "requirements")
                 .addConditionalEdges("requirements", edge_async(this::afterRequirements),
                         Map.of("impactAnalysis", "impactAnalysis", "design", "design"))
                 .addEdge("impactAnalysis", "design")
@@ -132,6 +154,9 @@ public class WorkflowRunner {
                 .addEdge("development", "qa")
                 .addEdge("development", "review")
                 .addEdge("development", "documentation")
+                .addEdge(RESUME_GROUP, "qa")
+                .addEdge(RESUME_GROUP, "review")
+                .addEdge(RESUME_GROUP, "documentation")
                 .addEdge("qa", "collect")
                 .addEdge("review", "collect")
                 .addEdge("documentation", "collect");
@@ -203,17 +228,49 @@ public class WorkflowRunner {
         }
     }
 
+    /** The first attempt of a run: the whole graph, from the start. */
     public AgentState run(UUID runId, String requirement, RunKind kind) {
-        // Fail fast with a clear message; Map.of would fail with a bare NullPointerException.
-        Objects.requireNonNull(runId, "runId must not be null");
-        Objects.requireNonNull(requirement, "requirement must not be null");
-        Objects.requireNonNull(kind, "kind must not be null");
+        requireInputs(runId, requirement, kind);
         Map<String, Object> input = new HashMap<>(Map.of(
                 "runId", runId,
                 "requirement", requirement,
                 "kind", kind));
+        return execute(runId, kind, input, true);
+    }
 
-        if (requirementsAgent.isPresent()) {
+    /**
+     * A later attempt of a failed run. From {@link RunResume#START} it is the whole graph again, with every stage shown
+     * as not started; the requirements stage reuses the clarification answers that are stored. From a stage it starts
+     * the graph at that stage with the state rebuilt from what the earlier attempts stored, and the stages before it do
+     * not run again; the group of QA, review and documentation starts together. Every stage keeps its own retries.
+     *
+     * @param startAt {@link RunResume#START} or the stage the attempt starts at, as {@link RunResume#startPoint} chose it
+     */
+    public AgentState retry(UUID runId, String requirement, RunKind kind, String startAt) {
+        requireInputs(runId, requirement, kind);
+        Objects.requireNonNull(startAt, "startAt must not be null");
+        RunResume resumed = resume.orElseThrow(() -> new IllegalStateException("A retry needs the run resume"));
+        Map<String, Object> input = new HashMap<>(resumed.input(runId, requirement, kind, startAt));
+        boolean fromStart = startAt.equals(RunResume.START);
+        if (fromStart) {
+            progress.ifPresent(recorder -> recorder.reset(runId));
+        } else {
+            input.put(START_AT, startAt);
+        }
+        log.info("event=workflow_retry runId={} kind={} startAt={}", runId, kind, startAt);
+        return execute(runId, kind, input, fromStart);
+    }
+
+    private static void requireInputs(UUID runId, String requirement, RunKind kind) {
+        // Fail fast with a clear message; Map.of would fail with a bare NullPointerException.
+        Objects.requireNonNull(runId, "runId must not be null");
+        Objects.requireNonNull(requirement, "requirement must not be null");
+        Objects.requireNonNull(kind, "kind must not be null");
+    }
+
+    /** @param withRequirements whether the requirements stage runs first; an attempt that starts later has its result */
+    private AgentState execute(UUID runId, RunKind kind, Map<String, Object> input, boolean withRequirements) {
+        if (withRequirements && requirementsAgent.isPresent()) {
             Map<String, Object> prepared = attempts(runId, "requirements", requirementsAgent.get()::prepare,
                     new AgentState(input));
             input.putAll(prepared);
@@ -228,6 +285,7 @@ public class WorkflowRunner {
         try (ExecutorService branchExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
             RunnableConfig config = RunnableConfig.builder()
                     .addParallelNodeExecutor("development", branchExecutor)
+                    .addParallelNodeExecutor(RESUME_GROUP, branchExecutor)
                     .build();
             Optional<AgentState> finalState;
             try {
@@ -246,6 +304,23 @@ public class WorkflowRunner {
             log.info("event=workflow_executed runId={} kind={}", runId, kind);
             return result;
         }
+    }
+
+    /** The node the graph starts at: the start point of a retry, and for a fresh run the first node. */
+    private String entry(AgentState state) {
+        return state.<String>value(START_AT).orElse(INITIALIZE);
+    }
+
+    /** Every start point and the node it starts at; QA, review and documentation start together, as one group. */
+    private static Map<String, String> entryPoints() {
+        return Map.of(INITIALIZE, INITIALIZE, "impactAnalysis", "impactAnalysis", "design", "design",
+                "planning", "planning", "development", "development",
+                "qa", RESUME_GROUP, "review", RESUME_GROUP, "documentation", RESUME_GROUP);
+    }
+
+    /** It only gives the group its three edges, so that the three stages start side by side. */
+    private static Map<String, Object> startGroup(AgentState state) {
+        return Map.of();
     }
 
     private String afterRequirements(AgentState state) {

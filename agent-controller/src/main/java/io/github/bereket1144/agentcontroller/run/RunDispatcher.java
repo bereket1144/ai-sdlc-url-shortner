@@ -32,9 +32,12 @@ public class RunDispatcher {
         Run run = claimedRun.get();
         UUID runId = run.getId();
         // The claim has its own transaction, so its RUNNING state is committed before the graph starts.
-        log.info("event=run_dispatch_started runId={}", runId);
+        log.info("event=run_dispatch_started runId={} attempt={}", runId, run.getAttempt());
         try {
-            var result = workflowRunner.run(runId, run.getRequirement(), run.getKind());
+            // A run that was retried says where its attempt starts; a first attempt starts at the beginning.
+            var result = run.getResumedFrom() == null
+                    ? workflowRunner.run(runId, run.getRequirement(), run.getKind())
+                    : workflowRunner.retry(runId, run.getRequirement(), run.getKind(), run.getResumedFrom());
             if (result.<Boolean>value("waitingForInput").orElse(false)) {
                 log.info("event=run_dispatch_waiting runId={} stage=requirements", runId);
                 return true;
