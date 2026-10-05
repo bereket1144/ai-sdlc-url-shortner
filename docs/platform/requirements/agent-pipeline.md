@@ -305,7 +305,7 @@ As a reviewer, I want to retry a failed run, first from the stage that failed an
 
 ### AGT-67 Work on a branch of this repository
 
-Status: open
+Status: coded
 
 Depends on: AGT-20, AGT-50, AGT-21.
 
