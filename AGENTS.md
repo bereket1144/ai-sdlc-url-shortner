@@ -64,17 +64,17 @@ The platform must stay generic. The words "URL shortener" belong in requirement 
 - Base package: `io.github.bereket1144.agentcontroller`
 - LangGraph4j has few public examples. Check its documentation before using an API; do not guess.
 
-Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring Security (it comes later, with approvals), or a Docker client library (it comes later, with the sandbox).
+Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring Security (it comes later, with approvals), or a Docker client library (the controller starts containers with the `docker` command line instead).
 
 # Decisions already made
 
 1. **One Spring Boot app.** `agent-controller` holds the graph, the SDLC agents, gates, approvals, and audit. There is no microservice per agent; an agent is a class with a role, a prompt, allowed tools, and a budget.
 2. **One Git repository**, at the repository root. No nested repositories and no submodules.
-3. **`docker compose up` starts PostgreSQL and the controller.** A reviewer needs only Docker. During development the controller may be run from the IDE against the Compose database.
-4. **Each run works in a fresh clone** of this repository at `/workspaces/<run-id>` inside a Docker volume, on a branch named `run/<run-id>`. Nothing is written to a user's home folder.
+3. **`docker compose up` starts PostgreSQL only; the controller runs locally** from the IDE or with `./mvnw spring-boot:run`, against the Compose database. A reviewer needs Java 21 and Docker.
+4. **Each run works in a fresh clone** of this repository in its own folder, `<base>/<run-id>`, on a branch named `run/<run-id>`. The base directory is configured and lies outside the controller's checkout; nothing is written outside it.
 5. **SDLC agents never touch files.** The controller gives an agent the file contents it needs, the agent returns a patch, and the controller checks the paths and applies it. Agent patches may only change `apps/url-shortener/` and that run's folder under `runs/`.
 6. **The controller makes the commits**, with the agent as author and the run and task in the message.
-7. **Builds and tests run in throwaway sandbox containers.** The workspace is copied in and the reports are copied out. The sandbox runs as a non-root user with resource limits, no credentials, and no open network during build and test.
+7. **Builds and tests run in throwaway sandbox containers,** started by the controller with the `docker` command line. The workspace is copied in and the reports are copied out. The sandbox runs as a non-root user with resource limits, no credentials, and no open network during build and test.
 8. **Only the controller can start containers.** This is a documented limitation.
 9. **Plain, tested code decides pass or fail.** A model never makes that call.
 10. **Replay mode replays model answers only.** Patches are applied and builds, tests, and coverage run for real every time.
@@ -198,5 +198,5 @@ How to use it:
 
 ```
 ./mvnw verify              # from agent-controller/: build, tests, coverage
-docker compose up          # from the root: PostgreSQL (and later the controller)
+docker compose up          # from the root: PostgreSQL (the controller runs locally)
 ```

@@ -11,7 +11,7 @@ The first model is a small local one, so the agents must work unchanged on a lar
 ## How the file is organised
 
 - Eight parts, in order. A story is one working behaviour with every layer it needs and its tests, small enough for one logical step. Each story names what it depends on.
-- **Part A** roles and model access. **Part B** requirements and the clarification loop. **Part C** design and plan. **Part D** code. **Part E** checks, review and repair. **Part F** recovery, audit and metrics. **Part G** change, brownfield and re-planning. **Part H** scenarios, evaluation and delivery.
+- **Part A** roles and model access. **Part B** requirements and the clarification loop. **Part C** design and plan. **Part D** code. **Part E** checks, review and repair. **Part F** restart, audit and metrics. **Part G** change, brownfield and re-planning. **Part H** scenarios and delivery.
 - Story numbers are labels, not order. A story added later took the next free number and sits in the part where it belongs. The build order is given below.
 - Parts A to C are ready to code. **Parts D to H are drafts.** Their criteria are confirmed with the user before the first story of the part starts, because they depend on what the earlier parts teach us and on the sandbox design. Parts F to H are outlines with fewer criteria than the earlier parts.
 - Build order, each step ending in something that can be shown:
@@ -73,8 +73,8 @@ The first model is a small local one, so the agents must work unchanged on a lar
 - **Each stage has a switch** between its agent and its dummy node, one setting per role. The dummy stays the default until a role is enabled, so the existing graph tests keep their meaning while stages are converted one at a time.
 - **Output location.** Agent file changes may only go to the run's own folder under `runs/<run-id>/`. A product run adds its product folder by configuration. The trial output (a small Python app) lives under the run's folder.
 - **Change sets are whole-file writes.** A file operation carries the full new content, not a diff, because small models produce diffs unreliably. Diffs may come later.
-- **Trial first, product second.** Trial work is small: a few files of Python with tests, proved on the small local model through a Python trial profile (AGT-29). The product, a Java service, comes after, through the Java profile (AGT-42), a larger model and the scenarios of Part H. Nothing in Parts A to C depends on either language.
-- **The later parts cover what the whole project needs:** recovery, audit, metrics, brownfield change, re-planning, the scenarios and delivery. The end of the file names what belongs to other files.
+- **One language, one profile.** The product is a Python service, built and tested through one execution profile (AGT-29). The small local model is for tests and the trial requirements; real runs use a larger hosted model. Nothing in Parts A to C depends on the language. A second profile is a stretch item.
+- **The later parts cover what the whole project needs:** restart handling, audit, metrics, brownfield change, re-planning, the scenarios and delivery. The end of the file names what belongs to other files.
 - **Artifacts live in PostgreSQL first** and are written into the run's folder as files by the controller in Part D.
 
 ## Trial requirements
@@ -356,7 +356,7 @@ As the platform owner, I want runs started on a bounded set of threads, so that 
 - AC-AGT-35.3 When every place is busy, further runs stay CREATED, or stay waiting to resume, and are taken as places free up. No run is started twice (AC-EXEC-4.3).
 - AC-AGT-35.4 A run that waits for input holds no place.
 - AC-AGT-35.5 A failure in one run does not stop other runs or the polling.
-- AC-AGT-35.6 On shutdown the application stops taking runs and gives running ones a configurable time to finish. A run that does not finish stays RUNNING for reconciliation (AGT-39).
+- AC-AGT-35.6 On shutdown the application stops taking runs and gives running ones a configurable time to finish. A run that does not finish stays RUNNING and is ended by AGT-39 at the next start.
 
 ## Part C. Design and plan
 
@@ -569,7 +569,7 @@ Depends on: AGT-28.
 
 As the platform, I want builds and tests to run through a profile that returns one common result, so that the gates read facts and not model opinions.
 
-- AC-AGT-29.1 An execution profile is chosen by name per run in configuration. The trial profile builds and tests a small Python project. A profile turns its tool's output into one common result: the build outcome, the tests run, passed, failed and errored with the names of the failing tests, the line and branch coverage when the tool gives them, and a bounded excerpt of the raw report.
+- AC-AGT-29.1 An execution profile is chosen by name per run in configuration. The first profile builds and tests a Python project. A profile turns its tool's output into one common result: the build outcome, the tests run, passed, failed and errored with the names of the failing tests, the line and branch coverage when the tool gives them, and a bounded excerpt of the raw report.
 - AC-AGT-29.2 A missing, unreadable or timed-out result is NO_RESULT. The gates treat it as a failure and never as a pass.
 - AC-AGT-29.3 The result is stored with the candidate's commit id. A fake runner stands in for the real one in tests.
 - AC-AGT-29.4 The verification stage also runs the review role on the candidate, as a final review, beside the profile run, and ends only when both have finished.
@@ -616,13 +616,13 @@ As a reviewer, I want to approve one exact commit with its evidence in front of 
 
 Status: open
 
-Depends on: AGT-29. Needs a design step and the user's approval of how the controller starts containers before it is coded. No Docker client library is added until then.
+Depends on: AGT-29. The user approved (2026-10-04) that the controller starts containers by calling the `docker` command line behind a small port, with no Docker client library. The design step names the image and its contents.
 
 As the platform owner, I want builds and tests to run in a disposable container with no secrets, so that generated code never runs inside the controller.
 
-- AC-AGT-33.1 Each verification runs in a new container that is removed afterwards.
+- AC-AGT-33.1 Each verification runs in a new container that is removed afterwards. The controller starts it through a port that calls the `docker` command line, and a fake stands in for the port in tests (AC-AGT-29.3). The container carries a label that names the platform (AC-AGT-39.3).
 - AC-AGT-33.2 The container runs as a non-root user with limits on CPU, memory, processes, disk and time. It has no host credentials, no access to the controller's database and no access to the container runtime socket.
-- AC-AGT-33.3 The workspace is copied in and only the reports are copied out.
+- AC-AGT-33.3 The workspace is copied in and only the reports are copied out. No folder of the host is mounted into the container.
 - AC-AGT-33.4 The build and test steps run without open network access. Dependencies arrive through a separate, controlled step or are already in the image.
 - AC-AGT-33.5 A container that passes a limit is stopped and reported as NO_RESULT (AC-AGT-29.2).
 - AC-AGT-33.6 Only the controller can start containers. This is a documented limitation.
@@ -653,19 +653,6 @@ As a reviewer, I want the unit and functional coverage reports with every shortf
 - AC-AGT-41.3 Every uncovered item reported (a line or branch, a criterion, an endpoint or a status code) needs a reason written by the QA role. An item without a reason fails the gate. A reason for an item that is not uncovered is ignored.
 - AC-AGT-41.4 The reports state the real numbers. A named gap explains a shortfall and never turns it into a pass.
 
-### AGT-42 Build and test Java projects through an execution profile
-
-Status: open
-
-Depends on: AGT-29, AGT-33.
-
-As the platform owner, I want a Java profile that returns the same common result as the trial profile, so that the platform can build and judge a Java product.
-
-- AC-AGT-42.1 The Java profile builds with the Maven wrapper, runs the unit and integration tests, reads the coverage report, and returns the common result of AC-AGT-29.1 with line and branch coverage.
-- AC-AGT-42.2 Integration tests of the product use an embedded database, because the sandbox cannot start containers. The profile runs as a non-root user.
-- AC-AGT-42.3 Dependencies are fetched in a separate, controlled step. The build and test steps run without network access (AC-AGT-33.4).
-- AC-AGT-42.4 Fixture reports for a passing build, a compile error, a failing test and a coverage shortfall each give the right common result in tests.
-
 ### AGT-43 Stop a run safely and undo its changes
 
 Status: open
@@ -679,64 +666,33 @@ As a reviewer, I want to stop a run at any time and have it end in a clean, know
 - AC-AGT-43.3 When a run ends this way its workspace and any container are removed. The run branch is kept as evidence unless configuration says to delete it. The main branch is never touched. The run records whether it was rolled back.
 - AC-AGT-43.4 A stopped run keeps its artifacts, call records and decisions readable.
 
-## Part F. Recovery, audit and metrics (draft outline)
+## Part F. Restart, audit and metrics (draft outline)
 
-Shown when: a run killed at any point is picked up without repeating work, every action is in a trail that shows tampering, and the reliability numbers can be read.
+Shown when: a run left behind by a crash ends failed with a reason, every action is in an append-only trail, and the reliability numbers can be read.
 
-### AGT-38 Give every operation a stable identity and keep its result once
-
-Status: open
-
-Depends on: AGT-23, AGT-28.
-
-As the platform owner, I want every operation that has an effect to have a stable identity and a stored result, so that an operation may run more than once while its effects apply once.
-
-- AC-AGT-38.1 Every operation with an effect (a stage result, a change set applied, an artifact file written, a candidate frozen, a gate verdict, a sandbox run) has an id derived from the run, the stage or task, the kind of work and the input artifact versions. The same work always has the same id.
-- AC-AGT-38.2 The result of an operation is stored under its id before the run advances. A second result for the same id is ignored and recorded as a duplicate.
-- AC-AGT-38.3 Asking for an operation whose result is stored returns that result and does not repeat its effect.
-- AC-AGT-38.4 The controller records which worker (thread or container) it started for which operation. A result reported under an id that the worker was not given is refused.
-
-### AGT-39 Pick up runs left behind by a crash
+### AGT-39 End runs left behind by a crash
 
 Status: open
 
-Depends on: AGT-35, AGT-38.
+Depends on: AGT-35, AGT-33.
 
-As a reviewer, I want a run that was running when the controller or a worker died to be picked up and finished, so that a crash costs time but not work. This is the recovery story that `run-execution.md` deferred.
+As a reviewer, I want a run that was running when the controller died to end clearly as failed, so that no run stays RUNNING forever. Work in progress is not resumed: a new run is started. This replaces the recovery story that `run-execution.md` deferred.
 
-- AC-AGT-39.1 A running run renews a lease while it executes. A run is stranded when it is RUNNING and its lease has expired (the length is configurable).
-- AC-AGT-39.2 At startup, and then at a configured interval, the controller reconciles each stranded run: a stored result for its pending operation is used, a worker that is still alive is stopped, and otherwise the operation is issued again as an infrastructure retry.
-- AC-AGT-39.3 After reconciliation the run resumes from its last checkpoint. An operation with a stored result is not repeated: no second model call, commit or artifact version.
-- AC-AGT-39.4 A run waiting for input is never treated as stranded.
-- AC-AGT-39.5 A run that cannot be reconciled within the retry limit ends FAILED with the reason RECOVERY_FAILED.
-- AC-AGT-39.6 A test kills the process before a model call returns, after a change set is applied but before its result is stored, and after the result is stored. In each case the run ends with one commit and one artifact version.
-
+- AC-AGT-39.1 At startup, every run that is RUNNING is ended FAILED with the reason RECOVERY_FAILED, in the same transaction as its status (AC-AGT-9.3).
+- AC-AGT-39.2 A run that is waiting for input or already finished is not touched. A waiting run still waits with the same questions after the restart (AC-AGT-34.4).
+- AC-AGT-39.3 A sandbox container left over from the crash is removed at startup. Containers are found by a label that names the platform (AGT-33).
+- AC-AGT-39.4 The documentation states the limitation: one controller instance, and a crash during code generation or a build ends the run.
 ### AGT-44 Keep an append-only audit trail
 
 Status: open
 
-Depends on: AGT-38.
+Depends on: AGT-28.
 
-As a reviewer, I want every action of a run recorded in a trail that shows tampering, so that I can trust the history of what the agents and people did.
+As a reviewer, I want every action of a run recorded in an append-only trail, so that I can read the history of what the agents and people did.
 
 - AC-AGT-44.1 Every node execution, gate decision, approval, retry, fallback, policy finding and change of run status is stored as an audit event: the run, the actor (an agent role, an approver name or the system), the type, ids and codes as details, and the time. Details never hold requirement, answer or model text.
 - AC-AGT-44.2 The database role the application uses can add events but cannot change or delete them. A test using that role tries both and fails.
-- AC-AGT-44.3 Each event stores the fingerprint of the one before it and its own fingerprint over its content and that fingerprint.
-- AC-AGT-44.4 A verify command recomputes the chain and reports it intact, or reports the first event where it breaks. Changing a stored event in a test makes verification fail at that event.
-- AC-AGT-44.5 The documentation says what this proves: the trail is tamper-evident, not tamper-proof.
-
-### AGT-45 Anchor the audit chain with the approver
-
-Status: open
-
-Depends on: AGT-32, AGT-44.
-
-As a reviewer, I want the trail's fingerprint recorded where the controller cannot rewrite it, so that later changes to the trail can be detected.
-
-- AC-AGT-45.1 The merge approval request shows the current chain fingerprint.
-- AC-AGT-45.2 The approver records that fingerprint outside the controller, in the protected main branch, in a commit signed with the approver's own key. The controller holds no credential that can write there.
-- AC-AGT-45.3 The verify command accepts an anchored fingerprint and reports whether the chain up to that event matches it.
-- AC-AGT-45.4 The documentation states the guarantee: changes after an anchor are detectable, and changes by a compromised controller before the next anchor are not.
+- AC-AGT-44.3 The documentation states the limit: the trail is append-only for the application, but a database administrator can still change it, so it is a record and not proof against tampering.
 
 ### AGT-46 Measure how reliably the platform runs
 
@@ -747,7 +703,7 @@ Depends on: AGT-44.
 As the platform owner, I want reliability numbers computed from the trail, so that I can see how often runs succeed, retry, fall back, stop and recover, and how long they take.
 
 - AC-AGT-46.1 From the audit events, plain code computes per run and across runs: the success rate; the retry frequency by stage; the stop and rollback frequency; the fallback frequency; the mean time to recovery (from a failed step to a healthy one); and the end-to-end latency, with the time spent waiting for people shown separately.
-- AC-AGT-46.2 A metrics report is written into the run's folder, and the summary across runs can be read through a read operation of the platform.
+- AC-AGT-46.2 A metrics report is written into the run's folder.
 - AC-AGT-46.3 The numbers come only from events. Adding or removing events in a test changes them as defined, and each definition is written in the report.
 
 ### AGT-47 Trace any change back to its requirement
@@ -766,15 +722,14 @@ As a reviewer, I want to ask why a file exists and be told the task, the decisio
 
 Status: open
 
-Depends on: AGT-15. Needs the user's go-ahead to add Spring Security (AGENTS.md).
+Depends on: AGT-15. A small request filter is assumed; Spring Security is added only with the user's go-ahead (AGENTS.md).
 
-As the platform owner, I want decisions to come from known people with the right permissions, so that an approval means something.
+As the platform owner, I want decisions to come from known people with the right permissions, so that an approval means something. The set of people is a small configured list; there is no registration or account management.
 
-- AC-AGT-48.1 The reply, decision and stop operations need an authenticated identity. A request without one is refused with 401 in the RUN-4 format. The health endpoint and the API document stay open (AC-RUN-3.4).
-- AC-AGT-48.2 Each identity has permissions for the decisions it may make (for example spec, design or merge). A decision outside them is refused with 403 in the RUN-4 format.
-- AC-AGT-48.3 A decision records the authenticated identity, not a typed name.
+- AC-AGT-48.1 Identities are configured: a name, a key read from the environment, and the decisions the identity may make (for example spec, design or merge). The reply, decision and stop operations need a key. A request without a known key is refused with 401 in the RUN-4 format. The health endpoint and the API document stay open (AC-RUN-3.4).
+- AC-AGT-48.2 A decision outside the identity's permissions is refused with 403 in the RUN-4 format.
+- AC-AGT-48.3 A decision records the identity's name, not a typed name.
 - AC-AGT-48.4 No agent has an identity. Nothing an agent returns can approve, reply or stop.
-
 ## Part G. Change, brownfield and re-planning (draft outline)
 
 Shown when: a change to existing code is analysed before design, and a requirement that changes mid-run triggers a re-plan with new approvals.
@@ -844,21 +799,21 @@ As a reviewer, I want the plan redone after a change, with the difference shown,
 - AC-AGT-53.3 Approvals tied to old versions no longer apply, and the gates concerned open again.
 - AC-AGT-53.4 The run budget carries over, so a run cannot loop forever by re-planning.
 
-## Part H. Scenarios, evaluation and delivery (draft outline)
+## Part H. Scenarios and delivery (draft outline)
 
-Shown when: the three scenarios and the failure drill have been run and recorded, a recorded run can be replayed, and the controller starts with `docker compose up`.
+Shown when: the three scenarios and the failure drill have been run and recorded, a recorded run can be replayed, and the database starts with `docker compose up` while the controller runs locally.
 
 ### AGT-54 Run the greenfield scenario for the product
 
 Status: open
 
-Depends on: AGT-32, AGT-41, AGT-42, AGT-44, AGT-46.
+Depends on: AGT-32, AGT-41, AGT-44, AGT-46.
 
 As the platform owner, I want one complete run that builds the product from a written requirement, so that the platform is proved on the product it was made for.
 
 - AC-AGT-54.1 `scenarios/greenfield.md` states a request to build a link-shortening service with link creation, redirects and click statistics. It pins, as decisions that must appear as numbered criteria in the approved spec: where data is kept, the code format, collision handling, concurrent creation, idempotency, URL validation, the redirect status, unknown and expired codes, atomic click counting, the error format and audit content.
 - AC-AGT-54.2 A run of the scenario ends SUCCEEDED with the product under `apps/url-shortener/` and the evidence under `runs/<run-id>/`: requirements, design, plan, review, QA (unit and functional coverage with gaps), audit and metrics.
-- AC-AGT-54.3 The product builds and its tests pass in the sandbox through the Java profile, and its coverage and gaps are reported as in AGT-41.
+- AC-AGT-54.3 The product builds and its tests pass in the sandbox through the execution profile, and its coverage and gaps are reported as in AGT-41.
 - AC-AGT-54.4 The commit history has one commit per task, with the agent as author and the run and task in the message.
 - AC-AGT-54.5 Each approval in the run was made with the evidence in front of the approver (AGT-15, AGT-32).
 
@@ -911,31 +866,18 @@ As a reviewer without a model, I want to replay a recorded scenario with everyth
 - AC-AGT-58.2 In replay, change sets are applied, builds run, tests run and coverage is measured for real. A recording whose answer holds a patch that breaks a test fails its gate in replay.
 - AC-AGT-58.3 A replay regression check replays a recording after a platform change and fails when the controller's decisions differ from the recorded ones.
 
-### AGT-59 Evaluate the agents against known cases
-
-Status: open
-
-Depends on: AGT-10, AGT-26.
-
-As the platform owner, I want the agents tested against cases with known answers, so that their behaviour is measured and not assumed.
-
-- AC-AGT-59.1 Evaluation cases are data: patches with planted defects for the review role, vague requirements that must produce questions, changes with a known set of affected modules, and answers that cite files that do not exist.
-- AC-AGT-59.2 An evaluation run calls the configured model on demand, never in `./mvnw verify`, and records the model, the prompt version, the inputs, the outputs and the result of each case.
-- AC-AGT-59.3 Plain code scores each case (for example, a planted defect counts as found when a finding names its file and line). No model scores another model.
-- AC-AGT-59.4 The committed evaluation report is labelled as a recorded result for that model and prompt version.
-
-### AGT-60 Start the controller with `docker compose up`
+### AGT-60 Start the database with `docker compose up` and run the controller locally
 
 Status: open
 
 Depends on: AGT-10.
 
-As a reviewer, I want one command to start the controller and its database, so that I need only Docker to try the platform.
+As a reviewer, I want a short setup, so that I need only Java 21 and Docker to try the platform.
 
-- AC-AGT-60.1 The Compose file starts PostgreSQL and the controller from the repository, with settings from environment variables and no secret in a committed file.
-- AC-AGT-60.2 The controller reports healthy at `/actuator/health`, and a run can be created against it.
-- AC-AGT-60.3 The model mode is replay unless a live model is configured. The local model server is reached at a configured address or through an optional Compose profile.
-- AC-AGT-60.4 From a fresh clone, following only the README, a reviewer starts the stack and replays a scenario. The check is made by hand and its result is recorded in the steps log.
+- AC-AGT-60.1 The Compose file starts PostgreSQL only, with settings from environment variables and no secret in a committed file.
+- AC-AGT-60.2 The controller, started locally with the Maven wrapper against that database, reports healthy at `/actuator/health`, and a run can be created against it.
+- AC-AGT-60.3 The model mode is replay unless a live model is configured. The local model server is reached at a configured address.
+- AC-AGT-60.4 From a fresh clone, following only the README, a reviewer starts the database and the controller and replays a scenario. The check is made by hand and its result is recorded in the steps log.
 
 ### AGT-61 Run the checks in CI
 
@@ -954,12 +896,12 @@ As the platform owner, I want every change checked automatically, so that tests 
 - The role definition file format, and where the files live.
 - How the pause is built in the graph: an interrupt before an input node, resume with the answers as new state, and which component resumes a run (the scheduler is assumed).
 - Where artifacts, questions, decisions, tasks and call records are stored, and who owns the checkpoint tables.
-- Where the workspace source comes from when the controller runs in a container, and whether Ollama runs on the host or in the Compose file. The reviewer needs only Docker, so replay is the default for them.
-- How the controller starts sandbox containers, and the image and dependency plan for the Python trial profile.
+- Where the workspace base directory lies (assumed: a git-ignored folder next to the repository, outside the controller's checkout), and whether Ollama runs on the host or in the Compose file. The reviewer has no model, so replay is the default for them.
+- How the controller starts sandbox containers, and the image and dependency plan for the Python profile.
 - How the default of one call at a time on a local model interacts with the three parallel branches and their timeouts.
 - Whether a safe stop is its own run status or FAILED with a reason (assumed: FAILED with a reason and a rolled-back flag).
-- How a lease is stored and renewed for crash reconciliation, and how the application's database role is split from the migration role for the audit trail.
-- How the product's integration tests use an embedded database inside the sandbox, and which larger model the product scenarios use (the 32,768-token local model is the trial only).
+- How the application's database role is split from the migration role for the audit trail.
+- How the product keeps its data and runs its tests inside the sandbox (assumed: the standard library, SQLite and pytest baked into the image), and which larger model the product scenarios use (the 32,768-token local model is for tests and the trial only).
 
 ## Outside this file
 
@@ -971,5 +913,7 @@ Still required by the project, but belonging to other files or documents:
 - **Expiry of runs that wait too long** for a person.
 
 Stretch, only after everything above is complete: retrieval over standards and code, tool calling and an MCP connection to an outside tool, a second execution profile, and a run on an unrelated requirement.
+
+Cut from scope (user decisions, 2026-10-04): the Java profile (AGT-42), operation identities (AGT-38), the audit anchor and hash chain (AGT-45, and the chain of AGT-44), the evaluation framework (AGT-59), lease-based crash recovery (replaced by AGT-39's restart rule), account management and role hierarchies (AGT-48), a metrics dashboard and summary operation (AGT-46), and distributed scale (one controller instance, documented).
 
 Not planned: training or fine-tuning models, a front end, and a real cloud deployment.
