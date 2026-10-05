@@ -8,6 +8,7 @@ import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
 import io.github.bereket1144.agentcontroller.artifact.StageInputs;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService;
+import io.github.bereket1144.agentcontroller.workspace.ChangeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
@@ -35,7 +36,7 @@ public class AgentStages {
         for (String role : ROLES) {
             String setting = environment.getProperty("agent.stages." + role, "dummy");
             switch (setting) {
-                case "agent" -> enabled.put(role, new AgentStageNode(role, roles, stageInputs, answers, artifacts));
+                case "agent" -> enabled.put(role, node(role, roles, stageInputs, answers, artifacts));
                 case "dummy" -> { }
                 default -> throw new IllegalStateException(
                         "agent.stages." + role + " must be agent or dummy, not " + setting);
@@ -43,6 +44,16 @@ public class AgentStages {
         }
         this.nodes = Map.copyOf(enabled);
         log.info("event=agent_stages_enabled roles={}", enabled.keySet());
+    }
+
+    /** The development role is told where its files may go; every other role gets the plain task text. */
+    private static AgentStageNode node(String role, RoleCatalog roles, StageInputs stageInputs,
+                                       StructuredAnswerService answers, ArtifactStore artifacts) {
+        if (!role.equals("development")) {
+            return new AgentStageNode(role, roles, stageInputs, answers, artifacts);
+        }
+        return new AgentStageNode(role, roles, stageInputs, answers, artifacts, runId -> AgentStageNode.TASK
+                + " Write every file under " + ChangeSet.PRODUCT_FOLDER + " or under runs/" + runId + "/.");
     }
 
     /** The agent node of each role that is switched on, by role id; empty when none is. */

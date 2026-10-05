@@ -10,6 +10,8 @@ import io.github.bereket1144.agentcontroller.model.ModelCallBudget.BudgetExhaust
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.ContextTooLargeException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.ModelUnavailableException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.OutputInvalidException;
+import io.github.bereket1144.agentcontroller.sandbox.VerificationFailedException;
+import io.github.bereket1144.agentcontroller.sandbox.VerificationResult.Outcome;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +23,7 @@ class RunFailureReasonTest {
         assertThat(Arrays.stream(RunFailureReason.values()).map(Enum::name)).containsExactly(
                 "OUTPUT_INVALID", "MODEL_UNAVAILABLE", "CONTEXT_TOO_LARGE", "BUDGET_EXHAUSTED",
                 "REPLAY_MISSING", "ACCESS_DENIED", "REJECTED", "ASSEMBLY_CONFLICT",
-                "STOPPED_BY_REVIEWER", "STAGE_TIMEOUT", "RECOVERY_FAILED", "UNEXPECTED");
+                "STOPPED_BY_REVIEWER", "STAGE_TIMEOUT", "RECOVERY_FAILED", "UNEXPECTED", "VERIFICATION_FAILED");
         assertThat(RunFailureReason.values()).allSatisfy(reason ->
                 assertThat(reason.message()).isNotBlank().endsWith("."));
     }
@@ -37,6 +39,8 @@ class RunFailureReasonTest {
                 .isEqualTo(RunFailureReason.CONTEXT_TOO_LARGE);
         assertThat(RunFailureReason.from(new CompletionException(mock(BudgetExhaustedException.class))))
                 .isEqualTo(RunFailureReason.BUDGET_EXHAUSTED);
+        assertThat(RunFailureReason.from(new CompletionException(new VerificationFailedException(Outcome.FAILED))))
+                .isEqualTo(RunFailureReason.VERIFICATION_FAILED);
     }
 
     @Test

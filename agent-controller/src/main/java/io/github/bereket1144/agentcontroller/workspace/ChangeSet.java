@@ -15,7 +15,7 @@ import tools.jackson.databind.JsonNode;
 public record ChangeSet(List<FileChange> files) {
 
     /** The product's own folder, the first of the two places a change may write. */
-    static final String PRODUCT_FOLDER = "apps/url-shortener/";
+    public static final String PRODUCT_FOLDER = "apps/url-shortener/";
     /** The folder that holds one sub-folder per run, the second place; a run may write only to its own. */
     static final String RUN_FOLDERS = "runs/";
     static final int MAX_FILE_BYTES = 100_000;

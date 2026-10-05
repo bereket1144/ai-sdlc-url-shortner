@@ -100,7 +100,7 @@ class ApiDocumentTest {
                         containsInAnyOrder("OUTPUT_INVALID", "MODEL_UNAVAILABLE", "CONTEXT_TOO_LARGE",
                                 "BUDGET_EXHAUSTED", "REPLAY_MISSING", "ACCESS_DENIED", "REJECTED",
                                 "ASSEMBLY_CONFLICT", "STOPPED_BY_REVIEWER", "STAGE_TIMEOUT",
-                                "RECOVERY_FAILED", "UNEXPECTED")));
+                                "RECOVERY_FAILED", "UNEXPECTED", "VERIFICATION_FAILED")));
     }
 
     @Test

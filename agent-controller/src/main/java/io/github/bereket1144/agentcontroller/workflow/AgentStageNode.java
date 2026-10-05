@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
@@ -34,7 +35,7 @@ import tools.jackson.databind.node.ObjectNode;
 public class AgentStageNode {
 
     private static final Logger log = LoggerFactory.getLogger(AgentStageNode.class);
-    private static final String TASK = "Do the work of your role for this run, using only the inputs below and "
+    static final String TASK = "Do the work of your role for this run, using only the inputs below and "
             + "the output structure of your role. State every assumption you make.";
     /** The graph state key under which a stage leaves its artifact reference, by the input kind that names it. */
     private static final Map<InputKind, String> STATE_KEY = Map.of(
@@ -52,10 +53,18 @@ public class AgentStageNode {
     private final StageInputs stageInputs;
     private final StructuredAnswerService answers;
     private final ArtifactStore artifacts;
+    private final Function<UUID, String> task;
 
     /** Fails with an unknown-role error when the catalog has no such role, so a wrong setting stops the start. */
     public AgentStageNode(String role, RoleCatalog roles, StageInputs stageInputs, StructuredAnswerService answers,
                           ArtifactStore artifacts) {
+        this(role, roles, stageInputs, answers, artifacts, runId -> TASK);
+    }
+
+    /** As above, with a task text that may depend on the run, for a role whose answer must name the run's folders. */
+    public AgentStageNode(String role, RoleCatalog roles, StageInputs stageInputs, StructuredAnswerService answers,
+                          ArtifactStore artifacts, Function<UUID, String> task) {
+        this.task = task;
         this.role = role;
         this.definition = roles.get(role);
         this.stageInputs = stageInputs;
@@ -73,7 +82,7 @@ public class AgentStageNode {
         Resolved resolved = stageInputs.resolve(runId, role, readableRefs(state));
         inputs.addAll(resolved.inputs());
         // A failed call or an answer that stays invalid throws a typed exception; nothing is stored then.
-        AcceptedAnswer answer = answers.call(runId, role, TASK, inputs);
+        AcceptedAnswer answer = answers.call(runId, role, task.apply(runId), inputs);
         JsonNode content = withQuestionsAsAssumptions(answer.value());
         ArtifactRef ref = artifacts.store(new NewArtifact(runId, role, content, summary(content), answer.profile(),
                 resolved.consumed()));

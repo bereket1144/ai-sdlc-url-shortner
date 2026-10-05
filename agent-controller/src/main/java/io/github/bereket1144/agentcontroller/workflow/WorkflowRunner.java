@@ -47,12 +47,25 @@ public class WorkflowRunner {
      * A stage whose setting enabled its agent runs on that agent; every other stage stays on its dummy node. The agent
      * stages are optional only because a test context that loads this class alone does not hold them.
      */
-    @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages) throws GraphStateException {
+        this(nodes, requirementsAgent, agentStages, Optional.empty());
+    }
+
+    /** When the development agent is on, its stage also commits the change set and has it built and tested. */
+    @Autowired
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish)
+            throws GraphStateException {
         Map<String, NodeAction<AgentState>> agents = new HashMap<>();
         requirementsAgent.ifPresent(node -> agents.put("requirements", node::requirements));
         agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role, node::execute)));
+        developmentFinish.ifPresent(finish -> {
+            NodeAction<AgentState> development = agents.get("development");
+            if (development != null) {
+                agents.put("development", state -> finish.finish(state, development.apply(state)));
+            }
+        });
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         this.graph = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))

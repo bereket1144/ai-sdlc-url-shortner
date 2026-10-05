@@ -5,6 +5,7 @@ import io.github.bereket1144.agentcontroller.model.ModelCallBudget.BudgetExhaust
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.ContextTooLargeException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.ModelUnavailableException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.OutputInvalidException;
+import io.github.bereket1144.agentcontroller.sandbox.VerificationFailedException;
 
 /** Stable reviewer-facing failure codes and messages. Exception messages are never exposed by the run API. */
 public enum RunFailureReason {
@@ -19,7 +20,8 @@ public enum RunFailureReason {
     STOPPED_BY_REVIEWER("A reviewer stopped the run."),
     STAGE_TIMEOUT("A stage exceeded its time limit."),
     RECOVERY_FAILED("The run could not be recovered."),
-    UNEXPECTED("The run stopped after an unexpected error.");
+    UNEXPECTED("The run stopped after an unexpected error."),
+    VERIFICATION_FAILED("The build or the tests did not pass.");
 
     private final String message;
 
@@ -49,6 +51,9 @@ public enum RunFailureReason {
             }
             if (cause instanceof InputAccessDeniedException) {
                 return ACCESS_DENIED;
+            }
+            if (cause instanceof VerificationFailedException) {
+                return VERIFICATION_FAILED;
             }
         }
         return UNEXPECTED;
