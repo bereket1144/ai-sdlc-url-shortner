@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.regex.Matcher;
@@ -13,6 +14,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.io.ByteArrayResource;
@@ -164,6 +166,91 @@ class RoleCatalogTest {
         assertThatThrownBy(() -> catalog.get("unknown"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Unknown role: unknown");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidRoleResources")
+    @DisplayName("AC-AGT-1.1 startup rejects a role resource that has no name or is not a properties file")
+    void rejectsInvalidRoleResource(String description, Resource invalid) throws IOException {
+        Resource[] resources = Arrays.copyOf(roleFiles(), 9);
+        resources[8] = invalid;
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Invalid role resource");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unreadableRoleResources")
+    @DisplayName("a role file that cannot be read fails startup and names the role")
+    void rejectsUnreadableRoleFile(String description, Resource unreadable) throws IOException {
+        Resource[] resources = Arrays.copyOf(roleFiles(), 9);
+        resources[8] = unreadable;
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot read role qa");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-1.2 working standards must be three different practices, not one repeated")
+    void rejectsRepeatedStandards() throws IOException {
+        Resource[] resources = replaceRole(roleFiles(), "requirements", "standards", "one; one; two");
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Role requirements needs at least three named standards");
+    }
+
+    @Test
+    @DisplayName("AC-AGT-1.2 a role cannot list the same input twice")
+    void rejectsRepeatedInputs() throws IOException {
+        Resource[] resources = replaceRole(roleFiles(), "requirements", "inputs",
+                "DESIGN_ARTIFACT,DESIGN_ARTIFACT");
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Role requirements has duplicate inputs");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("blankListEntries")
+    @DisplayName("AC-AGT-1.2 a blank entry in a list part fails and names the role and the part")
+    void rejectsBlankListEntry(String field, String value) throws IOException {
+        Resource[] resources = replaceRole(roleFiles(), "requirements", field, value);
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Role requirements has a blank " + field + " entry");
+    }
+
+    private static Stream<Arguments> invalidRoleResources() {
+        return Stream.of(
+                Arguments.of("no file name", new ByteArrayResource(new byte[0])),
+                Arguments.of("not a properties file", namedResource("qa.txt", "version=1")));
+    }
+
+    private static Stream<Arguments> unreadableRoleResources() {
+        Resource cannotOpen = new ByteArrayResource(new byte[0]) {
+            @Override
+            public String getFilename() {
+                return "qa.properties";
+            }
+
+            @Override
+            public InputStream getInputStream() throws IOException {
+                throw new IOException("cannot open");
+            }
+        };
+        return Stream.of(
+                Arguments.of("the file cannot be opened", cannotOpen),
+                Arguments.of("the file has a broken escape", namedResource("qa.properties", "version=\\uZZZZ")));
+    }
+
+    private static Stream<Arguments> blankListEntries() {
+        return Stream.of(
+                Arguments.of("standards", "one;;two;three"),
+                Arguments.of("inputs", "DESIGN_ARTIFACT,"));
     }
 
     private static Stream<String> requiredFields() {
