@@ -551,10 +551,9 @@ main.wrap { flex: 1; min-height: 0; padding: 0; display: block; overflow: auto; 
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-message.user { justify-self: end; max-width: 88%; background: var(--surface-2); border-radius: 20px; padding: 1rem 1.25rem; }
 .chat-message.agent { padding-block: .25rem; }
-.chat-footer { flex: none; color: var(--muted); font-size: .75rem; text-align: center; padding: .8rem 1rem; border-top: 1px solid var(--border); }
 .chat > .card, .chat > .notice, .chat > .building, .chat > .verification { margin-top: 1.5rem !important; }
-#questions-card { padding: 1rem 1.25rem; box-shadow: none; border-color: var(--border-strong); }
-#questions-card h2 { font-size: 1rem; }
+#questions-card, #approval-card { padding: 1rem 1.25rem; box-shadow: none; border-color: var(--border-strong); }
+#questions-card h2, #approval-card h2 { font-size: 1rem; }
 .question { padding: .75rem 0; }
 .question textarea { min-height: 3.5rem; max-height: 10rem; }
 .why, .default-row { font-size: .8rem; }
@@ -586,7 +585,6 @@ pre.code { width: 100%; max-width: 100%; }
   .chat, .artifact-view { padding: .8rem; }
   .chat-message.user { max-width: 100%; }
   .pane-head { flex-wrap: wrap; gap: .5rem; }
-  .chat-footer { font-size: .65rem; }
   #start { margin-top: 2rem; padding: 1rem; }
 }
 
@@ -605,12 +603,53 @@ pre.code { width: 100%; max-width: 100%; }
   .marker { width: 1.6rem; height: 1.6rem; }
 }
 
-/* Asking for a change on a finished run: the card at the end of the conversation, and the links between a change run
-   and the run it changes (shown under the run id). */
-#change-card { padding: 1rem 1.25rem; box-shadow: none; border-color: var(--border-strong); }
-#change-card h2 { font-size: 1rem; }
-#change-card textarea { min-height: 4rem; max-height: 12rem; }
-#change-card .message { margin-top: 0.5rem; overflow-wrap: anywhere; }
+/* The links between a change run and the run it changes (shown under the run id). */
 .run-links { margin-top: 0.25rem; color: var(--muted); font-size: 0.8rem; }
 .run-links-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.45rem; margin: 0; }
 .run-links-line a { color: var(--accent); }
+
+/* Stop and Resume sit in the run header; a refusal is shown on a line of its own under them. */
+.run-head-message { flex: 1 1 100%; font-size: 0.85rem; overflow-wrap: anywhere; }
+
+/* The chat bar is the last row of the conversation pane (a flex column), so the conversation scrolls above it and is
+   never covered, beside the sidebar and on a phone. Its side padding follows the conversation column. */
+.chat-bar {
+  flex: none;
+  padding: .75rem max(1.5rem, calc((100% - 52rem) / 2)) .6rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.chat-bar-row { display: flex; align-items: flex-end; gap: .6rem; }
+.chat-bar textarea {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  min-height: 2.9rem;
+  max-height: min(10rem, 30vh);
+  resize: none;
+  field-sizing: content; /* grows with the text where the browser supports it; else it scrolls */
+}
+.chat-bar textarea:disabled { opacity: .6; cursor: not-allowed; }
+.chat-bar .btn { flex: none; min-height: 2.9rem; justify-content: center; }
+.chat-bar .btn:disabled { cursor: not-allowed; }
+.chat-bar .message { margin: 0 0 .5rem; font-size: .85rem; overflow-wrap: anywhere; }
+.chat-hint { margin: .4rem 0 0; color: var(--muted); font-size: .75rem; }
+@media (max-width: 700px) { .chat-bar { padding-inline: 1rem; } }
+@media (max-width: 480px) { .chat-bar { padding: .6rem .8rem .5rem; } }
+
+/* The approval card: what waits, its summary, the name and comment fields and the two decisions. */
+#approval-card .approval-summary {
+  margin: .5rem 0;
+  padding: .7rem 1rem;
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.approval-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; color: var(--muted); font-size: .85rem; }
+.approval-fields { display: grid; gap: .35rem; margin-top: .75rem; }
+.approval-fields label { margin: .4rem 0 0; font-size: .85rem; }
+#approval-card textarea { min-height: 4rem; max-height: 10rem; }
+#approval-card .message { margin-top: .5rem; overflow-wrap: anywhere; }
+#approval-what { overflow-wrap: anywhere; }

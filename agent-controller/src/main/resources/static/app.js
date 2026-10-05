@@ -1,5 +1,6 @@
-// Reviewer page: starts a run, answers its questions and shows each stage's result as it appears, with the lineage
-// of what was built from what. A second view (#metrics) shows the platform's reliability numbers.
+// Reviewer page: starts a run, answers its questions, approves or rejects what waits for approval, stops and resumes
+// it, asks for a change once it has finished, and shows each stage's result as it appears, with the lineage of what
+// was built from what. A second view (#metrics) shows the platform's reliability numbers.
 // It only calls the controller's own HTTP operations.
 //
 // AC-UI-1.9: text that comes from a run or a model is put on the page only through createElement, textContent and
@@ -12,15 +13,23 @@
   const RECENT_KEY = 'recentRuns';
   const CHANGES_KEY = 'changeRuns'; // { baseRunId: [the change runs this page started from it] }
   const MAX_CHANGES = 20; // per base run
+  const APPROVER_KEY = 'approverName';
   const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const END_STATUSES = ['SUCCEEDED', 'FAILED'];
+  // A run in one of these statuses does not change by itself: the page stops reading it (a stopped run is read again
+  // after Resume).
+  const RESTING_STATUSES = ['SUCCEEDED', 'FAILED', 'STOPPED'];
+  const STOPPABLE_STATUSES = ['CREATED', 'RUNNING', 'WAITING_FOR_INPUT'];
 
   const STAGE_LABELS = {
     requirements: 'Requirements', impactAnalysis: 'Impact analysis', design: 'Design', planning: 'Planning',
     development: 'Development', qa: 'QA', review: 'Review', documentation: 'Documentation'
   };
-  const STATE_LABELS = { NOT_STARTED: 'Not started', RUNNING: 'Running', FINISHED: 'Finished', FAILED: 'Failed' };
-  const STATUS_TONES = { CREATED: 'neutral', RUNNING: 'info', WAITING_FOR_INPUT: 'warn', SUCCEEDED: 'good', FAILED: 'bad' };
+  // The stage that makes each artifact kind, where the two names differ.
+  const STAGE_OF_KIND = { plan: 'planning' };
+  const STATE_LABELS = { NOT_STARTED: 'Not started', RUNNING: 'Running', FINISHED: 'Finished', FAILED: 'Failed', STOPPED: 'Stopped' };
+  const STATUS_TONES = {
+    CREATED: 'neutral', RUNNING: 'info', WAITING_FOR_INPUT: 'warn', SUCCEEDED: 'good', FAILED: 'bad', STOPPED: 'neutral'
+  };
   const OUTCOME_TONES = { PASSED: 'good', FAILED: 'bad', NO_RESULT: 'neutral' };
   const FIELD_TITLES = { changes: 'Files' };
 
@@ -258,7 +267,8 @@
     if (!response.ok) {
       throw new ApiError(response.status, problemText(body, response.status));
     }
-    if (body === null) {
+    // An accepted request (202) or one with nothing to send back (204) may have no body.
+    if (body === null && response.status !== 202 && response.status !== 204) {
       throw new ApiError(response.status, 'The controller sent an answer the page cannot read.');
     }
     return body;
@@ -289,10 +299,15 @@
     changeExisting: $('change-existing'), changeFields: $('change-fields'),
     baseRunSelect: $('base-run-select'), baseRunId: $('base-run-id'),
     run: $('run'), runId: $('run-id'), runLinks: $('run-links'), runStatus: $('run-status'), notice: $('notice'),
+    stopButton: $('stop-button'), resumeButton: $('resume-button'), runActionMessage: $('run-action-message'),
     failure: $('failure'), failureCode: $('failure-code'), failureMessage: $('failure-message'),
     retryButton: $('retry-button'), retryMessage: $('retry-message'),
-    changeCard: $('change-card'), changeForm: $('change-form'), changeText: $('change-text'),
-    changeSend: $('change-send'), changeMessage: $('change-message'),
+    approvalCard: $('approval-card'), approvalWhat: $('approval-what'), approvalSummary: $('approval-summary'),
+    approvalRejections: $('approval-rejections'), approvalOpen: $('approval-open'), approver: $('approver'),
+    approvalComment: $('approval-comment'), approvalMessage: $('approval-message'),
+    approveButton: $('approve-button'), rejectButton: $('reject-button'),
+    chatForm: $('chat-bar'), chatText: $('chat-text'), chatSend: $('chat-send'), chatMessage: $('chat-message'),
+    chatHint: $('chat-hint'),
     stages: $('stages'), questionsCard: $('questions-card'), questionsForm: $('questions-form'),
     questionList: $('question-list'), questionsMessage: $('questions-message'), questionsSend: $('questions-send'),
     workspace: $('workspace'), sidebarToggle: $('sidebar-toggle'),
@@ -322,8 +337,9 @@
     return card;
   });
 
-  // The "Request a change" card is last: the conversation ends with it, after the build result.
-  ui.chat.append(ui.building, ui.verification, ui.changeCard);
+  // The approval card is last: the conversation ends with what waits for the person, after the build result.
+  ui.chat.append(ui.building, ui.verification, ui.approvalCard);
+  ui.approver.value = loadApprover();
   let selectedArtifact = null;
 
   // Switching panes never changes the route or the polling session.
@@ -369,9 +385,15 @@
   });
   ui.lineageOpen.addEventListener('click', () => openArtifact(null));
 
-  function chatMessage(role, text, card) {
-    // Keep the reader's position when they have scrolled up to earlier messages.
+  // Keep the reader's position when they have scrolled up to earlier messages: only a reader who is at the end of
+  // the conversation is moved down when something is added there.
+  function keepingBottom(change) {
     const nearBottom = ui.chat.scrollHeight - ui.chat.scrollTop - ui.chat.clientHeight < 100;
+    change();
+    if (nearBottom) ui.chat.scrollTop = ui.chat.scrollHeight;
+  }
+
+  function chatMessage(role, text, card) {
     const message = el('article', { class: `chat-message ${role}` },
       el('p', { class: 'eyebrow', text: role === 'user' ? 'You' : 'Agent' }),
       el('p', { class: 'message-text', text }));
@@ -380,8 +402,7 @@
       button.addEventListener('click', () => openArtifact(card));
       message.append(button);
     }
-    ui.chatMessages.append(message);
-    if (nearBottom) ui.chat.scrollTop = ui.chat.scrollHeight;
+    keepingBottom(() => ui.chatMessages.append(message));
   }
 
   // The run being followed, or null. Every answer from the controller is dropped when it is no longer the one
@@ -428,10 +449,12 @@
   function follow(id) {
     resetRunView();
     current = {
-      id, timer: null, busy: false, shown: new Map(), stageItems: new Map(), answered: new Set(),
+      id, timer: null, busy: false, again: false, shown: new Map(), stageItems: new Map(), answered: new Set(),
       questionKey: null, questionFields: [], verificationSignature: null, lineageSignature: null,
-      stageStates: new Map(), lastStatus: null, requirementShown: false, linksSignature: null
+      stageStates: new Map(), lastStatus: null, requirementShown: false, linksSignature: null,
+      approval: null, decided: new Set(), changeReason: 'Reading the run', sending: false
     };
+    renderBar(current);
     setText(ui.runId, id);
     ui.start.hidden = true;
     ui.metrics.hidden = true;
@@ -454,9 +477,18 @@
     ui.questionsCard.hidden = true;
     ui.failure.hidden = true;
     ui.notice.hidden = true;
-    ui.changeCard.hidden = true;
-    ui.changeText.value = '';
-    setMessage(ui.changeMessage, '');
+    ui.approvalCard.hidden = true;
+    ui.approvalComment.value = '';
+    setMessage(ui.approvalMessage, '');
+    ui.approveButton.disabled = false;
+    ui.rejectButton.disabled = false;
+    ui.chatText.value = '';
+    setMessage(ui.chatMessage, '');
+    ui.stopButton.hidden = true;
+    ui.resumeButton.hidden = true;
+    ui.stopButton.disabled = false;
+    ui.resumeButton.disabled = false;
+    setMessage(ui.runActionMessage, '');
     ui.runLinks.replaceChildren();
     ui.runLinks.hidden = true;
     ui.lineageCard.hidden = true;
@@ -478,12 +510,18 @@
     session.timer = setTimeout(() => poll(session), delay);
   }
 
-  // AC-UI-1.3: read the run every two seconds until it is SUCCEEDED or FAILED.
+  // AC-UI-1.3, AC-UI-3.4: read the run every two seconds until it is SUCCEEDED, FAILED or STOPPED. A stopped run is
+  // read again when Resume is accepted (schedule(session, 0)).
   async function poll(session) {
-    if (session !== current || session.busy) {
+    if (session !== current) {
+      return;
+    }
+    if (session.busy) {
+      session.again = true; // asked for while a read is on its way: read once more as soon as it is done
       return;
     }
     session.busy = true;
+    session.again = false;
     let more = true;
     try {
       const run = await api(`/v1/runs/${session.id}`);
@@ -495,9 +533,12 @@
       await syncQuestions(session, run);
       await syncArtifacts(session, run);
       await syncLineage(session, run);
-      more = !END_STATUSES.includes(run.status);
-      // AC-UI-2.2: the box appears only once the run is no longer followed, and only for a finished run with code.
-      ui.changeCard.hidden = more || run.status !== 'SUCCEEDED' || !run.commit;
+      if (session !== current) {
+        return;
+      }
+      more = !RESTING_STATUSES.includes(run.status);
+      showApproval(session, run);
+      showChangeBar(session, run);
     } catch (error) {
       if (session !== current) {
         return;
@@ -506,11 +547,15 @@
       // An id the controller refuses or does not know will never work, so the page stops asking.
       more = error.status !== 400 && error.status !== 404;
       showNotice(more ? `${error.message} Trying again.` : error.message, more ? 'warn' : 'bad');
+      if (!more) {
+        session.changeReason = 'This run cannot be read';
+        renderBar(session);
+      }
     } finally {
       session.busy = false;
     }
-    if (more && session === current) {
-      schedule(session, POLL_MS);
+    if ((more || session.again) && session === current) {
+      schedule(session, session.again ? 0 : POLL_MS);
     }
   }
 
@@ -529,12 +574,14 @@
     if (session.lastStatus !== run.status) {
       const messages = { CREATED: 'Your run is queued.', RUNNING: 'Working on your requirement.',
         WAITING_FOR_INPUT: 'Your input is needed to continue.', SUCCEEDED: 'Run complete. You can review the stage artifacts.',
-        FAILED: 'The run stopped. See the failure details below.' };
+        FAILED: 'The run stopped. See the failure details below.', STOPPED: 'The run is stopped. Resume it to continue.' };
       chatMessage('agent', messages[run.status] || humanize(run.status.toLowerCase()));
       session.lastStatus = run.status;
     }
     setText(ui.runStatus, humanize(run.status.toLowerCase()));
     setData(ui.runStatus, 'tone', STATUS_TONES[run.status] || 'neutral');
+    ui.stopButton.hidden = !STOPPABLE_STATUSES.includes(run.status);
+    ui.resumeButton.hidden = run.status !== 'STOPPED';
 
     const failed = run.status === 'FAILED' && isObject(run.failureReason);
     ui.failure.hidden = !failed;
@@ -769,7 +816,8 @@
 
   async function syncQuestions(session, run) {
     const key = run.awaiting ? run.awaiting.artifactVersion : 0;
-    if (run.status !== 'WAITING_FOR_INPUT' || session.answered.has(key)) {
+    // A run that waits for an approval (AC-UI-3.3) has no questions to read.
+    if (run.status !== 'WAITING_FOR_INPUT' || isObject(run.approval) || session.answered.has(key)) {
       ui.questionsCard.hidden = true;
       return;
     }
@@ -883,19 +931,192 @@ ${field.input.value.trim()}`);
     }
   });
 
-  // ---- Asking for a change on a finished run (AC-UI-2.1, AC-UI-2.2) ----------------------------------------------
+  // ---- Stopping and resuming a run (AC-UI-3.4) --------------------------------------------------------------------
 
-  // The card is shown by poll() only for a finished run with code. A refusal (400) is shown under the box and what was
-  // typed stays; a new run is followed the way the start form does it, by changing the address.
-  ui.changeForm.addEventListener('submit', async event => {
-    event.preventDefault();
+  // showRun() shows the button that fits the status. A refusal (409) is shown in the header and the run is read again,
+  // so that the buttons match its real status; an accepted request (202) is followed by the same read, which also
+  // restarts the polling of a stopped run.
+  async function changeRunState(operation) {
     const session = current;
     if (!session) {
       return;
     }
-    const requirement = ui.changeText.value;
-    setMessage(ui.changeMessage, '');
-    ui.changeSend.disabled = true;
+    setMessage(ui.runActionMessage, '');
+    ui.stopButton.disabled = true;
+    ui.resumeButton.disabled = true;
+    try {
+      await api(`/v1/runs/${session.id}/${operation}`, { method: 'POST' });
+      if (session !== current) {
+        return;
+      }
+      schedule(session, 0);
+    } catch (error) {
+      if (session !== current) {
+        return;
+      }
+      console.error(`event=${operation}_failed runId=${session.id} status=${error.status}`, error);
+      setMessage(ui.runActionMessage, error.message);
+      if (error.status === 409) {
+        schedule(session, 0);
+      }
+    } finally {
+      ui.stopButton.disabled = false;
+      ui.resumeButton.disabled = false;
+    }
+  }
+
+  ui.stopButton.addEventListener('click', () => changeRunState('stop'));
+  ui.resumeButton.addEventListener('click', () => changeRunState('resume'));
+
+  // ---- Approving or rejecting what waits for approval (AC-UI-3.3) -------------------------------------------------
+
+  function approvalKey(approval) {
+    return `${asText(approval.kind)}:${asText(approval.version)}:${asText(approval.fingerprint)}`;
+  }
+
+  function stageName(kind) {
+    return STAGE_LABELS[STAGE_OF_KIND[kind] || kind] || humanize(kind);
+  }
+
+  // The artifact card that shows what the approval is about, once that artifact has been read.
+  function approvalArtifact(approval) {
+    const kind = asText(approval.kind);
+    return cards.find(card => card.section.kind === kind && !card.link.hidden);
+  }
+
+  // The card is shown while the run reports an approval that this page has not answered yet (the same way as the
+  // answered questions). Its texts are written again only for a different approval, so what the person has typed
+  // stays through every read.
+  function showApproval(session, run) {
+    const approval = run.status === 'WAITING_FOR_INPUT' && isObject(run.approval) ? run.approval : null;
+    if (approval === null || session.decided.has(approvalKey(approval))) {
+      session.approval = null;
+      ui.approvalCard.hidden = true;
+      return;
+    }
+    const changed = session.approval === null || approvalKey(session.approval) !== approvalKey(approval);
+    session.approval = approval;
+    if (changed) {
+      const kind = asText(approval.kind);
+      setText(ui.approvalWhat, `${stageName(kind)} stage: the ${kindTitle(kind).toLowerCase()} `
+        + `(version ${asText(approval.version)}) waits for your decision.`);
+      setText(ui.approvalSummary, asText(approval.summary));
+      ui.approvalComment.value = '';
+      setMessage(ui.approvalMessage, '');
+    }
+    ui.approvalSummary.hidden = isEmpty(approval.summary);
+    const left = approval.rejectionsLeft;
+    ui.approvalRejections.hidden = left === undefined || left === null;
+    setText(ui.approvalRejections, `Rejections left: ${asText(left)}`);
+    const artifact = approvalArtifact(approval);
+    ui.approvalOpen.hidden = !artifact;
+    if (artifact) {
+      setText(ui.approvalOpen, `Open the ${artifact.section.title.toLowerCase()}`);
+    }
+    if (ui.approvalCard.hidden) {
+      keepingBottom(() => { ui.approvalCard.hidden = false; });
+    }
+  }
+
+  ui.approvalOpen.addEventListener('click', () => {
+    const artifact = current && current.approval ? approvalArtifact(current.approval) : null;
+    if (artifact) {
+      openArtifact(artifact);
+    }
+  });
+
+  // Reject needs a comment. A refusal (400, 409) is shown in the card and what was typed stays; an accepted decision
+  // (202) clears the card and goes back to following the run, which is still waiting until the controller moves on.
+  async function decide(decision) {
+    const session = current;
+    const approval = session ? session.approval : null;
+    if (approval === null) {
+      return;
+    }
+    const approver = ui.approver.value.trim();
+    const comment = ui.approvalComment.value.trim();
+    if (decision === 'REJECT' && comment === '') {
+      setMessage(ui.approvalMessage, 'Say why you reject it: a comment is needed.');
+      return;
+    }
+    setMessage(ui.approvalMessage, '');
+    ui.approveButton.disabled = true;
+    ui.rejectButton.disabled = true;
+    try {
+      await api(`/v1/runs/${session.id}/decisions`, postJson({ decision, approver, comment }));
+      rememberApprover(approver);
+      if (session !== current) {
+        return;
+      }
+      chatMessage('user', `${decision === 'APPROVE' ? 'Approved' : 'Rejected'} the `
+        + `${kindTitle(asText(approval.kind)).toLowerCase()} (version ${asText(approval.version)}).`
+        + (comment === '' ? '' : `\n${comment}`));
+      session.decided.add(approvalKey(approval));
+      session.approval = null;
+      ui.approvalComment.value = '';
+      ui.approvalCard.hidden = true;
+      schedule(session, 0);
+    } catch (error) {
+      if (session !== current) {
+        return;
+      }
+      console.error(`event=decision_failed runId=${session.id} decision=${decision} status=${error.status}`, error);
+      setMessage(ui.approvalMessage, error.message);
+    } finally {
+      ui.approveButton.disabled = false;
+      ui.rejectButton.disabled = false;
+    }
+  }
+
+  ui.approveButton.addEventListener('click', () => decide('APPROVE'));
+  ui.rejectButton.addEventListener('click', () => decide('REJECT'));
+
+  // ---- The chat bar: asking for a change on a finished run (AC-UI-3.1, AC-UI-2.1) ---------------------------------
+
+  // '' when the bar can send a change request (a finished run with code); else the one-line reason it is off.
+  function changeReasonFor(run) {
+    switch (run.status) {
+      case 'SUCCEEDED':
+        return run.commit ? '' : 'This run produced no code to change';
+      case 'WAITING_FOR_INPUT':
+        return isObject(run.approval) ? 'Approve or reject above' : 'Answer the questions above';
+      case 'STOPPED':
+        return 'Resume the run first';
+      case 'FAILED':
+        return 'This run failed: use Retry';
+      default:
+        return 'Available when the run has finished and passed its tests';
+    }
+  }
+
+  function showChangeBar(session, run) {
+    session.changeReason = changeReasonFor(run);
+    renderBar(session);
+  }
+
+  function renderBar(session) {
+    const off = session.changeReason !== '';
+    ui.chatText.disabled = off;
+    ui.chatSend.disabled = off || session.sending;
+    keepingBottom(() => setText(ui.chatHint, off ? session.changeReason : 'Enter sends, Shift+Enter adds a line.'));
+  }
+
+  // A refusal (400) is shown above the bar and what was typed stays; a new run is followed the way the start form does
+  // it, by changing the address.
+  async function sendChange(event) {
+    event.preventDefault();
+    const session = current;
+    if (!session || session.changeReason !== '' || session.sending) {
+      return;
+    }
+    const requirement = ui.chatText.value;
+    if (requirement.trim() === '') {
+      setMessage(ui.chatMessage, 'Describe the change first.');
+      return;
+    }
+    setMessage(ui.chatMessage, '');
+    session.sending = true;
+    renderBar(session);
     try {
       const created = await api('/v1/runs', postJson({ requirement, kind: 'BROWNFIELD', baseRunId: session.id }));
       remember(created.id, requirement);
@@ -903,17 +1124,27 @@ ${field.input.value.trim()}`);
       if (session !== current) {
         return; // the person went to another run meanwhile: the new run is remembered, but not opened over it
       }
-      ui.changeText.value = '';
-      ui.changeCard.hidden = true;
+      ui.chatText.value = '';
       location.hash = `run=${created.id}`;
     } catch (error) {
       if (session !== current) {
         return;
       }
       console.error(`event=change_failed runId=${session.id} status=${error.status}`, error);
-      setMessage(ui.changeMessage, error.message);
+      setMessage(ui.chatMessage, error.message);
     } finally {
-      ui.changeSend.disabled = false;
+      session.sending = false;
+      if (session === current) {
+        renderBar(session);
+      }
+    }
+  }
+
+  ui.chatForm.addEventListener('submit', sendChange);
+  // Enter sends; Shift+Enter adds a line. A key pressed to confirm a text composition (an input method) is left alone.
+  ui.chatText.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      sendChange(event);
     }
   });
 
@@ -1144,6 +1375,25 @@ ${field.input.value.trim()}`);
       localStorage.setItem(CHANGES_KEY, JSON.stringify(changes));
     } catch (error) {
       console.warn('event=change_runs_not_saved', error);
+    }
+  }
+
+  // ---- The approver's name (kept in the browser; the page works without it) -------------------------------------------
+
+  function loadApprover() {
+    try {
+      return asText(localStorage.getItem(APPROVER_KEY)).slice(0, 80);
+    } catch (error) {
+      console.warn('event=approver_unavailable', error);
+      return '';
+    }
+  }
+
+  function rememberApprover(name) {
+    try {
+      localStorage.setItem(APPROVER_KEY, name);
+    } catch (error) {
+      console.warn('event=approver_not_saved', error);
     }
   }
 

@@ -66,7 +66,10 @@
           <div id="run-links" class="run-links" hidden></div>
         </div>
         <span id="run-status" class="pill" role="status"></span>
+        <button id="stop-button" class="btn" type="button" hidden>Stop</button>
+        <button id="resume-button" class="btn primary" type="button" hidden>Resume</button>
         <a class="btn" href="#">New run</a>
+        <p id="run-action-message" class="message run-head-message" role="alert" hidden></p>
       </div>
 
       <div id="workspace" class="workspace">
@@ -109,18 +112,26 @@
               </form>
             </section>
             <!-- Moved to the end of the conversation by app.js, after the build result. -->
-            <section id="change-card" class="card" hidden>
-              <p class="eyebrow">You</p>
-              <h2 id="change-title">Request a change</h2>
-              <p class="muted">Describe what should be different. A new run changes this run's code and is followed here.</p>
-              <form id="change-form">
-                <textarea id="change-text" name="change" rows="3" required aria-labelledby="change-title"
-                          placeholder="Describe the change you want"></textarea>
-                <p id="change-message" class="message" role="alert" hidden></p>
-                <div class="row">
-                  <button id="change-send" class="btn primary" type="submit">Send</button>
-                </div>
-              </form>
+            <section id="approval-card" class="card attention" hidden>
+              <p class="eyebrow">Approval</p>
+              <h2>Your approval is needed</h2>
+              <p id="approval-what"></p>
+              <p id="approval-summary" class="approval-summary" hidden></p>
+              <div class="approval-facts">
+                <span id="approval-rejections" hidden></span>
+                <button id="approval-open" class="btn small" type="button" hidden></button>
+              </div>
+              <div class="approval-fields">
+                <label for="approver">Your name (optional)</label>
+                <input id="approver" type="text" maxlength="80" autocomplete="name">
+                <label for="approval-comment">Comment (needed to reject)</label>
+                <textarea id="approval-comment" rows="3"></textarea>
+              </div>
+              <p id="approval-message" class="message" role="alert" hidden></p>
+              <div class="row">
+                <button id="approve-button" class="btn primary" type="button">Approve</button>
+                <button id="reject-button" class="btn" type="button">Reject</button>
+              </div>
             </section>
           </div>
           <div id="artifact-view" class="artifact-view" hidden>
@@ -132,7 +143,16 @@
               <div id="lineage-body"></div>
             </section>
           </div>
-          <div class="chat-footer">Stage updates appear automatically. Questions will appear in the conversation.</div>
+          <!-- The last row of the pane, so the conversation scrolls above it and is never covered. -->
+          <form id="chat-bar" class="chat-bar" aria-label="Request a change to this run">
+            <p id="chat-message" class="message" role="alert" hidden></p>
+            <div class="chat-bar-row">
+              <textarea id="chat-text" rows="1" placeholder="Describe a change to this run"
+                        aria-label="Describe a change to this run" aria-describedby="chat-hint" disabled></textarea>
+              <button id="chat-send" class="btn primary" type="submit" disabled>Send</button>
+            </div>
+            <p id="chat-hint" class="chat-hint"></p>
+          </form>
         </div>
       </div>
     </section>
