@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import tools.jackson.databind.JsonNode;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,9 +28,11 @@ public class RunController {
     private static final String PROBLEM_JSON = "application/problem+json";
 
     private final RunService runService;
+    private final RunDetails details;
 
-    public RunController(RunService runService) {
+    public RunController(RunService runService, RunDetails details) {
         this.runService = runService;
+        this.details = details;
     }
 
     // The method returns a ResponseEntity, so the library cannot see the 201 status or the body type on its own.
@@ -61,6 +64,19 @@ public class RunController {
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @GetMapping("/{id}")
     public RunResponse getRun(@PathVariable UUID id) {
-        return RunResponse.from(runService.getRun(id));
+        Run run = runService.getRun(id);
+        return RunResponse.from(run, details.stages(id), details.artifacts(id), details.verification(id));
+    }
+
+    @Operation(summary = "Read an artifact",
+            description = "Returns the content of one stored artifact of the run, as JSON.")
+    @ApiResponse(responseCode = "200", description = "The artifact content.",
+            content = @Content(mediaType = "application/json"))
+    @ApiResponse(responseCode = "404", description = "No such run, kind or version.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @GetMapping("/{id}/artifacts/{kind}/{version}")
+    public JsonNode getArtifact(@PathVariable UUID id, @PathVariable String kind, @PathVariable int version) {
+        runService.getRun(id);
+        return details.artifact(id, kind, version).content();
     }
 }

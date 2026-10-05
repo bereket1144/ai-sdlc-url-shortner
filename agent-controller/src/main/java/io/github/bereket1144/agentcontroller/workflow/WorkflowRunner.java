@@ -31,6 +31,7 @@ public class WorkflowRunner {
     private static final Logger log = LoggerFactory.getLogger(WorkflowRunner.class);
 
     private final CompiledGraph<AgentState> graph;
+    private final Optional<StageProgress> progress;
 
     /** Every stage on its dummy node. */
     public WorkflowRunner(DummySdlcNodes nodes) throws GraphStateException {
@@ -53,10 +54,17 @@ public class WorkflowRunner {
     }
 
     /** When the development agent is on, its stage also commits the change set and has it built and tested. */
-    @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish)
             throws GraphStateException {
+        this(nodes, requirementsAgent, agentStages, developmentFinish, Optional.empty());
+    }
+
+    /** With a progress recorder, every stage writes when it starts and when it finishes. */
+    @Autowired
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
+                          Optional<StageProgress> progress) throws GraphStateException {
         Map<String, NodeAction<AgentState>> agents = new HashMap<>();
         requirementsAgent.ifPresent(node -> agents.put("requirements", node::requirements));
         agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role, node::execute)));
@@ -66,6 +74,7 @@ public class WorkflowRunner {
                 agents.put("development", state -> finish.finish(state, development.apply(state)));
             }
         });
+        this.progress = progress;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         this.graph = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))
@@ -95,11 +104,22 @@ public class WorkflowRunner {
                 .compile();
     }
 
-    private static NodeAction<AgentState> stage(Map<String, NodeAction<AgentState>> agents, String role,
-                                                NodeAction<AgentState> dummy) {
+    private NodeAction<AgentState> stage(Map<String, NodeAction<AgentState>> agents, String role,
+                                         NodeAction<AgentState> dummy) {
         NodeAction<AgentState> agent = agents.get(role);
         log.info("event=workflow_stage_selected stage={} node={}", role, agent == null ? "dummy" : "agent");
-        return agent == null ? dummy : agent;
+        NodeAction<AgentState> action = agent == null ? dummy : agent;
+        if (progress.isEmpty()) {
+            return action;
+        }
+        // The stage records that it is running and, if it returns, that it finished; a failed stage stays running.
+        return state -> {
+            UUID runId = state.<UUID>value("runId").orElseThrow();
+            progress.get().started(runId, role);
+            Map<String, Object> update = action.apply(state);
+            progress.get().finished(runId, role);
+            return update;
+        };
     }
 
     public AgentState run(UUID runId, String requirement, RunKind kind) {

@@ -32,6 +32,9 @@ class RunReadTest {
     @MockitoBean
     private RunService runService;
 
+    @MockitoBean
+    private RunDetails details;
+
     @Autowired
     private MockMvc mvc;
 

@@ -43,10 +43,11 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.2 the document lists POST /v1/runs and GET /v1/runs/{id} and no other path")
+    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14 the document lists the run endpoints and the artifact endpoint, and no other path")
     void documentListsOnlyTheRunEndpoints() throws Exception {
         mvc.perform(get(DOCS))
-                .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}")))
+                .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}",
+                        "/v1/runs/{id}/artifacts/{kind}/{version}")))
                 .andExpect(jsonPath("$.paths['/v1/runs'].keys()", containsInAnyOrder("post")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].keys()", containsInAnyOrder("get")));
     }
@@ -83,9 +84,23 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['200'].content['application/json'].schema.$ref")
                         .value("#/components/schemas/RunResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
-                        "id", "requirement", "status", "createdAt", "updatedAt", "version", "failureReason")))
+                        "id", "requirement", "status", "createdAt", "updatedAt", "version", "failureReason", "stages",
+                        "artifacts", "commit", "verification")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
                         containsInAnyOrder("CREATED", "RUNNING", "SUCCEEDED", "FAILED")));
+    }
+
+    @Test
+    @DisplayName("AC-AGT-62.14 the run API documents the stage, artifact and verification fields and the artifact operation")
+    void runDetailsAreDocumented() throws Exception {
+        mvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.components.schemas.StageState.properties.keys()",
+                        containsInAnyOrder("stage", "state")))
+                .andExpect(jsonPath("$.components.schemas.ArtifactSummary.properties.keys()",
+                        containsInAnyOrder("kind", "version", "summary")))
+                .andExpect(jsonPath("$.components.schemas.Verification.properties.keys()",
+                        containsInAnyOrder("outcome", "testsRun", "testsPassed", "testsFailed")))
+                .andExpect(jsonPath("$.paths['/v1/runs/{id}/artifacts/{kind}/{version}'].get.responses['404']").exists());
     }
 
     @Test
