@@ -13,20 +13,26 @@ import org.junit.jupiter.api.Test;
 class LiveModelClientTest {
 
     @Test
-    @DisplayName("AC-AGT-62.1 a profile with a key is called with the hosted client and one without a key with the local client")
+    @DisplayName("AC-AGT-62.1, AC-AGT-63.1 a profile is called with the client of its API style: Ollama without a key, Anthropic with one, OpenAI when named")
     void sendsEachCallToTheClientOfItsProfile() {
         OllamaModelClient local = mock(OllamaModelClient.class);
         HostedModelClient hosted = mock(HostedModelClient.class);
+        OpenAiCompatibleModelClient openAi = mock(OpenAiCompatibleModelClient.class);
         ModelProfile unkeyed = profile("local", null);
         ModelProfile keyed = profile("hosted", "key");
+        ModelProfile openAiStyle = new ModelProfile("router", "router-model", URI.create("http://localhost"), 32768,
+                1024, Duration.ofSeconds(2), 1, 2, 0.0, "key", ModelProfile.ApiStyle.OPENAI);
         ModelClient.ModelResult fromLocal = result("local");
         ModelClient.ModelResult fromHosted = result("hosted");
         when(local.call("requirements", unkeyed, "system", "user")).thenReturn(fromLocal);
         when(hosted.call("requirements", keyed, "system", "user")).thenReturn(fromHosted);
-        LiveModelClient live = new LiveModelClient(local, hosted);
+        ModelClient.ModelResult fromOpenAi = result("openai");
+        when(openAi.call("requirements", openAiStyle, "system", "user")).thenReturn(fromOpenAi);
+        LiveModelClient live = new LiveModelClient(local, hosted, openAi);
 
         assertThat(live.call("requirements", unkeyed, "system", "user")).isSameAs(fromLocal);
         assertThat(live.call("requirements", keyed, "system", "user")).isSameAs(fromHosted);
+        assertThat(live.call("requirements", openAiStyle, "system", "user")).isSameAs(fromOpenAi);
     }
 
     private static ModelProfile profile(String name, String key) {

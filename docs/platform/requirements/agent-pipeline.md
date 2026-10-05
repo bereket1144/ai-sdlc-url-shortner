@@ -314,6 +314,22 @@ F. End to end
 - AC-AGT-62.15 A scripted end-to-end test in `./mvnw verify` posts a requirement through the HTTP API with a scripted model and a fake container port, waits for the run, and checks: status SUCCEEDED, an artifact of every stage, a commit on `run/<run-id>` that contains the files of the scripted change set, and a stored passing verification result. A second case with a failing scripted build ends FAILED with `VERIFICATION_FAILED`.
 - AC-AGT-62.16 An opt-in end-to-end test, enabled by a property and the key in the environment, runs the real model and the real container on the requirement in `scenarios/walking-skeleton.md`. That file asks for a small link-shortening service and pins the language and test tool (Python, the standard library, SQLite and pytest). The platform code contains neither. The test asserts structure only: the run ends SUCCEEDED, or FAILED with a reason; an artifact exists for every stage that ran; the commit and the verification result exist when the run got that far. It never asserts wording. `./mvnw verify` skips it.
 
+### AGT-63 Call an OpenAI-compatible model API such as OpenRouter
+
+Status: coded
+
+Depends on: AGT-3, AGT-62.
+
+As the platform owner, I want to run the agents on any model reached through an OpenAI-style chat API, such as OpenRouter, so that the choice of provider and model is a configuration change and not a code change.
+
+- AC-AGT-63.1 A model profile may name its API style with a setting `api-style`: `ollama`, `anthropic` or `openai`. A profile without it behaves as before (a profile with a key uses the Anthropic style, one without a key uses the Ollama style), so no existing configuration changes.
+- AC-AGT-63.2 A profile with the style `openai` is served by a new `ModelClient` implementation that sends `POST <base-address>/chat/completions` with the header `Authorization: Bearer <key>` and a body holding the model, a system message and a user message, the profile's answer limit as `max_tokens`, and its temperature. For OpenRouter the base address is `https://openrouter.ai/api/v1`.
+- AC-AGT-63.3 The answer text is the content of the first choice. A finish reason `stop` is COMPLETE and `length` is ANSWER_LIMIT; any other value, no choice, or empty content is RESPONSE_UNREADABLE. The reported prompt and answer token counts are kept when present.
+- AC-AGT-63.4 A leading reasoning block between `<think>` and `</think>` in the content is removed before the text is returned, so the answer check sees only the answer.
+- AC-AGT-63.5 Failures use the same typed failures and retryability as the other clients: 429 is RATE_LIMITED, 5xx is SERVER_ERROR, other 4xx (including 401, 402 and 404) is REQUEST_REJECTED, a timeout is TIMED_OUT, and no connection is UNREACHABLE. A body with an `error` object is a failure even when the status is 200. A message or a log never holds the key, a prompt, an answer or a response body.
+- AC-AGT-63.6 Like the other clients: one call slot per profile, no redirects followed, and a blank key is refused before any request.
+- AC-AGT-63.7 An opt-in live check, enabled by a property and the profile and key in the environment, sends one small request and asserts only structure (non-blank text and a finish reason). `./mvnw verify` skips it.
+
 ### AGT-12 Turn a requirement into stories and criteria
 
 Status: coded
