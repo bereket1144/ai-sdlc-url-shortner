@@ -49,12 +49,12 @@ public class ModelCallRecords {
     public enum AttemptKind { FIRST, REPAIR, RETRY, FALLBACK }
 
     /**
-     * How an attempt ended. The caller decides it. The last six are the typed failures of the model call itself, and
+     * How an attempt ended. The caller decides it. The last seven are the typed failures of the model call itself, and
      * have the same names as {@code ModelClient.FailureReason}.
      */
     public enum Outcome {
         SUCCESS, INVALID_ANSWER, ANSWER_CUT_OFF,
-        UNREACHABLE, TIMED_OUT, RATE_LIMITED, SERVER_ERROR, REQUEST_REJECTED, RESPONSE_UNREADABLE
+        UNREACHABLE, TIMED_OUT, RATE_LIMITED, SERVER_ERROR, REQUEST_REJECTED, RESPONSE_UNREADABLE, REPLAY_MISSING
     }
 
     /**

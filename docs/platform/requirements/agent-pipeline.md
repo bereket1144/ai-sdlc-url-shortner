@@ -225,7 +225,7 @@ As a reviewer, I want a failed run to tell me why, so that I do not have to read
 
 ### AGT-10 Replay recorded answers instead of calling a model
 
-Status: open
+Status: coded
 
 Depends on: AGT-7.
 

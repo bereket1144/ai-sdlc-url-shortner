@@ -14,7 +14,9 @@ public interface ModelClient {
 
     enum FailureReason {
         UNREACHABLE(true), TIMED_OUT(true), RATE_LIMITED(true), SERVER_ERROR(true),
-        REQUEST_REJECTED(false), RESPONSE_UNREADABLE(false);
+        REQUEST_REJECTED(false), RESPONSE_UNREADABLE(false),
+        /** Replay mode has no recorded answer for the call; it is never retried and never goes to a live model. */
+        REPLAY_MISSING(false);
 
         private final boolean retryable;
 
