@@ -65,6 +65,12 @@ public class StructuredAnswerService {
     }
 
     public AcceptedAnswer call(UUID runId, String roleId, String task, List<PromptInput> inputs) {
+        return call(runId, roleId, task, inputs, value -> List.of());
+    }
+
+    /** Phase-specific checks participate in the same bounded repair and recorded-call policy. */
+    public AcceptedAnswer call(UUID runId, String roleId, String task, List<PromptInput> inputs,
+                               Function<JsonNode, List<String>> phaseCheck) {
         Objects.requireNonNull(runId, "runId must not be null");
         ModelProfile profile = profiles.forRole(roleId);
         int repairs = 0;
@@ -85,6 +91,12 @@ public class StructuredAnswerService {
             OutputValidator.Validation checked = answer.finishReason() == FinishReason.ANSWER_LIMIT
                     ? new OutputValidator.Validation(null, List.of(CUT_OFF_MESSAGE))
                     : validator.validate(roleId, answer.text());
+            if (checked.valid()) {
+                List<String> phaseMessages = phaseCheck.apply(checked.value());
+                if (!phaseMessages.isEmpty()) {
+                    checked = new OutputValidator.Validation(null, phaseMessages);
+                }
+            }
             Outcome outcome = answer.finishReason() == FinishReason.ANSWER_LIMIT ? Outcome.ANSWER_CUT_OFF
                     : checked.valid() ? Outcome.SUCCESS : Outcome.INVALID_ANSWER;
             records.record(new Attempt(runId, roleId, profile, invocation.kind(),

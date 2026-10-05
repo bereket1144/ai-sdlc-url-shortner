@@ -62,6 +62,25 @@ Read a specific artifact with:
 GET /v1/runs/{id}/artifacts/{kind}/{version}
 ```
 
+### Resolve requirements clarification
+
+The requirements agent first returns at most four priority questions and optional product assumptions, before stories. Python, the standard library, SQLite and pytest are fixed execution context. Questions pause the run at `WAITING_FOR_INPUT`; assumptions alone allow processing to continue.
+
+Read `GET /v1/runs/{id}/questions`. Items include unique `Q-*` IDs, artifact versions, a `required` flag, `OPEN`, `ANSWERED` or `ASSUMED` status and saved replies. Submit all current questions together to `POST /v1/runs/{id}/replies`. You may also answer assumptions to confirm or correct them:
+
+```json
+{
+  "answers": [
+    {"questionId": "Q-1", "answer": "Reuse the existing code for duplicate URLs."},
+    {"questionId": "Q-2", "answer": "Confirmed."}
+  ]
+}
+```
+
+Use the actual IDs returned for your run. Assumption answers are optional: omitted proposals become `ASSUMED` and are labelled unconfirmed in the final artifact. Every question still needs an answer. Supplied replies must be nonblank and at most 5,000 characters. An accepted reply returns `202` with `{"runId":"...","message":"Answers submitted."}` and queues processing for the next scheduler poll. Invalid batches return `400` without changing items; a reply to an already answered batch returns `409`. A material ambiguity in a reply may prompt another batch. Otherwise, stories use the saved answers and optional assumptions.
+
+Waiting batches and answers survive a controller restart. This continuation happens before the downstream graph starts; it does not provide recovery of interrupted development or builds. Answering clarification also does not approve the resulting stories; story approval remains unfinished.
+
 Use the kind and version returned by the run response. Artifact kinds include `requirements`, `design`, `plan`, `development`, `qa`, `review` and `documentation`. The planning stage produces kind `plan`. Unknown artifacts return `404`.
 
 In the live profile, workspaces are created under `../../agentic-sdlc-workspaces/<run-id>`, relative to `agent-controller/`. Each workspace has branch `run/<run-id>` and a sparse checkout of `apps/url-shortener/` and `runs/`. Generated commits remain in that clone; the source checkout is not updated or pushed. Inspect the generated commit there using Git. Agents' other outputs are stored in PostgreSQL and read through the artifact API, not automatically exported as files.
@@ -90,4 +109,4 @@ Stop the controller with Ctrl+C and stop the database with `docker compose stop`
 - [Work history](docs/steps.md)
 - [Architecture decisions](docs/adr/)
 
-If startup fails, check database health and host port `5433`. If verification fails, check that Docker is running and the sandbox image exists. Inspect the run's failure reason and controller logs before retrying. A new API submission creates a new run; automatic crash recovery and continuation are not implemented in this live skeleton.
+If startup fails, check database health and host port `5433`. If verification fails, check that Docker is running and the sandbox image exists. Inspect the run's failure reason and controller logs before retrying. A new API submission creates a new run; automatic recovery of interrupted running work is not implemented in this live skeleton.

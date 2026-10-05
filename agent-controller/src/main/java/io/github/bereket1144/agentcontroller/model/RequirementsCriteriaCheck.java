@@ -24,6 +24,25 @@ public class RequirementsCriteriaCheck implements OutputValidator.RoleCheck {
     @Override
     public List<String> validate(JsonNode output) {
         List<String> messages = new ArrayList<>();
+        // Union-shaped model responses sometimes include empty story fields during clarification.
+        if (!output.has("stories") || (output.has("questions") && output.get("stories").isEmpty())) {
+            if (!output.has("questions")) {
+                return List.of("Clarification requires questions and assumptions arrays");
+            }
+            for (String field : List.of("questions", "assumptions")) {
+                for (JsonNode item : output.get(field)) {
+                    for (String textField : List.of("id", "text", "why")) {
+                        if (text(item, textField) == null) {
+                            messages.add("Clarification item has a blank " + textField);
+                        }
+                    }
+                }
+            }
+            return messages;
+        }
+        if (!output.has("openQuestions")) {
+            return List.of("Stories require an openQuestions array");
+        }
         Set<String> criterionIds = new HashSet<>();
         for (JsonNode story : output.get("stories")) {
             checkStory(story, criterionIds, messages);

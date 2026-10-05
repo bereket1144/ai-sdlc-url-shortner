@@ -21,6 +21,9 @@ public class RequirementsStoryIdsCheck implements OutputValidator.RoleCheck {
     public List<String> validate(JsonNode output) {
         Set<String> seen = new HashSet<>();
         List<String> messages = new ArrayList<>();
+        if (!output.has("stories")) {
+            return messages;
+        }
         for (JsonNode story : output.get("stories")) {
             JsonNode id = story.get("id");
             if (id != null && id.isString() && !id.asString().isBlank() && !seen.add(id.asString())) {

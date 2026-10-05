@@ -29,10 +29,12 @@ public class RunController {
 
     private final RunService runService;
     private final RunDetails details;
+    private final ClarificationService clarification;
 
-    public RunController(RunService runService, RunDetails details) {
+    public RunController(RunService runService, RunDetails details, ClarificationService clarification) {
         this.runService = runService;
         this.details = details;
+        this.clarification = clarification;
     }
 
     // The method returns a ResponseEntity, so the library cannot see the 201 status or the body type on its own.
@@ -65,7 +67,8 @@ public class RunController {
     @GetMapping("/{id}")
     public RunResponse getRun(@PathVariable UUID id) {
         Run run = runService.getRun(id);
-        return RunResponse.from(run, details.stages(id), details.artifacts(id), details.verification(id));
+        return RunResponse.from(run, details.stages(id), details.artifacts(id), details.verification(id),
+                run.getStatus() == RunStatus.WAITING_FOR_INPUT ? clarification.awaiting(id) : null);
     }
 
     @Operation(summary = "Read an artifact",
@@ -79,4 +82,34 @@ public class RunController {
         runService.getRun(id);
         return details.artifact(id, kind, version).content();
     }
+
+    @Operation(summary = "Read requirements clarification", description = "Returns all question and assumption "
+            + "batches, with their artifact versions, required flag, OPEN, ANSWERED or ASSUMED status, and saved replies.")
+    @ApiResponse(responseCode = "200", description = "Clarification items, or empty arrays before any exist.")
+    @ApiResponse(responseCode = "404", description = "Run not found.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @GetMapping("/{id}/questions")
+    public ClarificationService.Questions getQuestions(@PathVariable UUID id) {
+        runService.getRun(id);
+        return clarification.questions(id);
+    }
+
+    @Operation(summary = "Answer the complete clarification batch", description = "One answer per current question "
+            + "is required; assumption answers are optional. Queues requirements processing again.")
+    @ApiResponse(responseCode = "202", description = "Replies saved; processing is queued and continues automatically.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReplyAccepted.class)))
+    @ApiResponse(responseCode = "400", description = "Incomplete or invalid answers.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "409", description = "Run is not waiting for this batch.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "404", description = "Run not found.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @PostMapping("/{id}/replies")
+    public ResponseEntity<ReplyAccepted> reply(@PathVariable UUID id, @RequestBody ClarificationService.Replies replies) {
+        clarification.reply(id, replies);
+        return ResponseEntity.accepted().location(URI.create(RUNS_PATH + "/" + id))
+                .body(new ReplyAccepted(id, "Answers submitted."));
+    }
+
+    public record ReplyAccepted(UUID runId, String message) { }
 }

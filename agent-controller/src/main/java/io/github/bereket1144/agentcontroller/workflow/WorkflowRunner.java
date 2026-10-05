@@ -32,6 +32,7 @@ public class WorkflowRunner {
 
     private final CompiledGraph<AgentState> graph;
     private final Optional<StageProgress> progress;
+    private final Optional<RequirementsAgentNode> requirementsAgent;
 
     /** Every stage on its dummy node. */
     public WorkflowRunner(DummySdlcNodes nodes) throws GraphStateException {
@@ -75,6 +76,7 @@ public class WorkflowRunner {
             }
         });
         this.progress = progress;
+        this.requirementsAgent = requirementsAgent;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         this.graph = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))
@@ -114,6 +116,10 @@ public class WorkflowRunner {
         }
         // The stage records that it is running and, if it returns, that it finished; a failed stage stays running.
         return state -> {
+            if (role.equals("requirements") && agent != null) {
+                // Real requirements progress was recorded during the persisted clarification preflight.
+                return action.apply(state);
+            }
             UUID runId = state.<UUID>value("runId").orElseThrow();
             progress.get().started(runId, role);
             Map<String, Object> update = action.apply(state);
@@ -127,10 +133,21 @@ public class WorkflowRunner {
         Objects.requireNonNull(runId, "runId must not be null");
         Objects.requireNonNull(requirement, "requirement must not be null");
         Objects.requireNonNull(kind, "kind must not be null");
-        Map<String, Object> input = Map.of(
+        Map<String, Object> input = new HashMap<>(Map.of(
                 "runId", runId,
                 "requirement", requirement,
-                "kind", kind);
+                "kind", kind));
+
+        if (requirementsAgent.isPresent()) {
+            progress.ifPresent(recorder -> recorder.started(runId, "requirements"));
+            Map<String, Object> prepared = requirementsAgent.get().prepare(new AgentState(input));
+            input.putAll(prepared);
+            if (Boolean.TRUE.equals(prepared.get("waitingForInput"))) {
+                log.info("event=workflow_waiting runId={} stage=requirements", runId);
+                return new AgentState(input);
+            }
+            progress.ifPresent(recorder -> recorder.finished(runId, "requirements"));
+        }
 
         // LangGraph4j needs an executor on the fan-out node for these branches to overlap.
         try (ExecutorService branchExecutor = Executors.newVirtualThreadPerTaskExecutor()) {

@@ -15,6 +15,10 @@ import java.util.UUID;
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 import io.github.bereket1144.agentcontroller.workflow.WorkflowRunner;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.bsc.langgraph4j.state.AgentState;
+import java.util.Map;
+import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +59,12 @@ class RunDispatcherTest {
 
     private UUID createdId;
 
+    @BeforeEach
+    void completedWorkflowByDefault() {
+        when(workflowRunner.run(any(UUID.class), anyString(), any(RunKind.class)))
+                .thenReturn(new AgentState(Map.of()));
+    }
+
     @AfterEach
     void deleteCreatedRun() {
         if (createdId != null) {
@@ -78,7 +88,7 @@ class RunDispatcherTest {
             String storedStatus = separateRead.execute(status -> jdbcTemplate.queryForObject(
                     "select status from runs where id = ?", String.class, runId));
             assertThat(storedStatus).isEqualTo("RUNNING");
-            return null;
+            return new AgentState(Map.of());
         }).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD));
 
         Boolean dispatched = callerTransaction.execute(status -> runDispatcher.dispatchNext());

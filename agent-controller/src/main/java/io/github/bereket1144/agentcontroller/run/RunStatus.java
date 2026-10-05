@@ -4,6 +4,7 @@ package io.github.bereket1144.agentcontroller.run;
 public enum RunStatus {
     CREATED,
     RUNNING,
+    WAITING_FOR_INPUT,
     SUCCEEDED,
     FAILED
 }

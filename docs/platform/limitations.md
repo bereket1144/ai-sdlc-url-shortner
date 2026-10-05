@@ -5,11 +5,11 @@ This prototype demonstrates one live end-to-end skeleton. It is not ready to ope
 | Area | Current limitation and consequence |
 | --- | --- |
 | Success | With agents enabled, success means the graph completed after passing generated tests. Review or QA findings do not block it. With dummy stages, success proves routing only. |
-| Approvals | No live clarification, reply, approval or stop API exists. Unanswered questions are retained and represented as assumptions. High-impact changes have no enforced human gate yet. |
+| Approvals | AGT-64 adds a live requirements clarification and batch reply API. Story approval, other-role clarification and stop operations remain unfinished. High-impact changes have no enforced approval gate yet. |
 | Task execution | Planning produces an artifact, but development writes all files in one model answer. Task dependencies do not schedule individual development tasks. Keep trial requirements small. |
 | Repair | Invalid model outputs can be repaired and transient calls retried. A failed product test or negative review does not loop back to development. |
 | Brownfield | The graph contains a conditional impact-analysis route, but the create-run API always chooses greenfield. No completed brownfield scenario has been demonstrated. |
-| Recovery | Stored records survive database persistence, but the live graph has no checkpoint saver or resume API. Automatic startup failure of interrupted runs and leftover-container reconciliation are not implemented. A crash can leave a run RUNNING. |
+| Recovery | Requirements clarification batches and answers survive a restart and can continue through polling. The downstream graph has no checkpoint saver or resume API. Automatic startup failure of interrupted runs and leftover-container reconciliation are not implemented. A crash can leave a run RUNNING. |
 | Rollback | A separate workspace protects the source checkout, but multi-file writes are not atomic and there is no completed rollback/safe-stop workflow. Partial writes can remain in a failed workspace. |
 | Product validation | The Python container runs tests and returns their report. No generated-product coverage gate, independent criterion coverage gate or release-readiness gate exists. |
 | Audit and metrics | Model attempts, artifacts, commits, stage progress and verification results provide traceability. A complete append-only event trail and reliability metrics report are unfinished. |

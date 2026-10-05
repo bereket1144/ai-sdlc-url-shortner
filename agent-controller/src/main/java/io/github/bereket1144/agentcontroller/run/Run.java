@@ -93,6 +93,21 @@ public class Run {
         this.status = RunStatus.SUCCEEDED;
     }
 
+    public void waitForInput() {
+        if (status != RunStatus.RUNNING) {
+            throw new IllegalStateException("Only a RUNNING run can wait for input");
+        }
+        status = RunStatus.WAITING_FOR_INPUT;
+    }
+
+    /** Re-enter the existing claim queue after a complete clarification reply. */
+    public void resumeAfterInput() {
+        if (status != RunStatus.WAITING_FOR_INPUT) {
+            throw new IllegalStateException("Only a waiting run can resume");
+        }
+        status = RunStatus.CREATED;
+    }
+
     public void fail() {
         fail(RunFailureReason.UNEXPECTED);
     }

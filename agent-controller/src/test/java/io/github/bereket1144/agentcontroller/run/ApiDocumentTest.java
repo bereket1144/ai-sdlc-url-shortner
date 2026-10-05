@@ -47,7 +47,7 @@ class ApiDocumentTest {
     void documentListsOnlyTheRunEndpoints() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}",
-                        "/v1/runs/{id}/artifacts/{kind}/{version}")))
+                        "/v1/runs/{id}/artifacts/{kind}/{version}", "/v1/runs/{id}/questions", "/v1/runs/{id}/replies")))
                 .andExpect(jsonPath("$.paths['/v1/runs'].keys()", containsInAnyOrder("post")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].keys()", containsInAnyOrder("get")));
     }
@@ -85,9 +85,9 @@ class ApiDocumentTest {
                         .value("#/components/schemas/RunResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
                         "id", "requirement", "status", "createdAt", "updatedAt", "version", "failureReason", "stages",
-                        "artifacts", "commit", "verification")))
+                        "artifacts", "commit", "verification", "awaiting")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
-                        containsInAnyOrder("CREATED", "RUNNING", "SUCCEEDED", "FAILED")));
+                        containsInAnyOrder("CREATED", "RUNNING", "WAITING_FOR_INPUT", "SUCCEEDED", "FAILED")));
     }
 
     @Test

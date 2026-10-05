@@ -14,6 +14,8 @@ public record RunResponse(UUID id, String requirement, RunStatus status, Instant
         Long version,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         Failure failureReason,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        ClarificationService.Awaiting awaiting,
         List<StageState> stages,
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         List<ArtifactSummary> artifacts,
@@ -23,11 +25,11 @@ public record RunResponse(UUID id, String requirement, RunStatus status, Instant
         Verification verification) {
 
     static RunResponse from(Run run, List<StageState> stages, List<ArtifactSummary> artifacts,
-                            Optional<VerificationResult> verification) {
+                            Optional<VerificationResult> verification, ClarificationService.Awaiting awaiting) {
         return new RunResponse(run.getId(), run.getRequirement(), run.getStatus(), run.getCreatedAt(),
                 run.getUpdatedAt(), run.getVersion(), run.getStatus() == RunStatus.FAILED
                         ? new Failure(run.getFailureReason(), run.getFailureReason().message()) : null,
-                stages, artifacts, verification.map(VerificationResult::commitId).orElse(null),
+                awaiting, stages, artifacts, verification.map(VerificationResult::commitId).orElse(null),
                 verification.map(result -> new Verification(result.outcome().name(), result.testsRun(),
                         result.testsPassed(), result.testsFailed())).orElse(null));
     }

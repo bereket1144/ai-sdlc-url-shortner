@@ -104,8 +104,6 @@ class StructuredAnswerServiceTest {
                     assertThat(failure.code()).isEqualTo("OUTPUT_INVALID");
                     assertThat(failure.repairAttempts()).isEqualTo(2);
                     assertThat(failure.messages()).containsExactly(
-                            "Missing required field: stories",
-                            "Missing required field: openQuestions",
                             "Missing required field: assumptions");
                     assertThat(failure.getMessage()).doesNotContain(INVALID);
                 });

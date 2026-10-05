@@ -80,6 +80,8 @@ class RunDispatcherFailureTest {
         when(run.getRequirement()).thenReturn(requirement);
         when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
+        when(workflowRunner.run(runId, requirement, RunKind.GREENFIELD))
+                .thenReturn(new org.bsc.langgraph4j.state.AgentState(java.util.Map.of()));
         doThrow(recordingFailure).when(runService).succeedRun(runId);
 
         Logger dispatcherLog = (Logger) LoggerFactory.getLogger(RunDispatcher.class);

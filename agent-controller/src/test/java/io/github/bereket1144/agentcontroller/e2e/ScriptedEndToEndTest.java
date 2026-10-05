@@ -64,7 +64,7 @@ class ScriptedEndToEndTest {
     private static final Map<String, String> ANSWERS = Map.of(
             "requirements", "{\"stories\":[{\"id\":\"S-1\",\"title\":\"Shorten\",\"role\":\"user\",\"want\":\"w\","
                     + "\"benefit\":\"b\",\"acceptanceCriteria\":[{\"id\":\"S-1.1\",\"text\":\"t\"}]}],"
-                    + "\"openQuestions\":[],\"assumptions\":[\"a\"]}",
+                    + "\"openQuestions\":[],\"assumptions\":[]}",
             "design", "{\"components\":[\"c\"],\"interfaces\":[\"i\"],\"dataFlow\":\"d\",\"decisions\":[\"x\"],"
                     + "\"alternatives\":[\"y\"],\"risks\":[\"r\"],\"diagrams\":[\"graph TD\"]}",
             "planning", "{\"tasks\":[\"t1\"]}",
@@ -94,7 +94,9 @@ class ScriptedEndToEndTest {
         ModelClient scriptedModel() {
             return (role, profile, systemText, userText) -> {
                 ROLES_CALLED.add(role);
-                return new ModelResult(ANSWERS.get(role), FinishReason.COMPLETE, null, null, Duration.ZERO);
+                String text = role.equals("requirements") && userText.contains("CLARIFICATION phase")
+                        ? "{\"questions\":[],\"assumptions\":[]}" : ANSWERS.get(role);
+                return new ModelResult(text, FinishReason.COMPLETE, null, null, Duration.ZERO);
             };
         }
 
@@ -136,7 +138,7 @@ class ScriptedEndToEndTest {
 
         mvc.perform(get("/v1/runs/" + id))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.artifacts.length()").value(7))
+                .andExpect(jsonPath("$.artifacts.length()").value(8))
                 .andExpect(jsonPath("$.verification.outcome").value("PASSED"))
                 .andExpect(jsonPath("$.commit").isNotEmpty());
         List<String> states = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()
@@ -153,7 +155,7 @@ class ScriptedEndToEndTest {
         assertThat(git(workspace, "rev-parse", "run/" + id)).isEqualTo(commit);
         assertThat(git(workspace, "show", "--name-only", "--format=", commit))
                 .contains("apps/url-shortener/app.py", "apps/url-shortener/test_app.py");
-        assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "design", "planning", "development", "qa",
+        assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development", "qa",
                 "review", "documentation");
     }
 
@@ -170,7 +172,7 @@ class ScriptedEndToEndTest {
                 .andExpect(jsonPath("$.failureReason.code").value("VERIFICATION_FAILED"))
                 .andExpect(jsonPath("$.verification.outcome").value("FAILED"));
         // The stages after development never ran.
-        assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "design", "planning", "development");
+        assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development");
     }
 
     private UUID postRequirement() throws Exception {

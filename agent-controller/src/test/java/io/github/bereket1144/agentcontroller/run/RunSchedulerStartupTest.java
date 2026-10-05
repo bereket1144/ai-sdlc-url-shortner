@@ -1,19 +1,23 @@
 package io.github.bereket1144.agentcontroller.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 import io.github.bereket1144.agentcontroller.workflow.WorkflowRunner;
 import org.flywaydb.core.Flyway;
+import org.bsc.langgraph4j.state.AgentState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -56,8 +60,16 @@ class RunSchedulerStartupTest {
     @Autowired
     private RunRepository runRepository;
 
-    @MockitoBean
+    @TestBean(methodName = "completedWorkflow", enforceOverride = true)
     private WorkflowRunner workflowRunner;
+
+    static WorkflowRunner completedWorkflow() {
+        // Polling starts during context startup, before a @BeforeEach method could stub the mock.
+        WorkflowRunner runner = mock(WorkflowRunner.class);
+        when(runner.run(SAVED_ID, REQUIREMENT, RunKind.GREENFIELD))
+                .thenReturn(new AgentState(Map.of()));
+        return runner;
+    }
 
     @BeforeAll
     static void saveCreatedRunBeforeApplicationStarts() throws SQLException {

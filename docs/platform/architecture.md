@@ -68,7 +68,7 @@ Each run gets a separate Git clone outside the controller checkout. Only the pro
 
 The controller uses the Docker CLI through `DockerCommand`. It copies the workspace into a new container, runs as UID/GID `10001`, disables networking, sets CPU, memory, process and time limits, copies out the JUnit report, then removes the container. No host directory is mounted. Plain code parses the report and records the outcome with the commit id.
 
-PostgreSQL stores runs, model calls and reservations, artifacts, stage progress and verification results. Flyway owns schemas and Hibernate validates them. A separate `PostgresSaver` factory and foundation tests prove JSON checkpoint storage and pause/resume mechanics. The live `WorkflowRunner` currently compiles without a checkpoint saver; it does not offer durable human pauses or graph resume.
+PostgreSQL stores runs, model calls and reservations, artifacts, stage progress and verification results. Flyway owns schemas and Hibernate validates them. A separate `PostgresSaver` factory and foundation tests prove JSON checkpoint storage and pause/resume mechanics. The graph compiles without a checkpoint saver. AGT-64 now runs a persisted requirements clarification phase before this graph: waiting releases dispatch, and complete replies queue the run again. This supports durable requirements waits without providing general graph resume.
 
 ## Decisions and their costs
 

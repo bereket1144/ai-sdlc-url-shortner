@@ -175,7 +175,7 @@ class RoleCatalogTest {
     void loadsOutputFields() throws IOException {
         RoleCatalog catalog = new RoleCatalog(roleFiles());
         Map<String, List<String>> expectedNames = Map.of(
-                "requirements", List.of("stories", "openQuestions", "assumptions"),
+                "requirements", List.of("stories", "questions", "openQuestions", "assumptions"),
                 "impactAnalysis", List.of("affectedFiles", "affectedBehaviors", "dependencies", "dataFlows",
                         "risks", "evidence", "openQuestions"),
                 "design", List.of("components", "interfaces", "dataFlow", "decisions", "alternatives",
@@ -192,7 +192,7 @@ class RoleCatalogTest {
         expectedNames.forEach((roleId, names) -> assertThat(catalog.get(roleId).output().fields())
                 .extracting(RoleCatalog.OutputField::name).containsExactlyElementsOf(names));
         assertThat(catalog.get("requirements").output().fields()).contains(
-                new RoleCatalog.OutputField("stories", RoleCatalog.FieldType.ARRAY, true));
+                new RoleCatalog.OutputField("stories", RoleCatalog.FieldType.ARRAY, false));
         assertThat(catalog.get("qa").output().fields()).contains(
                 new RoleCatalog.OutputField("criterionMapping", RoleCatalog.FieldType.OBJECT, true),
                 new RoleCatalog.OutputField("failureDetails", RoleCatalog.FieldType.ARRAY, false));

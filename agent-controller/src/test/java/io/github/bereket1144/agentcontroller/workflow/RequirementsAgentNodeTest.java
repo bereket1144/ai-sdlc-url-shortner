@@ -35,6 +35,7 @@ import io.github.bereket1144.agentcontroller.model.ScriptedModelClient;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords;
 import io.github.bereket1144.agentcontroller.run.RunKind;
+import io.github.bereket1144.agentcontroller.run.ClarificationService;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.state.AgentState;
 import org.junit.jupiter.api.DisplayName;
@@ -51,7 +52,7 @@ class RequirementsAgentNodeTest {
     private static final String ANSWER = """
             {"stories":[{"id":"S-1","title":"Add","role":"user","want":"to add two numbers","benefit":"a sum",
               "acceptanceCriteria":[{"id":"S-1.1","text":"PRIVATE_CRITERION two numbers are added"}]}],
-             "openQuestions":[],"assumptions":["PRIVATE_ASSUMPTION runs in a terminal"]}
+             "openQuestions":[],"assumptions":[]}
             """;
 
     private final ModelProfile profile = new ModelProfile("local", "model", URI.create("http://localhost:11434"),
@@ -66,9 +67,9 @@ class RequirementsAgentNodeTest {
     void storesTheAnswerAsARequirementsArtifact() throws IOException {
         RequirementsAgentNode node = node();
 
-        Map<String, Object> update = node.requirements(state());
+        Map<String, Object> update = node.prepare(state());
 
-        assertThat(model.calls()).singleElement().satisfies(call -> {
+        assertThat(model.calls()).hasSize(2).allSatisfy(call -> {
             assertThat(call.role()).isEqualTo("requirements");
             assertThat(call.userText()).contains(REQUIREMENT);
         });
@@ -77,7 +78,7 @@ class RequirementsAgentNodeTest {
         assertThat(stored.getValue().runId()).isEqualTo(runId);
         assertThat(stored.getValue().role()).isEqualTo("requirements");
         assertThat(stored.getValue().content().get("stories").get(0).get("id").asString()).isEqualTo("S-1");
-        assertThat(stored.getValue().summary()).isEqualTo("1 stories, 0 open questions, 1 assumptions");
+        assertThat(stored.getValue().summary()).isEqualTo("1 stories, 0 open questions, 0 assumptions");
         assertThat(stored.getValue().profile()).isEqualTo(profile);
         assertThat(update).containsExactly(Map.entry("requirements", ref));
     }
@@ -99,7 +100,8 @@ class RequirementsAgentNodeTest {
         ApplicationContextRunner contexts = new ApplicationContextRunner()
                 .withUserConfiguration(RequirementsAgentNode.class)
                 .withBean(StructuredAnswerService.class, () -> mock(StructuredAnswerService.class))
-                .withBean(ArtifactStore.class, () -> mock(ArtifactStore.class));
+                .withBean(ArtifactStore.class, () -> mock(ArtifactStore.class))
+                .withBean(ClarificationService.class, () -> mock(ClarificationService.class));
 
         contexts.run(context -> assertThat(context).doesNotHaveBean(RequirementsAgentNode.class));
         contexts.withPropertyValues("agent.stages.requirements=agent")
@@ -116,7 +118,7 @@ class RequirementsAgentNodeTest {
         appender.start();
         root.addAppender(appender);
         try {
-            node.requirements(state());
+            node.prepare(state());
         } finally {
             root.detachAppender(appender);
             appender.stop();
@@ -130,7 +132,7 @@ class RequirementsAgentNodeTest {
                     assertThat(event.getLevel()).isEqualTo(Level.INFO);
                     assertThat(event.getFormattedMessage()).contains("event=requirements_artifact_stored",
                             "runId=" + runId, "role=requirements", "kind=requirements", "version=1",
-                            "fingerprint=" + ref.fingerprint(), "stories=1", "openQuestions=0", "assumptions=1");
+                            "fingerprint=" + ref.fingerprint(), "stories=1", "openQuestions=0", "assumptions=0");
                 });
     }
 
@@ -139,6 +141,7 @@ class RequirementsAgentNodeTest {
     }
 
     private RequirementsAgentNode node() throws IOException {
+        model.addResult(new ModelResult("{\"questions\":[],\"assumptions\":[]}", FinishReason.COMPLETE, null, null, null));
         model.addResult(new ModelResult(ANSWER, FinishReason.COMPLETE, null, null, null));
         when(store.store(any())).thenReturn(ref);
         RoleCatalog roles = new RoleCatalog(new PathMatchingResourcePatternResolver()
@@ -151,6 +154,8 @@ class RequirementsAgentNodeTest {
         StructuredAnswerService answers = new StructuredAnswerService(model, profiles,
                 new PromptBuilder(profiles, roles, 3), validator, mock(ModelCallRecords.class),
                 mock(ModelCallBudget.class), 2, Duration.ZERO);
-        return new RequirementsAgentNode(answers, store);
+        ClarificationService clarification = mock(ClarificationService.class);
+        when(clarification.questions(runId)).thenReturn(new ClarificationService.Questions(List.of(), List.of()));
+        return new RequirementsAgentNode(answers, store, clarification);
     }
 }
