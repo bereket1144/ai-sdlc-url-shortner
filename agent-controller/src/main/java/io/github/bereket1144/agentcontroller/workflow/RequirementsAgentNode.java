@@ -20,7 +20,6 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
-import tools.jackson.databind.node.ArrayNode;
 
 /**
  * The requirements stage run by the requirements agent. It exists only when {@code agent.stages.requirements=agent};
@@ -59,39 +58,37 @@ public class RequirementsAgentNode {
             return Map.of("waitingForInput", true);
         }
         ClarificationService.Questions history = clarification.questions(runId);
-        AcceptedAnswer batch = answers.call(runId, ROLE, CONTEXT
-                + "CLARIFICATION phase: return only questions and assumptions arrays. Present all unresolved product "
-                + "questions in one batch of at most four, ordered from most to least important. Ask only decisions "
-                + "that materially affect the product. Put minor choices in optional assumptions with clear proposed "
-                + "behaviour. Each item has id, text and why; questions may have proposedDefault. "
-                + "Assumptions marked ASSUMED are usable proposals, not human-confirmed decisions; do not ask the user "
-                + "to confirm them or repeat resolved decisions. Unanswered questions still require replies. "
-                + "Do not produce stories. If nothing needs clarification, return both arrays empty.", inputs(requirement, history),
-                value -> !value.has("questions") || hasItems(value, "stories") || hasItems(value, "openQuestions")
-                        ? List.of("CLARIFICATION requires questions and assumptions, with no nonempty stories or openQuestions")
-                        : List.of());
-        clarification.store(runId, batch);
-        if (!batch.value().get("questions").isEmpty()) {
-            return Map.of("waitingForInput", true);
+        // The questions are asked once, before the first stories. After the reply the run goes straight to the
+        // stories, and a run with nothing to ask stores no clarification batch at all.
+        if (history.questions().isEmpty()) {
+            AcceptedAnswer batch = answers.call(runId, ROLE, CONTEXT
+                    + "CLARIFICATION phase: return a questions array and an empty assumptions array. Present all "
+                    + "unresolved product questions in one batch of at most four, ordered from most to least "
+                    + "important. Ask only decisions that materially affect the product, and do not ask the user to "
+                    + "confirm assumptions. Each question has id, text and why, and may have proposedDefault. "
+                    + "Do not produce stories. If nothing needs clarification, return questions as an empty array.",
+                    inputs(requirement, history),
+                    value -> !value.has("questions") || hasItems(value, "stories") || hasItems(value, "openQuestions")
+                            || hasItems(value, "assumptions")
+                            ? List.of("CLARIFICATION requires questions, with no nonempty stories, openQuestions "
+                                    + "or assumptions")
+                            : List.of());
+            if (!batch.value().get("questions").isEmpty()) {
+                clarification.store(runId, batch);
+                return Map.of("waitingForInput", true);
+            }
         }
-        // Include proposals from this batch as well as decisions saved in previous rounds.
-        history = clarification.questions(runId);
         AcceptedAnswer answer = answers.call(runId, ROLE, CONTEXT
                 + "STORIES phase: generate user stories with numbered acceptance criteria using the original "
-                + "requirement, all saved answers and optional assumptions. An answer that corrects an assumption "
-                + "overrides its proposal. ASSUMED proposals can be used but are not human-confirmed. "
-                + "Return stories, openQuestions:[] and assumptions:[]. Do not introduce unresolved decisions; "
-                + "the controller attaches the assumptions with their confirmation status.", inputs(requirement, history),
+                + "requirement and all saved answers; an answer is the requester's decision. Return stories, "
+                + "openQuestions:[] and assumptions. Write one short plain-text statement in assumptions for every "
+                + "choice the requester did not decide and build the stories on it. Do not return questions.",
+                inputs(requirement, history),
                 value -> !value.has("stories") || value.get("stories").isEmpty() || hasItems(value, "questions")
                         || !value.has("openQuestions") || !value.get("openQuestions").isEmpty()
-                        || !value.get("assumptions").isEmpty()
-                        ? List.of("STORIES requires nonempty stories and empty openQuestions and assumptions") : List.of());
+                        ? List.of("STORIES requires nonempty stories and an empty openQuestions") : List.of());
         ObjectNode content = (ObjectNode) answer.value().deepCopy();
         content.remove("questions");
-        ArrayNode assumptionsContent = content.putArray("assumptions");
-        history.assumptions().forEach(item -> assumptionsContent.add(item.answer() == null
-                ? item.text() + " (assumed; not confirmed by requester)"
-                : item.text() + "; requester decision: " + item.answer()));
         int stories = content.get("stories").size();
         int questions = content.get("openQuestions").size();
         int assumptions = content.get("assumptions").size();

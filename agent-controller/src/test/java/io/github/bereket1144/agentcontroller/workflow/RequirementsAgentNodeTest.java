@@ -155,7 +155,7 @@ class RequirementsAgentNodeTest {
                 new PromptBuilder(profiles, roles, 3), validator, mock(ModelCallRecords.class),
                 mock(ModelCallBudget.class), 2, Duration.ZERO);
         ClarificationService clarification = mock(ClarificationService.class);
-        when(clarification.questions(runId)).thenReturn(new ClarificationService.Questions(List.of(), List.of()));
+        when(clarification.questions(runId)).thenReturn(new ClarificationService.Questions(List.of()));
         return new RequirementsAgentNode(answers, store, clarification);
     }
 }

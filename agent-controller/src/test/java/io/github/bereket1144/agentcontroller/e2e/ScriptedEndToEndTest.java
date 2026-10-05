@@ -138,7 +138,7 @@ class ScriptedEndToEndTest {
 
         mvc.perform(get("/v1/runs/" + id))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.artifacts.length()").value(8))
+                .andExpect(jsonPath("$.artifacts.length()").value(7))
                 .andExpect(jsonPath("$.verification.outcome").value("PASSED"))
                 .andExpect(jsonPath("$.commit").isNotEmpty());
         List<String> states = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()

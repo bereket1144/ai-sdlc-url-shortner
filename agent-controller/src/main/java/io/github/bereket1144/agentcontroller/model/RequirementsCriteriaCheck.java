@@ -27,14 +27,12 @@ public class RequirementsCriteriaCheck implements OutputValidator.RoleCheck {
         // Union-shaped model responses sometimes include empty story fields during clarification.
         if (!output.has("stories") || (output.has("questions") && output.get("stories").isEmpty())) {
             if (!output.has("questions")) {
-                return List.of("Clarification requires questions and assumptions arrays");
+                return List.of("Clarification requires a questions array");
             }
-            for (String field : List.of("questions", "assumptions")) {
-                for (JsonNode item : output.get(field)) {
-                    for (String textField : List.of("id", "text", "why")) {
-                        if (text(item, textField) == null) {
-                            messages.add("Clarification item has a blank " + textField);
-                        }
+            for (JsonNode question : output.get("questions")) {
+                for (String textField : List.of("id", "text", "why")) {
+                    if (text(question, textField) == null) {
+                        messages.add("Clarification question has a blank " + textField);
                     }
                 }
             }

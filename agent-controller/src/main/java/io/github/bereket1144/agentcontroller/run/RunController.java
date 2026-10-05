@@ -83,9 +83,9 @@ public class RunController {
         return details.artifact(id, kind, version).content();
     }
 
-    @Operation(summary = "Read requirements clarification", description = "Returns all question and assumption "
-            + "batches, with their artifact versions, required flag, OPEN, ANSWERED or ASSUMED status, and saved replies.")
-    @ApiResponse(responseCode = "200", description = "Clarification items, or empty arrays before any exist.")
+    @Operation(summary = "Read requirements clarification", description = "Returns the clarification questions, "
+            + "with their artifact version, OPEN or ANSWERED status, and saved answers.")
+    @ApiResponse(responseCode = "200", description = "The questions, or an empty array before any exist.")
     @ApiResponse(responseCode = "404", description = "Run not found.",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @GetMapping("/{id}/questions")
@@ -94,8 +94,8 @@ public class RunController {
         return clarification.questions(id);
     }
 
-    @Operation(summary = "Answer the complete clarification batch", description = "One answer per current question "
-            + "is required; assumption answers are optional. Queues requirements processing again.")
+    @Operation(summary = "Answer the complete clarification batch", description = "Exactly one answer per "
+            + "question is required. Queues requirements processing again.")
     @ApiResponse(responseCode = "202", description = "Replies saved; processing is queued and continues automatically.",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ReplyAccepted.class)))
     @ApiResponse(responseCode = "400", description = "Incomplete or invalid answers.",
