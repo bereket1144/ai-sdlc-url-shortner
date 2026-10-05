@@ -2,7 +2,7 @@
 
 Date: 2026-10-05
 
-Status: accepted
+Status: superseded by [0010](0010-work-in-a-git-worktree-of-this-repository.md)
 
 ## Context
 

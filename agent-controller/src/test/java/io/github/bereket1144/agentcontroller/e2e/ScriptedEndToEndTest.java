@@ -31,6 +31,7 @@ import io.github.bereket1144.agentcontroller.sandbox.VerificationRecords;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult.Outcome;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRunner;
+import io.github.bereket1144.agentcontroller.workspace.PlatformRepository;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,8 +51,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * AC-AGT-62.15: a requirement posted through the HTTP API goes through every stage with a scripted model and a fake
- * container, and ends with stored artifacts, a commit and a stored verification result. The workspace and its commit
- * are real git; only the model and the container are stand-ins. AGT-66: a failed run is retried through the API.
+ * container, and ends with stored artifacts, a commit and a stored verification result. The workspace is a worktree of
+ * a temporary platform repository and its commits are real git; only the model and the container are stand-ins.
+ * AGT-66: a failed run is retried through the API.
  */
 @SpringBootTest(properties = {
         "run.dispatch.polling-enabled=true", "run.dispatch.poll-delay-ms=200",
@@ -66,6 +68,10 @@ import org.springframework.test.web.servlet.MockMvc;
 class ScriptedEndToEndTest {
 
     private static final Path BASE = temporaryFolder("workspaces");
+    /** The platform repository, with one commit: the runs are worktrees of it, on branches cut from that commit. */
+    private static final Path PLATFORM = PlatformRepository.create(temporaryFolder("platform"));
+    private static final String PLATFORM_COMMIT = PlatformRepository.git(PLATFORM, "rev-parse", "HEAD");
+    private static final String PRODUCT = "apps/demo";
     private static final AtomicReference<Outcome> BUILD_OUTCOME = new AtomicReference<>(Outcome.PASSED);
     private static final Map<String, String> ANSWERS = Map.of(
             "requirements", "{\"stories\":[{\"id\":\"S-1\",\"title\":\"Shorten\",\"role\":\"user\",\"want\":\"w\","
@@ -103,6 +109,9 @@ class ScriptedEndToEndTest {
     @DynamicPropertySource
     static void workspace(DynamicPropertyRegistry registry) {
         registry.add("workspace.base", BASE::toString);
+        registry.add("workspace.repository", PLATFORM::toString);
+        registry.add("workspace.base-ref", () -> "main");
+        registry.add("workspace.product-folder", () -> PRODUCT);
     }
 
     /** The model and the container are the only stand-ins; the primary bean wins over the Docker runner. */
@@ -134,6 +143,7 @@ class ScriptedEndToEndTest {
         @Bean
         @Primary
         VerificationRunner fakeContainer() {
+            // The container is given the product folder of the workspace, so the files are at its root.
             return (workspace, commitId) -> {
                 boolean filesThere = Files.exists(workspace.resolve("app.py"));
                 Outcome outcome = Outcome.NO_RESULT;
@@ -199,18 +209,20 @@ class ScriptedEndToEndTest {
                 "FINISHED", "FINISHED", "FINISHED");
         mvc.perform(get("/v1/runs/" + id + "/artifacts/design/1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.dataFlow").value("d"));
-        // The commit is on main of the run's own new repository and holds the scripted files.
+        // The commit is on the branch run/<id> of the platform repository and holds the scripted files.
         Path workspace = BASE.resolve(id.toString());
+        String branch = "run/" + id;
         String commit = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()
                 .getContentAsString(), "$.commit");
-        assertThat(git(workspace, "rev-parse", "main~1")).isEqualTo(commit);
+        assertThat(git(workspace, "rev-parse", branch + "~1")).isEqualTo(commit);
         assertThat(git(workspace, "show", "--name-only", "--format=", commit))
-                .contains("app.py", "tests/test_app.py");
-        // The second commit, after the stages joined, holds the README and the design document, by the controller.
-        assertThat(git(workspace, "rev-list", "--count", "main")).isEqualTo("2");
-        assertThat(git(workspace, "show", "--name-only", "--format=", "main"))
-                .contains("README.md", "docs/design.md");
-        assertThat(git(workspace, "log", "-1", "--format=%an <%ae>", "main"))
+                .contains(PRODUCT + "/app.py", PRODUCT + "/tests/test_app.py");
+        // The second commit, after the stages joined, holds the README and the design document under the product
+        // folder and the evidence under runs/<id>, by the controller.
+        assertThat(git(workspace, "rev-list", "--count", PLATFORM_COMMIT + ".." + branch)).isEqualTo("2");
+        assertThat(git(workspace, "show", "--name-only", "--format=", branch))
+                .contains(PRODUCT + "/README.md", PRODUCT + "/docs/design.md", "runs/" + id + "/lineage.json");
+        assertThat(git(workspace, "log", "-1", "--format=%an <%ae>", branch))
                 .isEqualTo("controller <controller@agent.invalid>");
         assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development", "qa",
                 "review", "documentation");
@@ -235,10 +247,12 @@ class ScriptedEndToEndTest {
         // Development ran three times, one attempt and two fix attempts; the stages after it never ran.
         assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning",
                 "development", "development", "development");
-        // The repository holds the three development commits and nothing else: no README and no document.
+        // The branch holds the three development commits and nothing else: no README and no document.
         Path workspace = BASE.resolve(id.toString());
-        assertThat(git(workspace, "rev-list", "--count", "main")).isEqualTo("3");
-        assertThat(git(workspace, "ls-tree", "-r", "--name-only", "main")).isEqualTo("app.py\ntests/test_app.py");
+        String branch = "run/" + id;
+        assertThat(git(workspace, "rev-list", "--count", PLATFORM_COMMIT + ".." + branch)).isEqualTo("3");
+        assertThat(git(workspace, "ls-tree", "-r", "--name-only", branch, PRODUCT))
+                .isEqualTo(PRODUCT + "/app.py\n" + PRODUCT + "/tests/test_app.py");
     }
 
     @Test
@@ -322,15 +336,16 @@ class ScriptedEndToEndTest {
     @Test
     @DisplayName("AC-AGT-49.1, 49.2, 49.3, 49.4 a change run on a finished run ends SUCCEEDED: the impact stage ran and "
             + "the design and planning agents received its artifact, the four agents were shown the existing files before "
-            + "their other inputs and no other agent was, the new repository holds the first run's commits and a new "
-            + "one, and the first run's repository is unchanged")
+            + "their other inputs and no other agent was, the new branch holds the first run's commits and a new "
+            + "one, and the first run's branch is unchanged")
     void aChangeRunStartsFromTheEarlierRun() throws Exception {
         UUID first = postRequirement();
         awaitEnd(first);
         mvc.perform(get("/v1/runs/" + first)).andExpect(jsonPath("$.status").value("SUCCEEDED"));
         List<Prompt> firstRunPrompts = List.copyOf(PROMPTS);
-        Path firstRepository = BASE.resolve(first.toString());
-        List<String> firstCommits = git(firstRepository, "rev-list", "main").lines().toList();
+        Path firstWorkspace = BASE.resolve(first.toString());
+        String firstBranch = "run/" + first;
+        List<String> firstCommits = git(firstWorkspace, "rev-list", firstBranch).lines().toList();
 
         UUID second = postChange(first, "Add an expiry to links.");
         awaitEnd(second);
@@ -360,22 +375,23 @@ class ScriptedEndToEndTest {
                 .contains("impactAnalysis");
         // Development was told to change the files that are there, and rewrote app.py whole.
         assertThat(onlyPromptOf(changePrompts, "development")).contains("CHANGE attempt");
-        // The second repository holds the first run's commits and the new commit of this run, which rewrote app.py.
-        Path secondRepository = BASE.resolve(second.toString());
-        List<String> secondCommits = git(secondRepository, "rev-list", "main").lines().toList();
+        // The second branch holds the first run's commits and the new commit of this run, which rewrote app.py.
+        Path secondWorkspace = BASE.resolve(second.toString());
+        String secondBranch = "run/" + second;
+        List<String> secondCommits = git(secondWorkspace, "rev-list", secondBranch).lines().toList();
         String commit = JsonPath.read(body, "$.commit");
         assertThat(secondCommits).containsAll(firstCommits).contains(commit).hasSizeGreaterThan(firstCommits.size());
         assertThat(firstCommits).doesNotContain(commit);
-        assertThat(git(secondRepository, "show", "main:app.py")).isEqualTo("print(2)");
-        // The first run's repository is as it was.
-        assertThat(git(firstRepository, "rev-list", "main").lines().toList()).isEqualTo(firstCommits);
-        assertThat(git(firstRepository, "show", "main:app.py")).isEqualTo("print(1)");
-        assertThat(git(firstRepository, "status", "--porcelain")).isEmpty();
+        assertThat(git(secondWorkspace, "show", secondBranch + ":" + PRODUCT + "/app.py")).isEqualTo("print(2)");
+        // The first run's branch and worktree are as they were.
+        assertThat(git(firstWorkspace, "rev-list", firstBranch).lines().toList()).isEqualTo(firstCommits);
+        assertThat(git(firstWorkspace, "show", firstBranch + ":" + PRODUCT + "/app.py")).isEqualTo("print(1)");
+        assertThat(git(firstWorkspace, "status", "--porcelain")).isEmpty();
     }
 
     @Test
-    @DisplayName("AC-AGT-50.5 a change run whose base run's workspace no longer exists ends FAILED with UNEXPECTED and "
-            + "leaves no workspace of its own")
+    @DisplayName("AC-AGT-50.5, AC-AGT-67.6 a change run whose base run's branch does not exist ends FAILED with "
+            + "UNEXPECTED and leaves no workspace of its own")
     void aChangeRunWithoutItsBaseWorkspaceFails() throws Exception {
         Run base = new Run("The earlier run");
         base.start();

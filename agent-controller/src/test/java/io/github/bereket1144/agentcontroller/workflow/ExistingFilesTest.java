@@ -14,6 +14,7 @@ import io.github.bereket1144.agentcontroller.model.PromptBuilder.PromptInput;
 import io.github.bereket1144.agentcontroller.run.RunKind;
 import io.github.bereket1144.agentcontroller.workspace.ChangeSet;
 import io.github.bereket1144.agentcontroller.workspace.ChangeSet.FileChange;
+import io.github.bereket1144.agentcontroller.workspace.PlatformRepository;
 import io.github.bereket1144.agentcontroller.workspace.RunWorkspace;
 import io.github.bereket1144.agentcontroller.workspace.WorkspaceFiles;
 import org.bsc.langgraph4j.state.AgentState;
@@ -22,7 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** The real workspace and the real git command line, in a temporary base folder. */
+/** The real workspace and the real git command line, in a temporary platform repository and base folder. */
 class ExistingFilesTest {
 
     @TempDir
@@ -35,13 +36,15 @@ class ExistingFilesTest {
 
     @BeforeEach
     void setUp() {
-        workspaces = new RunWorkspace(temp.resolve("workspaces").toString());
+        Path platform = PlatformRepository.create(temp.resolve("platform"));
+        workspaces = new RunWorkspace(temp.resolve("workspaces").toString(), platform.toString(), "HEAD", "apps/demo");
         existing = new ExistingFiles(workspaces, new WorkspaceFiles());
     }
 
     @Test
-    @DisplayName("AC-AGT-49.1 a BROWNFIELD run is given the files of the clone of its base run's workspace, as an "
-            + "optional input versioned by the commit they are at")
+    @DisplayName("AC-AGT-49.1, AC-AGT-67.2 a BROWNFIELD run is given the files of the product folder of its workspace, "
+            + "cut from its base run's branch, with paths relative to that folder, as an optional input versioned by "
+            + "the commit they are at")
     void aBrownfieldRunGetsTheFilesOfTheBase() {
         String baseHead = workspaces.commit(baseRunId, new ChangeSet(List.of(
                 new FileChange("app.py", "print(1)\n"), new FileChange("tests/test_app.py", "def test_x(): pass\n"))));

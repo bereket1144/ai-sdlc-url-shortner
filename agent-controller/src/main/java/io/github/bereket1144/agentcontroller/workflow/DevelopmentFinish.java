@@ -28,10 +28,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * What happens to the development agent's answer: its change set is written and committed in the run's workspace, the
- * commit is built and tested in the sandbox, and the result is kept. A result that is not a clear pass ends the stage
- * with {@link VerificationFailedException}. When the stage is attempted again, the agent is given the failures and the
- * files of the workspace and answers with a corrected change set, which is committed on top and checked again. It
- * exists only when the development agent is on.
+ * product folder of that commit is built and tested in the sandbox, and the result is kept. A result that is not a
+ * clear pass ends the stage with {@link VerificationFailedException}. When the stage is attempted again, the agent is
+ * given the failures and the files of the product folder and answers with a corrected change set, which is committed
+ * on top and checked again. It exists only when the development agent is on.
  */
 @Component
 @ConditionalOnProperty(name = "agent.stages.development", havingValue = "agent")
@@ -94,7 +94,7 @@ public class DevelopmentFinish {
                     : node.execute(state));
         }
         VerificationResult result = failed.get();
-        Snapshot snapshot = workspaceFiles.read(workspaces.create(runId));
+        Snapshot snapshot = workspaceFiles.read(workspaces.productFolder(runId));
         log.info("event=development_fix_attempt runId={} commit={} outcome={} failingTests={} files={} omitted={}",
                 runId, result.commitId(), result.outcome(), result.failingTests().size(), snapshot.files().size(),
                 snapshot.omitted());
@@ -125,12 +125,13 @@ public class DevelopmentFinish {
         StoredArtifact artifact = artifacts.find(runId, ref.kind(), ref.version())
                 .orElseThrow(() -> new IllegalStateException("The development artifact was not stored"));
         ChangeSet changes = ChangeSet.from(artifact.content().get("changes"));
-        Path workspace = workspaces.create(runId);
+        Path product = workspaces.productFolder(runId);
         // A change set that changes nothing leaves the branch where it is, and that commit is checked again.
         String commit = workspaces.commitIfChanged(runId, changes, AUTHOR,
                 "development: apply " + changes.files().size() + " file changes for run " + runId)
                 .orElseGet(() -> workspaces.head(runId));
-        VerificationResult result = verifier.verify(workspace, commit);
+        // The sandbox is given the files of the product only, not the repository around them.
+        VerificationResult result = verifier.verify(product, commit);
         records.record(runId, result);
         log.info("event=development_verified runId={} commit={} outcome={}", runId, commit, result.outcome());
         if (!result.passed()) {

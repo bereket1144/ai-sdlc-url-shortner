@@ -20,9 +20,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Reads the text of the files in a run's workspace, so an agent can be shown the code it wrote before. The folder is
- * a repository that only the controller writes, by committing change sets, so every file in it, apart from the
- * {@code .git} folder, is a tracked file. A binary file, a file that is over the size limit, a link, and every file
+ * Reads the text of the files in a folder of a run's workspace, so an agent can be shown the code it wrote before. The
+ * folder is the product folder of the run's worktree, which only the controller writes, by committing change sets, so
+ * every file in it is a tracked file. Paths are relative to the folder that is read. A binary file, a file that is over the size limit, a link, and every file
  * past the count or the total size limit are left out and only counted: the bounds keep the answer small enough for a
  * prompt. The files come in order of their path, so the same workspace always gives the same answer.
  */
@@ -48,7 +48,7 @@ public class WorkspaceFiles {
         this.maxFileBytes = maxFileBytes;
     }
 
-    /** A file's path, relative to the workspace and with {@code /} between the folders, and its whole text. */
+    /** A file's path, relative to the folder that was read and with {@code /} between the folders, and its whole text. */
     public record FileText(String path, String text) { }
 
     /**
