@@ -73,6 +73,14 @@ public class AgentStageNode {
     }
 
     Map<String, Object> execute(AgentState state) {
+        return execute(state, "", List.of());
+    }
+
+    /**
+     * An attempt that comes after a check failed: the feedback is added to the task text and the extra inputs to the
+     * prompt, next to what the role reads anyway. An empty feedback and no extra inputs is the plain attempt.
+     */
+    Map<String, Object> execute(AgentState state, String feedback, List<PromptInput> extraInputs) {
         UUID runId = required(state, "runId");
         List<PromptInput> inputs = new ArrayList<>();
         if (definition.inputs().contains(InputKind.ORIGINAL_REQUIREMENT)) {
@@ -81,8 +89,10 @@ public class AgentStageNode {
         }
         Resolved resolved = stageInputs.resolve(runId, role, readableRefs(state));
         inputs.addAll(resolved.inputs());
+        inputs.addAll(extraInputs);
         // A failed call or an answer that stays invalid throws a typed exception; nothing is stored then.
-        AcceptedAnswer answer = answers.call(runId, role, task, inputs);
+        String attemptTask = feedback.isEmpty() ? task : task + "\n\n" + feedback;
+        AcceptedAnswer answer = answers.call(runId, role, attemptTask, inputs);
         JsonNode content = withQuestionsAsAssumptions(answer.value());
         ArtifactRef ref = artifacts.store(new NewArtifact(runId, role, content, summary(content), answer.profile(),
                 resolved.consumed()));

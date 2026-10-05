@@ -2,6 +2,7 @@ package io.github.bereket1144.agentcontroller.run;
 
 import io.github.bereket1144.agentcontroller.agent.InputAccessDeniedException;
 import io.github.bereket1144.agentcontroller.model.ModelCallBudget.BudgetExhaustedException;
+import io.github.bereket1144.agentcontroller.model.ModelClient.FailureReason;
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.ContextTooLargeException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.ModelUnavailableException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.OutputInvalidException;
@@ -40,8 +41,9 @@ public enum RunFailureReason {
             if (cause instanceof OutputInvalidException) {
                 return OUTPUT_INVALID;
             }
-            if (cause instanceof ModelUnavailableException) {
-                return MODEL_UNAVAILABLE;
+            if (cause instanceof ModelUnavailableException unavailable) {
+                // A replay with no recorded answer is a gap in the recording, not a model that was down.
+                return unavailable.lastReason() == FailureReason.REPLAY_MISSING ? REPLAY_MISSING : MODEL_UNAVAILABLE;
             }
             if (cause instanceof ContextTooLargeException) {
                 return CONTEXT_TOO_LARGE;

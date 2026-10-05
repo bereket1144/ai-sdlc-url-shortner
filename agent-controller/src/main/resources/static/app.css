@@ -302,12 +302,21 @@ textarea:focus { border-color: var(--accent); }
 }
 .stage[data-state="FINISHED"] .marker::after { content: "\2713"; font-size: 1.05rem; }
 
+.stage[data-state="FAILED"] .marker {
+  border-color: var(--bad);
+  background: var(--bad);
+  color: var(--on-solid);
+  font-size: 0;
+}
+.stage[data-state="FAILED"] .marker::after { content: "\2715"; font-size: 1.05rem; }
+
 .stage-text { display: flex; flex-direction: column; min-width: 0; }
 .stage-name { font-size: 0.88rem; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .stage-state { color: var(--muted); font-size: 0.78rem; }
 .stage[data-state="NOT_STARTED"] .stage-name { color: var(--muted); }
 .stage[data-state="RUNNING"] .stage-state { color: var(--accent); font-weight: 600; }
 .stage[data-state="FINISHED"] .stage-state { color: var(--good); }
+.stage[data-state="FAILED"] .stage-state { color: var(--bad); font-weight: 600; }
 
 /* ---- Bullets (the one renderer for artifact content) ----------------------------------------------------- */
 

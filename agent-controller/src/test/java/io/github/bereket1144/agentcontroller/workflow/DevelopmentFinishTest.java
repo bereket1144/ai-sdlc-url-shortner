@@ -22,6 +22,7 @@ import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult.Outcome;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRunner;
 import io.github.bereket1144.agentcontroller.workspace.RunWorkspace;
+import io.github.bereket1144.agentcontroller.workspace.WorkspaceFiles;
 import org.bsc.langgraph4j.state.AgentState;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,8 @@ class DevelopmentFinishTest {
     private final RunWorkspace workspaces = mock(RunWorkspace.class);
     private final VerificationRunner verifier = mock(VerificationRunner.class);
     private final VerificationRecords records = mock(VerificationRecords.class);
-    private final DevelopmentFinish finish = new DevelopmentFinish(artifacts, workspaces, verifier, records);
+    private final DevelopmentFinish finish = new DevelopmentFinish(artifacts, workspaces, verifier, records,
+            new WorkspaceFiles());
     private final AgentState state = new AgentState(Map.of("runId", runId));
     private final Path workspace = Path.of("workspace");
 

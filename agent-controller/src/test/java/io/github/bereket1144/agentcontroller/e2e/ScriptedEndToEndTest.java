@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.jayway.jsonpath.JsonPath;
@@ -78,6 +79,7 @@ class ScriptedEndToEndTest {
             "documentation", "{\"setup\":\"s\",\"usage\":\"u\",\"architecture\":\"a\",\"examples\":[\"e\"],"
                     + "\"knownLimits\":[\"l\"],\"evidenceLinks\":[\"l\"]}");
     private static final ConcurrentLinkedQueue<String> ROLES_CALLED = new ConcurrentLinkedQueue<>();
+    private static final AtomicInteger DEVELOPMENT_CALLS = new AtomicInteger();
 
     @DynamicPropertySource
     static void workspace(DynamicPropertyRegistry registry) {
@@ -92,8 +94,13 @@ class ScriptedEndToEndTest {
         ModelClient scriptedModel() {
             return (role, profile, systemText, userText) -> {
                 ROLES_CALLED.add(role);
-                String text = role.equals("requirements") && userText.contains("CLARIFICATION phase")
-                        ? "{\"questions\":[],\"assumptions\":[]}" : ANSWERS.get(role);
+                String text = ANSWERS.get(role);
+                if (role.equals("requirements") && userText.contains("CLARIFICATION phase")) {
+                    text = "{\"questions\":[],\"assumptions\":[]}";
+                } else if (role.equals("development")) {
+                    // Each attempt changes app.py, so a fix attempt has something new to commit.
+                    text = text.replace("print(1)", "print(" + DEVELOPMENT_CALLS.incrementAndGet() + ")");
+                }
                 return new ModelResult(text, FinishReason.COMPLETE, null, null, Duration.ZERO);
             };
         }
@@ -124,6 +131,7 @@ class ScriptedEndToEndTest {
             jdbc.update("delete from " + table);
         }
         ROLES_CALLED.clear();
+        DEVELOPMENT_CALLS.set(0);
         BUILD_OUTCOME.set(Outcome.PASSED);
     }
 
@@ -164,7 +172,7 @@ class ScriptedEndToEndTest {
     }
 
     @Test
-    @DisplayName("AC-AGT-62.15, AC-AGT-21.5 a failing build ends the run FAILED with VERIFICATION_FAILED and no document is written")
+    @DisplayName("AC-AGT-62.15, AC-AGT-21.5, AC-AGT-65.4, AC-AGT-65.5 a build that keeps failing is attempted twice more, then ends the run FAILED with VERIFICATION_FAILED and the development stage FAILED, and no document is written")
     void aFailingBuildEndsFailed() throws Exception {
         BUILD_OUTCOME.set(Outcome.FAILED);
         UUID id = postRequirement();
@@ -175,11 +183,17 @@ class ScriptedEndToEndTest {
                 .andExpect(jsonPath("$.status").value("FAILED"))
                 .andExpect(jsonPath("$.failureReason.code").value("VERIFICATION_FAILED"))
                 .andExpect(jsonPath("$.verification.outcome").value("FAILED"));
-        // The stages after development never ran.
-        assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development");
-        // The repository holds the development commit and nothing else: no README and no document.
-        assertThat(git(BASE.resolve(id.toString()), "ls-tree", "-r", "--name-only", "main"))
-                .isEqualTo("app.py\ntests/test_app.py");
+        List<String> states = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()
+                .getContentAsString(), "$.stages[*].state");
+        assertThat(states).containsExactly("FINISHED", "NOT_STARTED", "FINISHED", "FINISHED", "FAILED",
+                "NOT_STARTED", "NOT_STARTED", "NOT_STARTED");
+        // Development ran three times, one attempt and two fix attempts; the stages after it never ran.
+        assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning",
+                "development", "development", "development");
+        // The repository holds the three development commits and nothing else: no README and no document.
+        Path workspace = BASE.resolve(id.toString());
+        assertThat(git(workspace, "rev-list", "--count", "main")).isEqualTo("3");
+        assertThat(git(workspace, "ls-tree", "-r", "--name-only", "main")).isEqualTo("app.py\ntests/test_app.py");
     }
 
     private UUID postRequirement() throws Exception {

@@ -134,7 +134,7 @@ stateDiagram-v2
 
 ### Stage progress
 
-`StageProgress` writes a `run_stage` row when a stage starts (`RUNNING`) and when it returns (`FINISHED`). A stage that fails stays `RUNNING`; a stage with no row is `NOT_STARTED`. While a run waits for answers the requirements stage shows `RUNNING`. `GET /v1/runs/{id}` lists all eight stages in graph order, so `impactAnalysis` reads `NOT_STARTED` on the greenfield route.
+`StageProgress` writes a `run_stage` row when a stage starts (`RUNNING`), when it returns (`FINISHED`) and when it fails for good (`FAILED`). A stage that fails for a retryable reason (`OUTPUT_INVALID`, `MODEL_UNAVAILABLE`, `VERIFICATION_FAILED` or an unexpected error) is attempted again, up to `agent.stage.max-retries` more times, and is `RUNNING` again for each attempt; after a failed build the development agent is given the failing tests and the workspace files. A stage with no row is `NOT_STARTED`. While a run waits for answers the requirements stage shows `RUNNING`. `GET /v1/runs/{id}` lists all eight stages in graph order, so `impactAnalysis` reads `NOT_STARTED` on the greenfield route.
 
 ### Document export after the join
 
