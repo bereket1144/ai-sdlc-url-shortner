@@ -69,7 +69,7 @@ Do not add, unless the user asks: LangChain4j, Temporal, a vector store, Spring 
 # Decisions already made
 
 1. **One Spring Boot app.** `agent-controller` holds the graph, the SDLC agents, gates, approvals, and audit. There is no microservice per agent; an agent is a class with a role, a prompt, allowed tools, and a budget.
-2. **One Git repository**, at the repository root. No nested repositories and no submodules.
+2. **One Git repository for the submission**, at the repository root: the platform, each delivered product under `apps/<name>/`, each run's history as a branch `run/<run-id>`, and each run's evidence under `runs/<run-id>/`. No nested repositories and no submodules. The controller works in separate per-run repositories outside it (decision 4), and `scripts/deliver.sh <run-id>` brings a finished run into this repository.
 3. **`docker compose up` starts PostgreSQL only; the controller runs locally** from the IDE or with `./mvnw spring-boot:run`, against the Compose database. A reviewer needs Java 21 and Docker.
 4. **Each run works in its own fresh git repository,** made with `git init` in its own folder, `<base>/<run-id>`, with its commits on `main`. Nothing is cloned from this repository. The base directory is configured and lies outside the controller's checkout; nothing is written outside it.
 5. **SDLC agents never touch files.** The controller gives an agent the file contents it needs, the agent returns a patch, and the controller checks the paths and applies it. Agent patches may only write inside that run's workspace, and never under `.git`.

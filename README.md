@@ -87,6 +87,22 @@ In the live profile, workspaces are created under `../../agentic-sdlc-workspaces
 
 `SUCCEEDED` in a live skeleton run means that the selected stages returned, the generated commit was tested successfully and the graph completed. It does not mean a person approved the work or that review findings were resolved. `impactAnalysis` remains `NOT_STARTED` on the greenfield route.
 
+## Deliver a finished run into this repository
+
+A run lives in its own repository under `agentic-sdlc-workspaces/<run-id>/`. To put its result into this repository for submission, from the repository root with a clean working tree:
+
+```bash
+scripts/deliver.sh <run-id>
+```
+
+The script:
+1. fetches the run's whole commit history into this repository as the branch `run/<run-id>` (original authors, messages and order);
+2. replaces `apps/url-shortener/` with the files of the run's last commit (pass a second argument to use another folder name);
+3. saves the evidence under `runs/<run-id>/`: the run, its lineage, the latest version of every artifact and the metrics (these need the controller running at `http://localhost:8080`, or set `API`), and the commit list and history;
+4. stages `apps/url-shortener/` and `runs/<run-id>/` and commits nothing, so you review and commit yourself.
+
+A change run (`kind` BROWNFIELD) started from an earlier run is a clone of it, so its branch holds both runs' history. Deliver the latest run to get the final product. Publishing the branches is up to you.
+
 ## Verify the controller
 
 With Java 21 and Docker available, from `agent-controller/`:
