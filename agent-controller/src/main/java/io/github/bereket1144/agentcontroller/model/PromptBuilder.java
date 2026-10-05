@@ -98,6 +98,28 @@ public class PromptBuilder {
         throw new ContextTooLargeException(roleId, estimated, capacity);
     }
 
+    /** A repair keeps the original context and adds only the last answer and its exact check messages. */
+    public Prompt repair(String roleId, Prompt original, String previousAnswer, List<String> messages) {
+        Objects.requireNonNull(original, "original prompt must not be null");
+        Objects.requireNonNull(previousAnswer, "previous answer must not be null");
+        List<String> failures = List.copyOf(messages);
+        if (failures.isEmpty()) {
+            throw new IllegalArgumentException("A repair needs validation messages");
+        }
+        String user = original.userText() + "\n[PREVIOUS_ANSWER]\n" + previousAnswer
+                + "\n[/PREVIOUS_ANSWER]\n[VALIDATION_MESSAGES]\n"
+                + String.join("\n", failures) + "\n[/VALIDATION_MESSAGES]\n"
+                + "Correct the answer and return one JSON object.\n";
+        long estimated = estimate(original.systemText(), user);
+        if (estimated > original.availablePromptTokens()) {
+            throw new ContextTooLargeException(roleId, estimated, original.availablePromptTokens());
+        }
+        log.info("event=repair_prompt_built role={} estimatedTokens={} capacityTokens={} issueCount={}",
+                roleId, estimated, original.availablePromptTokens(), failures.size());
+        return new Prompt(original.systemText(), user, estimated, original.availablePromptTokens(),
+                original.reductions());
+    }
+
     private static boolean reducible(PromptInput input) {
         return input.kind() != InputKind.ORIGINAL_REQUIREMENT
                 && input.kind() != InputKind.QUESTIONS_AND_ANSWERS;
@@ -109,6 +131,11 @@ public class PromptBuilder {
                 + "\nWorking standards: " + String.join("; ", role.standards())
                 + "\nOutput kind: " + role.output().kind()
                 + "\nOutput structure: " + role.output().structure()
+                + "\nReturn one JSON object with these fields (name:JSON type:required or optional): "
+                + role.output().fields().stream()
+                        .map(field -> field.name() + ":" + field.type() + ":"
+                                + (field.required() ? "required" : "optional"))
+                        .collect(java.util.stream.Collectors.joining(", "))
                 + "\nHuman approval required: " + role.output().approvalRequired()
                 + "\nBoundaries: " + role.boundaries()
                 + "\nUncertainty: " + role.uncertainty()

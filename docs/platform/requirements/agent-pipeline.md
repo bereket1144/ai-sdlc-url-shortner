@@ -154,7 +154,7 @@ As the platform, I want the prompt for each call sized to the model's window, so
 
 ### AGT-5 Accept only structured answers that pass their checks
 
-Status: open
+Status: coded
 
 Depends on: AGT-3, AGT-4.
 
