@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -168,6 +170,48 @@ class RoleCatalogTest {
                 .hasMessage("Unknown role: unknown");
     }
 
+    @Test
+    @DisplayName("AC-AGT-5.1 each role loads named, typed, required output fields")
+    void loadsOutputFields() throws IOException {
+        RoleCatalog catalog = new RoleCatalog(roleFiles());
+        Map<String, List<String>> expectedNames = Map.of(
+                "requirements", List.of("stories", "openQuestions", "assumptions"),
+                "impactAnalysis", List.of("affectedFiles", "affectedBehaviors", "dependencies", "dataFlows",
+                        "risks", "evidence", "openQuestions"),
+                "design", List.of("components", "interfaces", "dataFlow", "decisions", "alternatives",
+                        "risks", "diagrams"),
+                "planning", List.of("tasks", "assumptions"),
+                "development", List.of("changes", "rationale", "affectedCriteria", "errorHandling",
+                        "verificationNotes"),
+                "qa", List.of("proposedTests", "criterionMapping", "observedEvidence", "coverageGaps",
+                        "failureDetails"),
+                "review", List.of("reviewedFiles", "findings", "evidence", "resolutionStatus"),
+                "documentation", List.of("setup", "usage", "architecture", "examples", "knownLimits",
+                        "evidenceLinks"));
+
+        expectedNames.forEach((roleId, names) -> assertThat(catalog.get(roleId).output().fields())
+                .extracting(RoleCatalog.OutputField::name).containsExactlyElementsOf(names));
+        assertThat(catalog.get("requirements").output().fields()).contains(
+                new RoleCatalog.OutputField("stories", RoleCatalog.FieldType.ARRAY, true));
+        assertThat(catalog.get("qa").output().fields()).contains(
+                new RoleCatalog.OutputField("criterionMapping", RoleCatalog.FieldType.OBJECT, true),
+                new RoleCatalog.OutputField("failureDetails", RoleCatalog.FieldType.ARRAY, false));
+        assertThatThrownBy(() -> catalog.get("requirements").output().fields().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidOutputFields")
+    @DisplayName("AC-AGT-5.1 invalid output fields fail startup with the role and field named")
+    void rejectsInvalidOutputFields(String description, String value, String message) throws IOException {
+        Resource[] resources = replaceRole(roleFiles(), "requirements", "output.fields", value);
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Role requirements")
+                .hasMessageContaining(message);
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidRoleResources")
     @DisplayName("AC-AGT-1.1 startup rejects a role resource that has no name or is not a properties file")
@@ -251,6 +295,28 @@ class RoleCatalogTest {
         return Stream.of(
                 Arguments.of("standards", "one;;two;three"),
                 Arguments.of("inputs", "DESIGN_ARTIFACT,"));
+    }
+
+    private static Stream<Arguments> invalidOutputFields() {
+        return Stream.of(
+                Arguments.of("missing field", "stories:ARRAY", "invalid output.fields entry"),
+                Arguments.of("unknown type", "stories:TEXT:required", "invalid output.fields entry"),
+                Arguments.of("bad name", "1stories:ARRAY:required", "invalid output.fields entry"),
+                Arguments.of("bad flag", "stories:ARRAY:maybe", "invalid output.fields entry"),
+                Arguments.of("duplicate field", "stories:ARRAY:required,stories:ARRAY:optional",
+                        "duplicate output field: stories"),
+                Arguments.of("no required field", "stories:ARRAY:optional", "needs a required output field"),
+                Arguments.of("blank entry", "stories:ARRAY:required,", "blank output.fields entry"));
+    }
+
+    @Test
+    @DisplayName("AC-AGT-5.1 a role without output fields fails startup")
+    void rejectsMissingOutputFields() throws IOException {
+        Resource[] resources = replaceRole(roleFiles(), "requirements", "output.fields", null);
+
+        assertThatThrownBy(() -> new RoleCatalog(resources))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Role requirements is missing output.fields");
     }
 
     private static Stream<String> requiredFields() {

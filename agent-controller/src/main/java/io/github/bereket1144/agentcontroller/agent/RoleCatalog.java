@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -95,6 +96,18 @@ public class RoleCatalog {
         if (!approval.equals("true") && !approval.equals("false")) {
             throw new IllegalStateException("Role " + roleId + " has invalid output.approvalRequired: " + approval);
         }
+        List<OutputField> outputFields = split(roleId, "output.fields",
+                required(roleId, properties, "output.fields"), ",")
+                .stream().map(field -> parseOutputField(roleId, field)).toList();
+        Set<String> fieldNames = new HashSet<>();
+        for (OutputField field : outputFields) {
+            if (!fieldNames.add(field.name())) {
+                throw new IllegalStateException("Role " + roleId + " has duplicate output field: " + field.name());
+            }
+        }
+        if (outputFields.stream().noneMatch(OutputField::required)) {
+            throw new IllegalStateException("Role " + roleId + " needs a required output field");
+        }
         return new RoleDefinition(roleId,
                 required(roleId, properties, "identity"),
                 required(roleId, properties, "mission"),
@@ -102,7 +115,8 @@ public class RoleCatalog {
                 standards,
                 inputs,
                 new Output(required(roleId, properties, "output.kind"),
-                        required(roleId, properties, "output.structure"), Boolean.parseBoolean(approval)),
+                        required(roleId, properties, "output.structure"), outputFields,
+                        Boolean.parseBoolean(approval)),
                 required(roleId, properties, "boundaries"),
                 required(roleId, properties, "uncertainty"),
                 required(roleId, properties, "selfCheck"),
@@ -133,6 +147,28 @@ public class RoleCatalog {
         }
     }
 
+    private static OutputField parseOutputField(String roleId, String value) {
+        // Role files declare each field as name:JSON_TYPE:required|optional.
+        String[] parts = value.split(":", -1);
+        if (parts.length != 3 || !parts[0].matches("[a-z][A-Za-z0-9]*")) {
+            throw new IllegalStateException("Role " + roleId + " has invalid output.fields entry: " + value);
+        }
+        FieldType type;
+        try {
+            type = FieldType.valueOf(parts[1]);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Role " + roleId + " has invalid output.fields entry: " + value,
+                    exception);
+        }
+        boolean required = switch (parts[2]) {
+            case "required" -> true;
+            case "optional" -> false;
+            default -> throw new IllegalStateException("Role " + roleId
+                    + " has invalid output.fields entry: " + value);
+        };
+        return new OutputField(parts[0], type, required);
+    }
+
     public enum InputKind {
         ORIGINAL_REQUIREMENT,
         QUESTIONS_AND_ANSWERS,
@@ -147,7 +183,15 @@ public class RoleCatalog {
         DOCUMENTATION_ARTIFACT
     }
 
-    public record Output(String kind, String structure, boolean approvalRequired) { }
+    public enum FieldType { STRING, NUMBER, BOOLEAN, OBJECT, ARRAY }
+
+    public record OutputField(String name, FieldType type, boolean required) { }
+
+    public record Output(String kind, String structure, List<OutputField> fields, boolean approvalRequired) {
+        public Output {
+            fields = List.copyOf(fields);
+        }
+    }
 
     public record RoleDefinition(String id, String identity, String mission, String voice,
                                  List<String> standards, List<InputKind> inputs, Output output,
