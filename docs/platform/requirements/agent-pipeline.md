@@ -183,7 +183,7 @@ As the platform, I want transient model failures retried and then moved to a sec
 
 ### AGT-7 Record every model call
 
-Status: open
+Status: coded
 
 Depends on: AGT-3.
 
