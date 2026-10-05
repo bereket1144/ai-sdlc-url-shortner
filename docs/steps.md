@@ -354,3 +354,7 @@ The record of the work done in this repository, one entry per step, in the order
 - [ ] 119. UI-3 A chat bar pinned at the bottom, and approvals.
   Done when: story UI-3 in docs/platform/requirements/reviewer-ui.md is coded and its criteria are named as checked by hand.
   Criterion update (user decision, 2026-10-05): the chat bar is pinned at the bottom and replaces the "Request a change" card. (main agent, direct)
+- [ ] 120. AGT-43 Stop a run at any point and resume it from where it stopped.
+  Done when: story AGT-43 in docs/platform/requirements/agent-pipeline.md is coded: every criterion has a passing test.
+  Criterion update (user decision, 2026-10-05): stop is a new non-failure status STOPPED and resume continues like the first retry; rollback by deleting the workspace is not part of it. It starts after step 118 is merged, because both change the graph and the run states. (main agent, direct)
+

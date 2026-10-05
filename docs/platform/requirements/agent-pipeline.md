@@ -765,18 +765,20 @@ As a reviewer, I want the unit and functional coverage reports with every shortf
 - AC-AGT-41.3 Every uncovered item reported (a line or branch, a criterion, an endpoint or a status code) needs a reason written by the QA role. An item without a reason fails the gate. A reason for an item that is not uncovered is ignored.
 - AC-AGT-41.4 The reports state the real numbers. A named gap explains a shortfall and never turns it into a pass.
 
-### AGT-43 Stop a run safely and undo its changes
+### AGT-43 Stop a run at any point and resume it from where it stopped
 
 Status: open
 
-Depends on: AGT-20, AGT-31.
+Depends on: AGT-15, AGT-66.
 
-As a reviewer, I want to stop a run at any time and have it end in a clean, known state, so that a run that cannot or should not continue never leaves loose ends.
+As a reviewer, I want to stop a run whenever I like and resume it later from where it stopped, so that I stay in control of what the agents do and a stop costs no work.
 
-- AC-AGT-43.1 A stop operation ends a run that is not finished as FAILED with the reason STOPPED_BY_REVIEWER. Stopping a finished run, or stopping a run twice, is refused with 409 in the RUN-4 format and changes nothing.
-- AC-AGT-43.2 A run that cannot continue (budget, repair limit, stage time limit, failed recovery) ends the same way with its own reason code, and its work is stopped.
-- AC-AGT-43.3 When a run ends this way its workspace and any container are removed. The run branch is kept as evidence unless configuration says to delete it. The main branch is never touched. The run records whether it was rolled back.
-- AC-AGT-43.4 A stopped run keeps its artifacts, call records and decisions readable.
+- AC-AGT-43.1 `POST /v1/runs/{id}/stop` on a CREATED, RUNNING or WAITING_FOR_INPUT run answers 202. A CREATED or waiting run becomes STOPPED at once. A RUNNING run is asked to stop and becomes STOPPED at the next safe point: before the next model call, the next stage attempt or the next build, between stages, and a build container that is running is stopped; a model call already in flight may finish and its result is stored. A SUCCEEDED, FAILED or already STOPPED run is refused with 409 in the RUN-4 format, an unknown run with 404, and nothing changes on a refusal.
+- AC-AGT-43.2 STOPPED is a run status shown in the read response and the API document. A stopped run is not claimed by the scheduler and is not a failure: it has no failure reason and is left out of the success rate. Its artifacts, call records, decisions, branch and workspace are kept.
+- AC-AGT-43.3 The stage that was running when the run stopped is shown as NOT_STARTED again, and stages that finished stay FINISHED.
+- AC-AGT-43.4 `POST /v1/runs/{id}/resume` on a STOPPED run answers 202 and queues it. It continues at the earliest stage that is not FINISHED with the state rebuilt from what is stored, as the first retry does (AC-AGT-66.2). A resume does not use up the run's attempts, and if the run later fails the retry rules apply as before. A run that is not STOPPED is refused with 409, an unknown run with 404.
+- AC-AGT-43.5 A run that was stopped while waiting for answers or for an approval resumes into the same wait, with the same questions or the same approval request, and does not go past it.
+- AC-AGT-43.6 The metrics report counts stopped runs separately. The API document lists both operations and the new status (this updates AC-SWAG-1.4 with the user's approval, noted in the steps log). The reviewer page has the Stop and Resume buttons (UI-3).
 
 ## Part F. Restart, audit and metrics (draft outline)
 
