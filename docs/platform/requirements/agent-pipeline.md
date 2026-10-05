@@ -273,7 +273,7 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 
 ### AGT-65 Retry a failed stage, with fix feedback for a failed build
 
-Status: open
+Status: coded
 
 Depends on: AGT-5 to AGT-9, AGT-62.
 
