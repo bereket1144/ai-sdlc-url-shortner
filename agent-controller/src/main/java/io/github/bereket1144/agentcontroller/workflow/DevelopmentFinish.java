@@ -12,6 +12,7 @@ import io.github.bereket1144.agentcontroller.artifact.ArtifactRef;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore.StoredArtifact;
 import io.github.bereket1144.agentcontroller.run.RunKind;
+import io.github.bereket1144.agentcontroller.run.StopCheck;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationFailedException;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRecords;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
@@ -31,7 +32,9 @@ import org.springframework.stereotype.Component;
  * product folder of that commit is built and tested in the sandbox, and the result is kept. A result that is not a
  * clear pass ends the stage with {@link VerificationFailedException}. When the stage is attempted again, the agent is
  * given the failures and the files of the product folder and answers with a corrected change set, which is committed
- * on top and checked again. It exists only when the development agent is on.
+ * on top and checked again. A stop request is a safe point before anything is committed and again while the build
+ * runs: the build is stopped, and the stage ends with a RunStoppedException; the result of a stopped build says
+ * nothing about the code, so it is not kept. It exists only when the development agent is on.
  */
 @Component
 @ConditionalOnProperty(name = "agent.stages.development", havingValue = "agent")
@@ -63,14 +66,16 @@ public class DevelopmentFinish {
     private final VerificationRunner verifier;
     private final VerificationRecords records;
     private final WorkspaceFiles workspaceFiles;
+    private final StopCheck stop;
 
     public DevelopmentFinish(ArtifactStore artifacts, RunWorkspace workspaces, VerificationRunner verifier,
-                             VerificationRecords records, WorkspaceFiles workspaceFiles) {
+                             VerificationRecords records, WorkspaceFiles workspaceFiles, StopCheck stop) {
         this.artifacts = artifacts;
         this.workspaces = workspaces;
         this.verifier = verifier;
         this.records = records;
         this.workspaceFiles = workspaceFiles;
+        this.stop = stop;
     }
 
     /**
@@ -121,6 +126,8 @@ public class DevelopmentFinish {
      */
     Map<String, Object> finish(AgentState state, Map<String, Object> update) {
         UUID runId = state.<UUID>value("runId").orElseThrow(() -> new IllegalStateException("Missing run id"));
+        // A safe point: the agent has answered, and nothing is committed or built yet.
+        stop.check(runId);
         ArtifactRef ref = (ArtifactRef) update.get("development");
         StoredArtifact artifact = artifacts.find(runId, ref.kind(), ref.version())
                 .orElseThrow(() -> new IllegalStateException("The development artifact was not stored"));
@@ -130,8 +137,11 @@ public class DevelopmentFinish {
         String commit = workspaces.commitIfChanged(runId, changes, AUTHOR,
                 "development: apply " + changes.files().size() + " file changes for run " + runId)
                 .orElseGet(() -> workspaces.head(runId));
+        stop.check(runId);
         // The sandbox is given the files of the product only, not the repository around them.
-        VerificationResult result = verifier.verify(product, commit);
+        VerificationResult result = verifier.verify(product, commit, () -> stop.requested(runId));
+        // A build that a stop request ended has no result worth keeping, and it must not count as a failed build.
+        stop.check(runId);
         records.record(runId, result);
         log.info("event=development_verified runId={} commit={} outcome={}", runId, commit, result.outcome());
         if (!result.passed()) {

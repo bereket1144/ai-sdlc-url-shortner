@@ -131,7 +131,7 @@ class DevelopmentFixAttemptTest {
                 roles, stageInputs, answers, store, Optional.empty());
         // The container is given the product folder and reads the committed file: the broken one fails its test, the
         // fixed one passes.
-        VerificationRunner container = (workspace, commitId) -> {
+        VerificationRunner container = (workspace, commitId, cancelled) -> {
             boolean fixed = read(workspace.resolve("app.py")).contains("FIXED_VERSION");
             return fixed ? new VerificationResult(Outcome.PASSED, 1, 1, 0, List.of(), "", commitId)
                     : new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of(FAILING_TEST), REPORT, commitId);
@@ -139,7 +139,8 @@ class DevelopmentFixAttemptTest {
         platform = PlatformRepository.create(temp.resolve("platform"));
         RunWorkspace workspaces = new RunWorkspace(temp.resolve("workspaces").toString(), platform.toString(), "HEAD",
                 PRODUCT);
-        DevelopmentFinish finish = new DevelopmentFinish(store, workspaces, container, records, new WorkspaceFiles());
+        DevelopmentFinish finish = new DevelopmentFinish(store, workspaces, container, records, new WorkspaceFiles(),
+                mock(io.github.bereket1144.agentcontroller.run.StopCheck.class));
         runner = new WorkflowRunner(new DummySdlcNodes(), Optional.empty(), Optional.of(stages), Optional.of(finish),
                 Optional.of(mock(StageProgress.class)), Optional.empty(), 2);
     }

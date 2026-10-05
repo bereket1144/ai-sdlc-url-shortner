@@ -144,7 +144,7 @@ class ScriptedEndToEndTest {
         @Primary
         VerificationRunner fakeContainer() {
             // The container is given the product folder of the workspace, so the files are at its root.
-            return (workspace, commitId) -> {
+            return (workspace, commitId, cancelled) -> {
                 boolean filesThere = Files.exists(workspace.resolve("app.py"));
                 Outcome outcome = Outcome.NO_RESULT;
                 if (filesThere) {

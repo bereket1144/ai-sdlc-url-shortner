@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +27,9 @@ import org.springframework.util.FileSystemUtils;
  * that names the platform), copy the workspace in, start it and wait, copy the one report file out, and remove the
  * container. No folder of the host is mounted. {@code --rm} is not used: Docker would delete the container the
  * moment it exits, before the report could be copied out, so the container is removed by an explicit
- * {@code docker rm -f} in a {@code finally} block. That command also kills a container that ran over its time limit.
+ * {@code docker rm -f} in a {@code finally} block. That command also kills a container that ran over its time limit,
+ * and one that a stop request ended: the wait on the container ends as soon as the request is seen (at most a second
+ * later), and the same removal then kills the container.
  */
 @Component
 @EnableConfigurationProperties(SandboxProperties.class)
@@ -53,9 +56,10 @@ public class DockerVerificationRunner implements VerificationRunner {
     }
 
     @Override
-    public VerificationResult verify(Path workspace, String commitId) {
+    public VerificationResult verify(Path workspace, String commitId, BooleanSupplier cancelled) {
         Objects.requireNonNull(workspace, "workspace must not be null");
         Objects.requireNonNull(commitId, "commitId must not be null");
+        Objects.requireNonNull(cancelled, "cancelled must not be null");
         if (!Files.isDirectory(workspace)) {
             throw new IllegalArgumentException("The workspace is not a folder: " + workspace);
         }
@@ -67,7 +71,7 @@ public class DockerVerificationRunner implements VerificationRunner {
         log.info("event=verification_started commitId={} container={} image={}",
                 commitId, container, properties.image());
         try {
-            result = runInContainer(container, workspace, commitId, reportFolder);
+            result = runInContainer(container, workspace, commitId, reportFolder, cancelled);
         } finally {
             succeeds("remove", container, List.of("docker", "rm", "-f", container), STEP_LIMIT);
             deleteReportFolder(reportFolder);
@@ -79,7 +83,8 @@ public class DockerVerificationRunner implements VerificationRunner {
         return result;
     }
 
-    private VerificationResult runInContainer(String container, Path workspace, String commitId, Path reportFolder) {
+    private VerificationResult runInContainer(String container, Path workspace, String commitId, Path reportFolder,
+                                              BooleanSupplier cancelled) {
         boolean ready = succeeds("create", container, createCommand(container), STEP_LIMIT)
                 && succeeds("copy_in", container, List.of("docker", "cp",
                         workspace.toAbsolutePath() + "/.", container + ":" + WORKSPACE_IN_CONTAINER), STEP_LIMIT);
@@ -87,7 +92,14 @@ public class DockerVerificationRunner implements VerificationRunner {
             return VerificationResult.noResult(commitId);
         }
 
-        DockerCommand.Result run = docker.run(List.of("docker", "start", "-a", container), properties.timeout());
+        DockerCommand.Result run = docker.run(List.of("docker", "start", "-a", container), properties.timeout(),
+                cancelled);
+        if (cancelled.getAsBoolean()) {
+            // The wait ended because of the request, or the request came as the build ended: either way the caller
+            // stops, so no report is read. The container is removed, and so killed, by the caller of this method.
+            log.info("event=verification_cancelled commitId={} container={}", commitId, container);
+            return VerificationResult.noResult(commitId);
+        }
         if (run.timedOut()) {
             log.warn("event=verification_timed_out commitId={} container={} limit={}",
                     commitId, container, properties.timeout());

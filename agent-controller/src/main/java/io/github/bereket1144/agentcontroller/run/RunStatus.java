@@ -6,5 +6,7 @@ public enum RunStatus {
     RUNNING,
     WAITING_FOR_INPUT,
     SUCCEEDED,
-    FAILED
+    FAILED,
+    /** A reviewer stopped the run. It is not a failure and is not claimed until it is resumed. */
+    STOPPED
 }

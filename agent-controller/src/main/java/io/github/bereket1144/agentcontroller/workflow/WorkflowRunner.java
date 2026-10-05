@@ -22,6 +22,8 @@ import io.github.bereket1144.agentcontroller.document.RunDocuments;
 import io.github.bereket1144.agentcontroller.run.ApprovalService;
 import io.github.bereket1144.agentcontroller.run.RunFailureReason;
 import io.github.bereket1144.agentcontroller.run.RunKind;
+import io.github.bereket1144.agentcontroller.run.RunStoppedException;
+import io.github.bereket1144.agentcontroller.run.StopCheck;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.RunnableConfig;
@@ -60,6 +62,7 @@ public class WorkflowRunner {
     private final Optional<RequirementsAgentNode> requirementsAgent;
     private final Optional<RunResume> resume;
     private final Optional<ApprovalService> approvals;
+    private final Optional<StopCheck> stop;
     private final int maxRetries;
 
     /** Every stage on its dummy node. */
@@ -131,12 +134,26 @@ public class WorkflowRunner {
      * stored its artifact, and waits for a reviewer's decision; when the reviewer rejected it before, the agent is given
      * the comments. It is optional for the same reason as the agent stages.
      */
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
+                          Optional<StageProgress> progress, Optional<RunDocuments> runDocuments, int maxRetries,
+                          Optional<RunResume> resume, Optional<ApprovalService> approvals)
+            throws GraphStateException {
+        this(nodes, requirementsAgent, agentStages, developmentFinish, progress, runDocuments, maxRetries, resume,
+                approvals, Optional.empty());
+    }
+
+    /**
+     * As above. With the stop check, every stage attempt is a safe point: when a reviewer asked the run to stop, the
+     * attempt ends there with {@link RunStoppedException}, which is not retried and is not a failure. It is optional for
+     * the same reason as the agent stages.
+     */
     @Autowired
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
                           Optional<StageProgress> progress, Optional<RunDocuments> runDocuments,
                           @Value("${agent.stage.max-retries:" + DEFAULT_MAX_RETRIES + "}") int maxRetries,
-                          Optional<RunResume> resume, Optional<ApprovalService> approvals)
+                          Optional<RunResume> resume, Optional<ApprovalService> approvals, Optional<StopCheck> stop)
             throws GraphStateException {
         if (maxRetries < 0) {
             throw new IllegalArgumentException("agent.stage.max-retries must not be negative");
@@ -155,6 +172,7 @@ public class WorkflowRunner {
         this.requirementsAgent = requirementsAgent;
         this.resume = resume;
         this.approvals = approvals;
+        this.stop = stop;
         this.maxRetries = maxRetries;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         StateGraph<AgentState> route = new StateGraph<>(AgentState::new)
@@ -200,10 +218,12 @@ public class WorkflowRunner {
         this.graph = route.compile();
     }
 
-    private static NodeAction<AgentState> documents(RunDocuments runDocuments) {
+    private NodeAction<AgentState> documents(RunDocuments runDocuments) {
         return state -> {
-            runDocuments.write(state.<UUID>value("runId")
-                    .orElseThrow(() -> new IllegalStateException("Missing workflow state: runId")));
+            UUID runId = state.<UUID>value("runId")
+                    .orElseThrow(() -> new IllegalStateException("Missing workflow state: runId"));
+            stop.ifPresent(check -> check.check(runId));
+            runDocuments.write(runId);
             return Map.of();
         };
     }
@@ -258,15 +278,24 @@ public class WorkflowRunner {
      * the stage is given up. A failure is attempted again when its reason is retryable and fewer than
      * {@code maxRetries} retries have been used. An error, or an interrupted thread, is never attempted again: an
      * interrupted stage was cancelled, as when a parallel branch failed, and writes nothing more. The last failure is
-     * rethrown as it is, so the run ends with its reason.
+     * rethrown as it is, so the run ends with its reason. A stop request is looked for before every attempt, and a
+     * stop is passed on as it is: it is not retried and the stage is not marked FAILED.
      */
     private Map<String, Object> attempts(UUID runId, String stage, Function<AgentState, Map<String, Object>> action,
                                          AgentState state) {
         for (int attempt = 1; ; attempt++) {
+            stop.ifPresent(check -> check.check(runId));
             progress.ifPresent(recorder -> recorder.started(runId, stage));
             try {
-                return action.apply(state);
+                Map<String, Object> update = action.apply(state);
+                // Preserve an in-flight model result, but leave its interrupted stage unfinished for resume.
+                stop.ifPresent(check -> check.check(runId));
+                return update;
+            } catch (RunStoppedException stopped) {
+                log.info("event=stage_stopped runId={} stage={} attempt={}", runId, stage, attempt);
+                throw stopped;
             } catch (RuntimeException | Error failure) {
+                stop.ifPresent(check -> check.check(runId));
                 RunFailureReason reason = RunFailureReason.from(failure);
                 boolean interrupted = Thread.currentThread().isInterrupted();
                 if (attempt <= maxRetries && RETRYABLE.contains(reason) && !(failure instanceof Error)
@@ -346,13 +375,29 @@ public class WorkflowRunner {
         Objects.requireNonNull(kind, "kind must not be null");
     }
 
-    /** @param withRequirements whether the requirements stage runs first; an attempt that starts later has its result */
+    /**
+     * @param withRequirements whether the requirements stage runs first; an attempt that starts later has its result.
+     *                         When the attempt ends because of a stop, the stages that were running are set back to not
+     *                         started; the graph and its branches have all ended by then, so nothing writes a state again.
+     */
     private AgentState execute(UUID runId, RunKind kind, Map<String, Object> input, boolean withRequirements) {
+        try {
+            return executeGraph(runId, kind, input, withRequirements);
+        } catch (RuntimeException | Error failure) {
+            if (RunStoppedException.in(failure)) {
+                progress.ifPresent(recorder -> recorder.reopenRunning(runId));
+            }
+            throw failure;
+        }
+    }
+
+    private AgentState executeGraph(UUID runId, RunKind kind, Map<String, Object> input, boolean withRequirements) {
         if (withRequirements && requirementsAgent.isPresent()) {
             Map<String, Object> prepared = attempts(runId, "requirements", requirementsAgent.get()::prepare,
                     new AgentState(input));
             input.putAll(prepared);
             if (Boolean.TRUE.equals(prepared.get(WAITING))) {
+                stop.ifPresent(check -> check.check(runId));
                 log.info("event=workflow_waiting runId={} stage=requirements", runId);
                 return new AgentState(input);
             }
@@ -379,6 +424,7 @@ public class WorkflowRunner {
             }
             AgentState result = finalState
                     .orElseThrow(() -> new IllegalStateException("Workflow returned no state"));
+            stop.ifPresent(check -> check.check(runId));
             log.info("event=workflow_executed runId={} kind={}", runId, kind);
             return result;
         }

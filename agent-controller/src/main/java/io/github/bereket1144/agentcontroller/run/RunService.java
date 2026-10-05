@@ -67,10 +67,14 @@ public class RunService {
     /** The claimed Run is detached after its transaction, so load it again for this state change. */
     @Transactional
     public void succeedRun(UUID runId) {
-        Run run = runRepository.findById(runId).orElseThrow(() -> {
+        // Serialize the final transition with the stop endpoint, so an accepted stop cannot turn into success.
+        Run run = runRepository.lockById(runId).orElseThrow(() -> {
             log.warn("event=run_success_target_missing runId={}", runId);
             return new IllegalStateException("Run not found while recording success");
         });
+        if (run.isStopRequested()) {
+            throw new RunStoppedException();
+        }
         run.succeed();
         log.info("event=run_success_transition_requested runId={}", runId);
     }
@@ -87,11 +91,33 @@ public class RunService {
         recordFailure(runId, RunFailureReason.from(failure));
     }
 
+    /** Commit STOPPED independently, as a failure is: the attempt has ended and the run waits for a reviewer's resume. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void stopRun(UUID runId) {
+        Run run = runRepository.lockById(runId).orElseThrow(() -> {
+            log.warn("event=run_stop_target_missing runId={}", runId);
+            return new IllegalStateException("Run not found while recording a stop");
+        });
+        RunStatus before = run.getStatus();
+        if (before == RunStatus.STOPPED) {
+            return; // A stop endpoint may already have stopped a run as it entered an input wait.
+        }
+        if (before == RunStatus.WAITING_FOR_INPUT) {
+            run.stopAtOnce();
+        } else {
+            run.stopped();
+        }
+        log.info("event=run_stopped runId={} stoppedFrom={}", runId, before);
+    }
+
     private void recordFailure(UUID runId, RunFailureReason reason) {
-        Run run = runRepository.findById(runId).orElseThrow(() -> {
+        Run run = runRepository.lockById(runId).orElseThrow(() -> {
             log.warn("event=run_failure_target_missing runId={}", runId);
             return new IllegalStateException("Run not found while recording failure");
         });
+        if (run.isStopRequested()) {
+            throw new RunStoppedException();
+        }
         run.fail(reason);
         log.info("event=run_failure_transition_requested runId={} reason={}", runId, reason);
     }

@@ -33,15 +33,18 @@ public class RunController {
     private final ClarificationService clarification;
     private final RunRetry retries;
     private final ApprovalService approvals;
+    private final RunStop stops;
 
     public RunController(RunService runService, RunCreation creation, RunDetails details,
-                         ClarificationService clarification, RunRetry retries, ApprovalService approvals) {
+                         ClarificationService clarification, RunRetry retries, ApprovalService approvals,
+                         RunStop stops) {
         this.runService = runService;
         this.creation = creation;
         this.details = details;
         this.clarification = clarification;
         this.retries = retries;
         this.approvals = approvals;
+        this.stops = stops;
     }
 
     // The method returns a ResponseEntity, so the library cannot see the 201 status or the body type on its own.
@@ -185,9 +188,53 @@ public class RunController {
                 .body(new RetryAccepted(id, run.getAttempt()));
     }
 
+    @Operation(summary = "Stop a run", description = "Stops a run that has not finished. A CREATED run, or one that "
+            + "waits for answers or for a decision, is STOPPED at once. A RUNNING run is asked to stop: it ends "
+            + "STOPPED at its next safe point (before its next model call, stage attempt or build, or between stages; "
+            + "a build that is running is stopped), and a model call already in flight may finish and its result is "
+            + "kept. Nothing the run made is removed, and a stopped run is not a failure. The status in the answer is "
+            + "STOPPED, or RUNNING when the run was only asked to stop. A refused request changes nothing.")
+    @ApiResponse(responseCode = "202", description = "The run is stopped, or asked to stop.",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = StatusAccepted.class)))
+    @ApiResponse(responseCode = "400", description = "The id is not a UUID.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "404", description = "No run has this id.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "409", description = "The run has SUCCEEDED or FAILED, or is STOPPED already.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @PostMapping("/{id}/stop")
+    public ResponseEntity<StatusAccepted> stop(@PathVariable UUID id) {
+        Run run = stops.stop(id);
+        return ResponseEntity.accepted().location(URI.create(RUNS_PATH + "/" + id))
+                .body(new StatusAccepted(id, run.getStatus()));
+    }
+
+    @Operation(summary = "Resume a stopped run", description = "Queues a STOPPED run again. It continues at the earliest "
+            + "stage that is not finished, with the stages before it left as they are, as the first retry of a failed "
+            + "run does. A run that was waiting for answers or for a decision goes back to waiting for the same "
+            + "questions or the same approval request, and no model is called. A resume does not use up an attempt. "
+            + "A refused request changes nothing.")
+    @ApiResponse(responseCode = "202", description = "The run is queued again (CREATED), or waits again "
+            + "(WAITING_FOR_INPUT).",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = StatusAccepted.class)))
+    @ApiResponse(responseCode = "400", description = "The id is not a UUID.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "404", description = "No run has this id.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @ApiResponse(responseCode = "409", description = "The run is not STOPPED.",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
+    @PostMapping("/{id}/resume")
+    public ResponseEntity<StatusAccepted> resume(@PathVariable UUID id) {
+        Run run = stops.resume(id);
+        return ResponseEntity.accepted().location(URI.create(RUNS_PATH + "/" + id))
+                .body(new StatusAccepted(id, run.getStatus()));
+    }
+
     public record ReplyAccepted(UUID runId, String message) { }
 
     public record DecisionAccepted(UUID runId, String message) { }
 
     public record RetryAccepted(UUID id, int attempt) { }
+
+    public record StatusAccepted(UUID id, RunStatus status) { }
 }

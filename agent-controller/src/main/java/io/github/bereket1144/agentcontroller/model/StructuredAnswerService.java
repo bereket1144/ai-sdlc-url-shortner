@@ -3,6 +3,7 @@ package io.github.bereket1144.agentcontroller.model;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -16,15 +17,21 @@ import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords.Attempt;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords.AttemptKind;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords.Outcome;
+import io.github.bereket1144.agentcontroller.run.StopCheck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.JsonNode;
 
-/** Coordinates model calls, retries, fallback and output repair for one role answer. */
+/**
+ * Coordinates model calls, retries, fallback and output repair for one role answer. Before every model call attempt,
+ * which is every first call, retry, repair and fallback, it is a safe point for a stop request: a call already in flight
+ * finishes and its result is recorded as usual, but no further call is made.
+ */
 @Service
 public class StructuredAnswerService {
 
@@ -42,11 +49,22 @@ public class StructuredAnswerService {
     private final ModelCallBudget budget;
     private final int repairLimit;
     private final Duration retryBaseDelay;
+    private final Optional<StopCheck> stop;
 
+    /** No stop request is ever looked for. */
+    public StructuredAnswerService(ModelClient model, ModelProfiles profiles, PromptBuilder prompts,
+                                   OutputValidator validator, ModelCallRecords records, ModelCallBudget budget,
+                                   int repairLimit, Duration retryBaseDelay) {
+        this(model, profiles, prompts, validator, records, budget, repairLimit, retryBaseDelay, Optional.empty());
+    }
+
+    /** The stop check is optional because a test context that loads this class alone does not hold it. */
+    @Autowired
     public StructuredAnswerService(ModelClient model, ModelProfiles profiles, PromptBuilder prompts,
                                    OutputValidator validator, ModelCallRecords records, ModelCallBudget budget,
                                    @Value("${agent.output.repair-limit:2}") int repairLimit,
-                                   @Value("${agent.models.retry-delay:200ms}") Duration retryBaseDelay) {
+                                   @Value("${agent.models.retry-delay:200ms}") Duration retryBaseDelay,
+                                   Optional<StopCheck> stop) {
         if (repairLimit < 0) {
             throw new IllegalArgumentException("agent.output.repair-limit must not be negative");
         }
@@ -62,6 +80,7 @@ public class StructuredAnswerService {
         this.budget = budget;
         this.repairLimit = repairLimit;
         this.retryBaseDelay = retryBaseDelay;
+        this.stop = stop;
     }
 
     public AcceptedAnswer call(UUID runId, String roleId, String task, List<PromptInput> inputs) {
@@ -158,6 +177,8 @@ public class StructuredAnswerService {
 
     private Invocation callOnce(UUID runId, String roleId, ModelProfile profile,
                                 Prompt prompt, AttemptKind kind) {
+        // A safe point, before the budget is charged: a stop request ends the run here instead of making the call.
+        stop.ifPresent(check -> check.check(runId));
         UUID reservationId = budget.reserve(runId, roleId, prompt.estimatedTokens(), profile.answerLimit());
         long started = System.nanoTime();
         try {

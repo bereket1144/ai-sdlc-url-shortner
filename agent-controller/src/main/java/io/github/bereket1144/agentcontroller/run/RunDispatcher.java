@@ -45,8 +45,14 @@ public class RunDispatcher {
                 return true;
             }
         } catch (RuntimeException | Error workflowFailure) {
+            if (RunStoppedException.in(workflowFailure)) {
+                // A reviewer asked the run to stop and the graph reached a safe point: neither a failure nor a success.
+                return recordStop(runId);
+            }
             try {
                 runService.failRun(runId, workflowFailure);
+            } catch (RunStoppedException stopped) {
+                return recordStop(runId);
             } catch (RuntimeException recordingFailure) {
                 workflowFailure.addSuppressed(recordingFailure);
                 log.error("event=run_failure_recording_failed runId={} errorType={}",
@@ -58,6 +64,8 @@ public class RunDispatcher {
         }
         try {
             runService.succeedRun(runId);
+        } catch (RunStoppedException stopped) {
+            return recordStop(runId);
         } catch (RuntimeException recordingFailure) {
             // The workflow finished, so the run is not marked FAILED; this line says which run is stuck RUNNING.
             log.error("event=run_success_recording_failed runId={} errorType={}",
@@ -65,6 +73,19 @@ public class RunDispatcher {
             throw recordingFailure;
         }
         log.info("event=run_dispatch_succeeded runId={}", runId);
+        return true;
+    }
+
+    private boolean recordStop(UUID runId) {
+        try {
+            runService.stopRun(runId);
+        } catch (RuntimeException recordingFailure) {
+            // The graph stopped, so the run is not marked FAILED; this line says which run is stuck RUNNING.
+            log.error("event=run_stop_recording_failed runId={} errorType={}",
+                    runId, recordingFailure.getClass().getName());
+            throw recordingFailure;
+        }
+        log.info("event=run_dispatch_stopped runId={}", runId);
         return true;
     }
 

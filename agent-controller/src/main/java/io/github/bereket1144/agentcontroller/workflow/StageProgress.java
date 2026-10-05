@@ -41,6 +41,14 @@ public class StageProgress {
     }
 
     /**
+     * Sets every stage that is running back to not started, for a run that stopped in the middle of them. A stage that
+     * finished stays finished.
+     */
+    public void reopenRunning(UUID runId) {
+        jdbc.update("delete from run_stage where run_id = ? and state = 'RUNNING'", runId);
+    }
+
+    /**
      * Sets one stage back to not started, so that a run resumed at the earliest stage that is not finished starts at it.
      * Public because a reviewer's rejection, which is decided in the run package, sets the rejected stage back.
      */

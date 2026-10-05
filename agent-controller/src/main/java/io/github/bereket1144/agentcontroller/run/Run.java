@@ -59,6 +59,12 @@ public class Run {
     @Column(length = 32)
     private String resumedFrom;
 
+    // Set to true by RunStop (a bulk update, so that the version does not change under the thread that runs the graph)
+    // when a reviewer asks a RUNNING run to stop. The graph thread reads it at its safe points. Cleared by start() and
+    // by both stop transitions, so a request never reaches into a later attempt.
+    @Column(nullable = false)
+    private boolean stopRequested;
+
     // Hibernate sets this when the row is first inserted and never writes it again.
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -102,6 +108,7 @@ public class Run {
             throw new IllegalStateException(
                     "Only a CREATED run can be started");
         }
+        this.stopRequested = false;
         this.status = RunStatus.RUNNING;
     }
 
@@ -199,6 +206,65 @@ public class Run {
         this.resumedFrom = startsAt;
         this.failureReason = null;
         this.status = RunStatus.CREATED;
+    }
+
+    /**
+     * Stops a run that is not running, at once: a CREATED run, which the scheduler then never claims, or a run that
+     * waits for input. A RUNNING run is asked to stop instead (see {@link RunRepository#requestStop}) and ends with
+     * {@link #stopped}.
+     *
+     * @throws IllegalStateException when the run is not CREATED or waiting for input
+     */
+    public void stopAtOnce() {
+        if (status != RunStatus.CREATED && status != RunStatus.WAITING_FOR_INPUT) {
+            throw new IllegalStateException("Only a created or waiting run can be stopped at once");
+        }
+        this.stopRequested = false;
+        this.status = RunStatus.STOPPED;
+    }
+
+    /**
+     * Ends the attempt of a RUNNING run that a reviewer asked to stop. It is not a failure: there is no failure reason,
+     * and the run can be resumed.
+     *
+     * @throws IllegalStateException when the run is not RUNNING
+     */
+    public void stopped() {
+        if (status != RunStatus.RUNNING) {
+            throw new IllegalStateException("Only a RUNNING run can end as stopped");
+        }
+        this.stopRequested = false;
+        this.status = RunStatus.STOPPED;
+    }
+
+    /**
+     * Queues a STOPPED run again, to be attempted from {@code startsAt}: a stage name, or START for the beginning, as
+     * in {@link #retry}. The run did not fail, so the attempt number is not used up.
+     *
+     * @throws IllegalStateException when the run is not STOPPED
+     */
+    public void resumeStopped(String startsAt) {
+        if (startsAt == null || startsAt.isBlank()) {
+            throw new IllegalArgumentException("startsAt must not be blank");
+        }
+        if (status != RunStatus.STOPPED) {
+            throw new IllegalStateException("Only a stopped run can be resumed");
+        }
+        this.resumedFrom = startsAt;
+        this.status = RunStatus.CREATED;
+    }
+
+    /**
+     * Puts a STOPPED run that was waiting for answers or for a decision back into that wait. What it waits for is
+     * stored, so nothing else changes and no attempt is queued.
+     *
+     * @throws IllegalStateException when the run is not STOPPED
+     */
+    public void waitAgain() {
+        if (status != RunStatus.STOPPED) {
+            throw new IllegalStateException("Only a stopped run can wait again");
+        }
+        this.status = RunStatus.WAITING_FOR_INPUT;
     }
 
 }

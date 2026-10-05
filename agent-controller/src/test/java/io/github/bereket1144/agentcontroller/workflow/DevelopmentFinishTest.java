@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import java.util.UUID;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactRef;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore.StoredArtifact;
+import io.github.bereket1144.agentcontroller.run.StopCheck;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationFailedException;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRecords;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
@@ -40,7 +42,7 @@ class DevelopmentFinishTest {
     private final VerificationRunner verifier = mock(VerificationRunner.class);
     private final VerificationRecords records = mock(VerificationRecords.class);
     private final DevelopmentFinish finish = new DevelopmentFinish(artifacts, workspaces, verifier, records,
-            new WorkspaceFiles());
+            new WorkspaceFiles(), mock(StopCheck.class));
     private final AgentState state = new AgentState(Map.of("runId", runId));
     private final Path product = Path.of("workspace", "apps", "demo");
 
@@ -59,14 +61,14 @@ class DevelopmentFinishTest {
     void aPassingResultGoesOn() {
         givenAnArtifactAndACommit();
         VerificationResult passed = new VerificationResult(Outcome.PASSED, 2, 2, 0, List.of(), "", "abc123");
-        when(verifier.verify(product, "abc123")).thenReturn(passed);
+        when(verifier.verify(eq(product), eq("abc123"), any())).thenReturn(passed);
 
         Map<String, Object> update = finish.finish(state, Map.of("development", ref));
 
         assertThat(update).containsEntry("development", ref).containsEntry("commit", "abc123")
                 .containsEntry("verification", "PASSED");
         // The sandbox is given the product folder, not the root of the workspace.
-        verify(verifier).verify(product, "abc123");
+        verify(verifier).verify(eq(product), eq("abc123"), any());
         verify(records).record(runId, passed);
     }
 
@@ -75,7 +77,7 @@ class DevelopmentFinishTest {
     void aFailedResultEndsTheStage() {
         givenAnArtifactAndACommit();
         VerificationResult noResult = VerificationResult.noResult("abc123");
-        when(verifier.verify(product, "abc123")).thenReturn(noResult);
+        when(verifier.verify(eq(product), eq("abc123"), any())).thenReturn(noResult);
 
         assertThatThrownBy(() -> finish.finish(state, Map.of("development", ref)))
                 .isInstanceOf(VerificationFailedException.class);
@@ -90,7 +92,7 @@ class DevelopmentFinishTest {
         when(workspaces.commitIfChanged(any(), any(), any(), any())).thenReturn(Optional.empty());
         when(workspaces.head(runId)).thenReturn("abc123");
         VerificationResult failed = new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of("test_x"), "", "abc123");
-        when(verifier.verify(product, "abc123")).thenReturn(failed);
+        when(verifier.verify(eq(product), eq("abc123"), any())).thenReturn(failed);
 
         assertThatThrownBy(() -> finish.finish(state, Map.of("development", ref)))
                 .isInstanceOf(VerificationFailedException.class);
@@ -104,7 +106,7 @@ class DevelopmentFinishTest {
         givenAnArtifactAndACommit();
         VerificationResult before = new VerificationResult(Outcome.FAILED, 1, 0, 1, List.of("test_x"), "", "old");
         when(records.latest(runId)).thenReturn(Optional.of(before));
-        when(verifier.verify(product, "abc123"))
+        when(verifier.verify(eq(product), eq("abc123"), any()))
                 .thenReturn(new VerificationResult(Outcome.PASSED, 2, 2, 0, List.of(), "", "abc123"));
         AgentStageNode node = mock(AgentStageNode.class);
         AgentState restarted = new AgentState(Map.of("runId", runId, DevelopmentFinish.PREVIOUS_ATTEMPT_COMMIT, "old"));

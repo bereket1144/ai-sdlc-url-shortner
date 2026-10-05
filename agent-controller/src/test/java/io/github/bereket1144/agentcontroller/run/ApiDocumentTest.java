@@ -44,12 +44,13 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1, AC-AGT-66.6, AC-AGT-15.8 the document lists the run endpoints, the artifact, lineage, retry, decisions and metrics endpoints, and no other path")
+    @DisplayName("AC-SWAG-1.2, AC-AGT-62.14, AC-AGT-46.1, AC-AGT-47.1, AC-AGT-66.6, AC-AGT-15.8, AC-AGT-43.6 the document lists the run, artifact, lineage, retry, decisions, stop, resume and metrics endpoints, and no other path")
     void documentListsOnlyTheRunEndpoints() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths.keys()", containsInAnyOrder("/v1/runs", "/v1/runs/{id}",
                         "/v1/runs/{id}/artifacts/{kind}/{version}", "/v1/runs/{id}/questions", "/v1/runs/{id}/replies",
-                        "/v1/runs/{id}/lineage", "/v1/runs/{id}/retry", "/v1/runs/{id}/decisions", "/v1/metrics")))
+                        "/v1/runs/{id}/lineage", "/v1/runs/{id}/retry", "/v1/runs/{id}/decisions",
+                        "/v1/runs/{id}/stop", "/v1/runs/{id}/resume", "/v1/metrics")))
                 .andExpect(jsonPath("$.paths['/v1/runs'].keys()", containsInAnyOrder("post")))
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].keys()", containsInAnyOrder("get")));
     }
@@ -99,7 +100,7 @@ class ApiDocumentTest {
                         containsInAnyOrder("GREENFIELD", "BROWNFIELD")))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.baseRunId.format").value("uuid"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
-                        containsInAnyOrder("CREATED", "RUNNING", "WAITING_FOR_INPUT", "SUCCEEDED", "FAILED")));
+                        containsInAnyOrder("CREATED", "RUNNING", "WAITING_FOR_INPUT", "SUCCEEDED", "FAILED", "STOPPED")));
     }
 
     @Test

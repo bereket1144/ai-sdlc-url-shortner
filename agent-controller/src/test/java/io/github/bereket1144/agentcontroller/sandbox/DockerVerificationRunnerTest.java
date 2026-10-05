@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult.Outcome;
 import org.junit.jupiter.api.DisplayName;
@@ -70,6 +72,30 @@ class DockerVerificationRunnerTest {
         assertNoResult(new FakeDocker(PASSING_REPORT, true));
     }
 
+    @Test
+    @DisplayName("AC-AGT-43.1 a stop during a build cancels its wait, removes the container and does not read a report")
+    void stopsARunningBuildAndRemovesItsContainer() {
+        AtomicBoolean stopped = new AtomicBoolean();
+        List<List<String>> commands = new ArrayList<>();
+        DockerCommand docker = (command, timeout, cancelled) -> {
+            commands.add(command);
+            if (command.get(1).equals("start")) {
+                // A reviewer stops the run while the attached Docker command is waiting for the build.
+                stopped.set(true);
+                assertThat(cancelled.getAsBoolean()).isTrue();
+                return new DockerCommand.Result(DockerCommand.NO_EXIT_CODE, false);
+            }
+            return new DockerCommand.Result(0, false);
+        };
+
+        VerificationResult result = runnerWith(docker).verify(workspace, "abc123", stopped::get);
+
+        assertThat(result.outcome()).isEqualTo(Outcome.NO_RESULT);
+        assertThat(commands).hasSize(4);
+        assertThat(commands.getLast()).startsWith("docker", "rm", "-f");
+        assertThat(commands).noneMatch(command -> command.get(1).equals("cp") && command.get(2).contains(":/"));
+    }
+
     private void assertNoResult(FakeDocker docker) {
         VerificationResult result = runnerWith(docker).verify(workspace, "abc123");
 
@@ -105,7 +131,7 @@ class DockerVerificationRunnerTest {
         }
 
         @Override
-        public Result run(List<String> command, Duration timeout) {
+        public Result run(List<String> command, Duration timeout, BooleanSupplier cancelled) {
             commands.add(command);
             timeouts.add(timeout);
             String step = command.get(1);
