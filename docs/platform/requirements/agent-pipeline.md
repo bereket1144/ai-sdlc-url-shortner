@@ -270,6 +270,50 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 - AC-AGT-11.5 The graph state holds only artifact references (kind, version, fingerprint), never content, so checkpoints stay small and nothing sensitive sits in graph state or logs.
 - AC-AGT-11.6 A run's artifacts can be listed with their lineage.
 
+### AGT-62 Run the whole pipeline once, from Postman, on a real model
+
+Status: open
+
+Depends on: AGT-6 to AGT-12, AGT-16.
+
+As the platform owner, I want to post one requirement and watch the run go through every stage with a real model and end with committed, built and tested code, so that the whole platform is proved end to end before the later controls (approvals, pauses, repair, gates) are added on top of it. This is a deliberately thin first run: it covers the work of AGT-17, AGT-18, AGT-22, AGT-23, AGT-29 and AGT-33 in their smallest form, and those stories later harden it.
+
+The story is built in five parts that do not depend on each other: the model client (A), the stage agents (B), file changes and the commit (C), the sandboxed build (D) and the run read operations (E). A scripted end-to-end test joins them (F).
+
+A. Model client
+
+- AC-AGT-62.1 A second implementation of the `ModelClient` port calls a hosted model. A profile chooses it by configuration (address, model identifier, window, answer limit, key). The key is read from the environment only. It returns the same typed results and failures as AC-AGT-3.x (text, finish reason, reported token counts, retryable or not) and never logs a prompt or an answer. A stub server proves it in tests; an opt-in live check sends one small request and asserts only structure.
+
+B. Stage agents
+
+- AC-AGT-62.2 The switch of AC-AGT-12.3 exists for every role (`agent.stages.<role>=agent`), with the dummy as the default. A generic agent stage node serves `impactAnalysis`, `design`, `planning`, `development`, `qa`, `review` and `documentation`.
+- AC-AGT-62.3 An agent stage reads only the artifacts its role may read (AGT-16), calls the role through the structured answer service (AGT-5 to AGT-8), stores one artifact of the role's kind (AGT-11), and passes only its reference to the graph state.
+- AC-AGT-62.4 In this first run open questions do not pause the run. They stay in the artifact, and each unanswered question is also listed as an assumption. Pausing is AGT-13.
+- AC-AGT-62.5 The order and the parallel join of FLOW-1 are unchanged: QA, review and documentation run side by side after development and join before the run ends.
+
+C. File changes and the commit
+
+- AC-AGT-62.6 The development role answers with a change set: a list of files, each with a path and its full new content. A path outside `apps/url-shortener/` and the run's folder `runs/<run-id>/`, an absolute path, a path with `..`, a link, an empty change set, or a file over the size limit makes the answer invalid, and the repair of AGT-5 applies.
+- AC-AGT-62.7 The controller writes the files into the run's workspace, a folder `<base>/<run-id>` under the configured base directory, on a new branch `run/<run-id>`, and makes one commit with the development role as author and the run id in the message. Creating the workspace again for the same run reuses it. Nothing is written outside the base directory, and the controller's own checkout and the main branch are never changed.
+
+D. Sandboxed build and test
+
+- AC-AGT-62.8 After the commit the controller builds and tests the workspace in a new container that is removed afterwards. The container runs as a non-root user with limits on CPU, memory, processes and time, has no network, receives the workspace by copy and returns only its reports by copy, and has a label that names the platform. The controller starts it with the `docker` command line behind a port, and a fake stands in for the port in tests.
+- AC-AGT-62.9 The result is stored with the commit id: the build outcome, the tests run, passed and failed with the names of the failing tests, and a bounded excerpt of the report. A missing, unreadable or timed-out result is NO_RESULT, and NO_RESULT is a failure.
+- AC-AGT-62.10 The run ends SUCCEEDED only when every stage finished, the commit exists, and the build and every test passed. Otherwise it ends FAILED with a reason. The reason `VERIFICATION_FAILED` is added to the list of AC-AGT-9.1, and the stored failure reasons accept it.
+
+E. Run read operations (what Postman calls)
+
+- AC-AGT-62.11 `POST /v1/runs` with `{"requirement": "..."}` is unchanged and answers 201 with the run id. The run then goes on by itself, with no further call.
+- AC-AGT-62.12 `GET /v1/runs/{id}` also shows, while they exist: each stage with its state (not started, running, finished), the stored artifacts (kind, version, summary), the commit id, and the verification result. It never shows requirement, question, answer or model text beyond what is already shown today.
+- AC-AGT-62.13 `GET /v1/runs/{id}/artifacts/{kind}/{version}` returns that artifact's content as JSON. An unknown run, kind or version is 404 in the RUN-4 format.
+- AC-AGT-62.14 The API document lists the new fields and the new operation, so that Postman can import it from `/v3/api-docs` and the Swagger page shows it. This updates AC-SWAG-1.3 and AC-SWAG-1.4 with the user's approval, noted in the steps log.
+
+F. End to end
+
+- AC-AGT-62.15 A scripted end-to-end test in `./mvnw verify` posts a requirement through the HTTP API with a scripted model and a fake container port, waits for the run, and checks: status SUCCEEDED, an artifact of every stage, a commit on `run/<run-id>` that contains the files of the scripted change set, and a stored passing verification result. A second case with a failing scripted build ends FAILED with `VERIFICATION_FAILED`.
+- AC-AGT-62.16 An opt-in end-to-end test, enabled by a property and the key in the environment, runs the real model and the real container on the requirement in `scenarios/walking-skeleton.md`. That file asks for a small link-shortening service and pins the language and test tool (Python, the standard library, SQLite and pytest). The platform code contains neither. The test asserts structure only: the run ends SUCCEEDED, or FAILED with a reason; an artifact exists for every stage that ran; the commit and the verification result exist when the run got that far. It never asserts wording. `./mvnw verify` skips it.
+
 ### AGT-12 Turn a requirement into stories and criteria
 
 Status: coded
