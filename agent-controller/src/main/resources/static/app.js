@@ -288,6 +288,10 @@
     failure: $('failure'), failureCode: $('failure-code'), failureMessage: $('failure-message'),
     stages: $('stages'), questionsCard: $('questions-card'), questionsForm: $('questions-form'),
     questionList: $('question-list'), questionsMessage: $('questions-message'), questionsSend: $('questions-send'),
+    workspace: $('workspace'), sidebarToggle: $('sidebar-toggle'),
+    chat: $('chat'), chatMessages: $('chat-messages'), artifactView: $('artifact-view'),
+    artifactLinks: $('artifact-links'), artifactsEmpty: $('artifacts-empty'),
+    paneTitle: $('pane-title'), backToChat: $('back-to-chat'), lineageOpen: $('lineage-open'),
     sections: $('sections'), lineageCard: $('lineage-card'), lineageMessage: $('lineage-message'),
     lineageBody: $('lineage-body'),
     metrics: $('metrics'), metricsBody: $('metrics-body'), metricsMessage: $('metrics-message'),
@@ -301,12 +305,76 @@
   const cards = SECTIONS.map(section => {
     const badge = el('span', { class: 'muted small' });
     const body = el('div', { class: 'card-body' });
-    const extras = section.kind === 'development' ? [ui.building, ui.verification] : [];
     const root = el('section', { class: 'card', hidden: '' },
-      el('div', { class: 'card-head' }, el('h2', { text: section.title }), badge), ...extras, body);
+      el('div', { class: 'card-head' }, el('h2', { text: section.title }), badge), body);
     ui.sections.append(root);
-    return { section, root, body, badge };
+    const link = el('button', { type: 'button', class: 'artifact-link', hidden: '', text: section.title });
+    link.addEventListener('click', () => openArtifact(card));
+    ui.artifactLinks.append(link);
+    const card = { section, root, body, badge, link };
+    return card;
   });
+
+  ui.chat.append(ui.building, ui.verification);
+  let selectedArtifact = null;
+
+  // Switching panes never changes the route or the polling session.
+  function openArtifact(card) {
+    closeSidebar();
+    selectedArtifact = card;
+    ui.chat.hidden = true;
+    ui.artifactView.hidden = false;
+    ui.backToChat.hidden = false;
+    setText(ui.paneTitle, card ? card.section.title : 'Lineage');
+    for (const item of cards) {
+      item.root.hidden = item !== card;
+      item.link.setAttribute('aria-pressed', String(item === card));
+    }
+    ui.lineageCard.hidden = card !== null;
+    ui.lineageOpen.setAttribute('aria-pressed', String(card === null));
+    ui.backToChat.focus();
+  }
+
+  function showChat() {
+    selectedArtifact = null;
+    ui.chat.hidden = false;
+    ui.artifactView.hidden = true;
+    ui.backToChat.hidden = true;
+    setText(ui.paneTitle, 'Conversation');
+    for (const card of cards) card.link.setAttribute('aria-pressed', 'false');
+    ui.lineageOpen.setAttribute('aria-pressed', 'false');
+  }
+
+  function closeSidebar() {
+    ui.workspace.classList.remove('sidebar-open');
+    ui.sidebarToggle.setAttribute('aria-expanded', 'false');
+  }
+
+  ui.sidebarToggle.addEventListener('click', () => {
+    const open = ui.workspace.classList.toggle('sidebar-open');
+    ui.sidebarToggle.setAttribute('aria-expanded', String(open));
+  });
+
+  ui.backToChat.addEventListener('click', () => {
+    showChat();
+    ui.chat.focus();
+  });
+  ui.lineageOpen.addEventListener('click', () => openArtifact(null));
+
+  function chatMessage(role, text, card) {
+    // Keep the reader's position when they have scrolled up to earlier messages.
+    const nearBottom = ui.chat.scrollHeight - ui.chat.scrollTop - ui.chat.clientHeight < 100;
+    const message = el('article', { class: `chat-message ${role}` },
+      el('p', { class: 'eyebrow', text: role === 'user' ? 'You' : 'Agent' }),
+      el('p', { class: 'message-text', text }));
+    if (card) {
+      const button = el('button', { type: 'button', class: 'btn small', text: `View ${card.section.title.toLowerCase()}` });
+      button.addEventListener('click', () => openArtifact(card));
+      message.append(button);
+    }
+    ui.chatMessages.append(message);
+    if (nearBottom) ui.chat.scrollTop = ui.chat.scrollHeight;
+  }
 
   // The run being followed, or null. Every answer from the controller is dropped when it is no longer the one
   // followed (the person started or opened another run while it was on its way).
@@ -353,7 +421,8 @@
     resetRunView();
     current = {
       id, timer: null, busy: false, shown: new Map(), stageItems: new Map(), answered: new Set(),
-      questionKey: null, questionFields: [], verificationSignature: null, lineageSignature: null
+      questionKey: null, questionFields: [], verificationSignature: null, lineageSignature: null,
+      stageStates: new Map(), lastStatus: null, requirementShown: false
     };
     setText(ui.runId, id);
     ui.start.hidden = true;
@@ -364,6 +433,11 @@
   }
 
   function resetRunView() {
+    showChat();
+    closeSidebar();
+    ui.chatMessages.replaceChildren();
+    ui.artifactsEmpty.hidden = false;
+    ui.lineageOpen.hidden = true;
     ui.stages.replaceChildren();
     ui.questionList.replaceChildren();
     ui.verification.replaceChildren();
@@ -379,6 +453,7 @@
     setText(ui.runStatus, '');
     for (const card of cards) {
       card.root.hidden = true;
+      card.link.hidden = true;
       card.body.replaceChildren();
       card.badge.textContent = '';
     }
@@ -431,6 +506,17 @@
 
   // Status, failure reason, the eight stages, the build indicator and the verification result.
   function showRun(session, run) {
+    if (!session.requirementShown && run.requirement) {
+      chatMessage('user', asText(run.requirement));
+      session.requirementShown = true;
+    }
+    if (session.lastStatus !== run.status) {
+      const messages = { CREATED: 'Your run is queued.', RUNNING: 'Working on your requirement.',
+        WAITING_FOR_INPUT: 'Your input is needed to continue.', SUCCEEDED: 'Run complete. You can review the stage artifacts.',
+        FAILED: 'The run stopped. See the failure details below.' };
+      chatMessage('agent', messages[run.status] || humanize(run.status.toLowerCase()));
+      session.lastStatus = run.status;
+    }
     setText(ui.runStatus, humanize(run.status.toLowerCase()));
     setData(ui.runStatus, 'tone', STATUS_TONES[run.status] || 'neutral');
 
@@ -445,6 +531,10 @@
       buildStepper(session, run.stages);
     }
     for (const stage of run.stages) {
+      if (session.stageStates.get(stage.stage) !== stage.state && stage.state !== 'NOT_STARTED') {
+        chatMessage('agent', `${STAGE_LABELS[stage.stage] || humanize(stage.stage)}: ${STATE_LABELS[stage.state] || humanize(stage.state.toLowerCase())}.`);
+      }
+      session.stageStates.set(stage.stage, stage.state);
       const parts = session.stageItems.get(stage.stage);
       setData(parts.item, 'state', stage.state);
       setText(parts.state, STATE_LABELS[stage.state] || humanize(stage.state.toLowerCase()));
@@ -454,9 +544,7 @@
     const development = run.stages.find(stage => stage.stage === 'development');
     ui.building.hidden = !(development && development.state === 'RUNNING');
     showVerification(session, run);
-    if (!ui.building.hidden || run.verification) {
-      cards.find(card => card.section.kind === 'development').root.hidden = false;
-    }
+
   }
 
   function buildStepper(session, stages) {
@@ -558,7 +646,11 @@
     }
     card.body.replaceChildren(rendered);
     card.badge.textContent = `version ${version}`;
-    card.root.hidden = false;
+    card.root.hidden = ui.artifactView.hidden || selectedArtifact !== card;
+    card.link.hidden = false;
+    card.link.textContent = `${card.section.title} · v${version}`;
+    ui.artifactsEmpty.hidden = true;
+    chatMessage('agent', `${card.section.title} artifact is ready (version ${version}).`, card);
   }
 
   // ---- Lineage (AC-AGT-47.3) -----------------------------------------------------------------------------------
@@ -581,7 +673,7 @@
       // The signature stays unmarked, so a run that is still going tries again on the next poll.
       console.error(`event=lineage_failed runId=${session.id} status=${error.status}`, error);
       setMessage(ui.lineageMessage, `Could not read the lineage (${error.message}).`);
-      ui.lineageCard.hidden = false;
+      ui.lineageOpen.hidden = false;
       return;
     }
     if (session !== current) {
@@ -590,7 +682,7 @@
     session.lineageSignature = signature;
     setMessage(ui.lineageMessage, '');
     ui.lineageBody.replaceChildren(lineageView(lineage));
-    ui.lineageCard.hidden = false;
+    ui.lineageOpen.hidden = false;
   }
 
   function kindTitle(kind) {
@@ -698,7 +790,7 @@
           el('span', { text: `Proposed default: ${question.proposedDefault}` }), use));
       }
       ui.questionList.append(block);
-      session.questionFields.push({ id: question.id, input });
+      session.questionFields.push({ id: question.id, text: asText(question.text), input });
     }
   }
 
@@ -719,6 +811,10 @@
       await api(`/v1/runs/${session.id}/replies`, postJson({ answers }));
       if (session !== current) {
         return;
+      }
+      for (const field of session.questionFields) {
+        chatMessage('user', `${field.id}: ${field.text}
+${field.input.value.trim()}`);
       }
       session.answered.add(session.questionKey);
       session.questionFields = [];

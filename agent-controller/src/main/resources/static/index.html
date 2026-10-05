@@ -25,12 +25,13 @@
 
   <main class="wrap">
     <section id="start" class="card">
-      <h1>Start a run</h1>
+      <p class="eyebrow">Your development workspace</p>
+      <h1>What do you want to build?</h1>
       <p class="muted">Describe what you want built. The agents take it through requirements, design, planning,
         code, QA, review and documentation. Follow each stage here, and answer the agents' questions when they ask.</p>
       <form id="start-form">
         <label for="requirement">Requirement</label>
-        <textarea id="requirement" name="requirement" rows="7" required
+        <textarea id="requirement" name="requirement" rows="4" required
                   placeholder="Describe what should be built, in a few sentences."></textarea>
         <div class="row">
           <button id="start-button" class="btn primary" type="submit">Start run</button>
@@ -53,41 +54,54 @@
         <a class="btn" href="#">New run</a>
       </div>
 
-      <p id="notice" class="notice" role="status" hidden></p>
-
-      <section id="failure" class="card failure" role="alert" hidden>
-        <h2>The run failed</h2>
-        <p><code id="failure-code" class="mono"></code></p>
-        <p id="failure-message"></p>
-      </section>
-
-      <section class="card">
-        <h2>Stages</h2>
-        <ol id="stages" class="stepper"></ol>
-      </section>
-
-      <section id="questions-card" class="card attention" hidden>
-        <h2>The agent needs your answers</h2>
-        <p class="muted">Answer every question, then send all the answers together. The run goes on when they are
-          accepted.</p>
-        <form id="questions-form">
-          <div id="question-list"></div>
-          <p id="questions-message" class="message" role="alert" hidden></p>
-          <div class="row">
-            <button id="questions-send" class="btn primary" type="submit">Send answers</button>
+      <div id="workspace" class="workspace">
+        <aside id="sidebar" class="sidebar" aria-label="Run stages and artifacts">
+          <h2>Stages</h2>
+          <ol id="stages" class="stepper"></ol>
+          <h2>Artifacts</h2>
+          <p id="artifacts-empty" class="muted">Stage outputs will appear here.</p>
+          <div id="artifact-links" class="artifact-links"></div>
+          <button id="lineage-open" class="artifact-link" type="button" hidden>View lineage</button>
+        </aside>
+        <div class="conversation-pane">
+          <div class="pane-head">
+            <button id="sidebar-toggle" class="btn small sidebar-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Stages &amp; artifacts</button>
+            <h2 id="pane-title">Conversation</h2>
+            <button id="back-to-chat" class="btn small" type="button" hidden>Back to chat</button>
           </div>
-        </form>
-      </section>
-
-      <div id="sections" class="sections"></div>
-
-      <section id="lineage-card" class="card" hidden>
-        <h2>Lineage</h2>
-        <p class="muted">Why this output exists: what each artifact was built from, and which criteria each file
-          serves.</p>
-        <p id="lineage-message" class="message" role="alert" hidden></p>
-        <div id="lineage-body"></div>
-      </section>
+          <div id="chat" class="chat" role="region" aria-label="Run conversation" tabindex="0">
+            <div id="chat-messages" class="chat-messages"></div>
+            <p id="notice" class="notice" role="status" hidden></p>
+            <section id="failure" class="card failure" role="alert" hidden>
+              <h2>The run failed</h2>
+              <p><code id="failure-code" class="mono"></code></p>
+              <p id="failure-message"></p>
+            </section>
+            <section id="questions-card" class="card attention" hidden>
+              <p class="eyebrow">Agent</p>
+              <h2>A few questions before we continue</h2>
+              <p class="muted">Send your answers together to continue the run.</p>
+              <form id="questions-form">
+                <div id="question-list"></div>
+                <p id="questions-message" class="message" role="alert" hidden></p>
+                <div class="row">
+                  <button id="questions-send" class="btn primary" type="submit">Send answers</button>
+                </div>
+              </form>
+            </section>
+          </div>
+          <div id="artifact-view" class="artifact-view" hidden>
+            <div id="sections" class="sections"></div>
+            <section id="lineage-card" class="card" hidden>
+              <h2>Lineage</h2>
+              <p class="muted">What each artifact was built from, and which criteria each file serves.</p>
+              <p id="lineage-message" class="message" role="alert" hidden></p>
+              <div id="lineage-body"></div>
+            </section>
+          </div>
+          <div class="chat-footer">Stage updates appear automatically. Questions will appear in the conversation.</div>
+        </div>
+      </div>
     </section>
 
     <section id="metrics" hidden>
