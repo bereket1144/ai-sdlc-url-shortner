@@ -17,9 +17,11 @@ import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.action.NodeAction;
 import org.bsc.langgraph4j.state.AgentState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -29,11 +31,23 @@ public class WorkflowRunner {
 
     private final CompiledGraph<AgentState> graph;
 
+    /** Every stage on its dummy node. */
     public WorkflowRunner(DummySdlcNodes nodes) throws GraphStateException {
+        this(nodes, Optional.empty());
+    }
+
+    /** The requirements agent replaces the dummy requirements stage when its setting enabled it. */
+    @Autowired
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent)
+            throws GraphStateException {
+        NodeAction<AgentState> requirements = requirementsAgent.isPresent()
+                ? requirementsAgent.get()::requirements : nodes::requirements;
+        log.info("event=workflow_stage_selected stage=requirements node={}",
+                requirementsAgent.isPresent() ? "agent" : "dummy");
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         this.graph = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))
-                .addNode("requirements", node_async(nodes::requirements))
+                .addNode("requirements", node_async(requirements))
                 .addNode("impactAnalysis", node_async(nodes::impactAnalysis))
                 .addNode("design", node_async(nodes::design))
                 .addNode("planning", node_async(nodes::planning))
