@@ -28,6 +28,9 @@ import tools.jackson.databind.JsonNode;
 @Service
 public class StructuredAnswerService {
 
+    /** The check message of an answer that the answer limit cut off; the repair prompt asks for a shorter one. */
+    static final String CUT_OFF_MESSAGE = "Answer was cut off at answer limit";
+
     private static final Logger log = LoggerFactory.getLogger(StructuredAnswerService.class);
     private static final Duration MAX_RETRY_DELAY = Duration.ofSeconds(30);
 
@@ -80,7 +83,7 @@ public class StructuredAnswerService {
             profile = invocation.profile();
             ModelResult answer = invocation.result();
             OutputValidator.Validation checked = answer.finishReason() == FinishReason.ANSWER_LIMIT
-                    ? new OutputValidator.Validation(null, List.of("Answer was cut off at answer limit"))
+                    ? new OutputValidator.Validation(null, List.of(CUT_OFF_MESSAGE))
                     : validator.validate(roleId, answer.text());
             Outcome outcome = answer.finishReason() == FinishReason.ANSWER_LIMIT ? Outcome.ANSWER_CUT_OFF
                     : checked.valid() ? Outcome.SUCCESS : Outcome.INVALID_ANSWER;

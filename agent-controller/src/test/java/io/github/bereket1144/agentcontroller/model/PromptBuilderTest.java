@@ -45,6 +45,22 @@ class PromptBuilderTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-4.1 the system part states an answer size from the profile, and a repair after a cut-off asks for a shorter answer")
+    void statesTheAnswerSizeAndAsksForAShorterAnswerAfterACutOff() throws Exception {
+        ModelProfile profile = profile("local", 40960, 12000);
+        PromptBuilder builder = builder(Map.of("local", profile), 10, 3);
+        PromptBuilder.Prompt prompt = builder.build("requirements", profile, "Write stories",
+                List.of(input(InputKind.ORIGINAL_REQUIREMENT, "1", "A request", null, false)));
+
+        assertThat(prompt.systemText()).contains("Answer size: the whole answer must stay under about 2000 words",
+                "12000 tokens");
+        assertThat(builder.repair("requirements", prompt, "{", List.of(StructuredAnswerService.CUT_OFF_MESSAGE))
+                .userText()).contains("too long and was cut off");
+        assertThat(builder.repair("requirements", prompt, "{", List.of("a field is missing")).userText())
+                .doesNotContain("too long");
+    }
+
+    @Test
     @DisplayName("AC-AGT-4.2 the estimate uses the configured character ratio, answer reserve, and safety margin")
     void estimatesAvailableWindow() throws Exception {
         ModelProfile profile = profile("local", 4096, 100);

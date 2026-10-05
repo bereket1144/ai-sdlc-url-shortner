@@ -55,7 +55,7 @@ public class PromptBuilder {
             }
         }
 
-        String system = systemText(role);
+        String system = systemText(role, profile);
         long reserved = (long) profile.contextWindow() * profiles.safetyMarginPercent() / 100;
         long capacity = profile.contextWindow() - profile.answerLimit() - reserved;
         Set<Integer> shortened = new HashSet<>();
@@ -111,7 +111,10 @@ public class PromptBuilder {
         String user = original.userText() + "\n[PREVIOUS_ANSWER]\n" + previousAnswer
                 + "\n[/PREVIOUS_ANSWER]\n[VALIDATION_MESSAGES]\n"
                 + String.join("\n", failures) + "\n[/VALIDATION_MESSAGES]\n"
-                + "Correct the answer and return one JSON object.\n";
+                + "Correct the answer and return one JSON object.\n"
+                + (failures.contains(StructuredAnswerService.CUT_OFF_MESSAGE)
+                        ? "The previous answer was too long and was cut off: write a much shorter one, with fewer and "
+                        + "shorter items, so that it fits.\n" : "");
         long estimated = estimate(original.systemText(), user);
         if (estimated > original.availablePromptTokens()) {
             throw new ContextTooLargeException(roleId, estimated, original.availablePromptTokens());
@@ -127,7 +130,7 @@ public class PromptBuilder {
                 && input.kind() != InputKind.QUESTIONS_AND_ANSWERS;
     }
 
-    private static String systemText(RoleDefinition role) {
+    private static String systemText(RoleDefinition role, ModelProfile profile) {
         return "Role: " + role.id() + "\nVersion: " + role.version() + "\nIdentity: " + role.identity()
                 + "\nMission: " + role.mission() + "\nVoice: " + role.voice()
                 + "\nWorking standards: " + String.join("; ", role.standards())
@@ -141,7 +144,12 @@ public class PromptBuilder {
                 + "\nHuman approval required: " + role.output().approvalRequired()
                 + "\nBoundaries: " + role.boundaries()
                 + "\nUncertainty: " + role.uncertainty()
-                + "\nSelf-check: " + role.selfCheck() + "\n" + PLATFORM_RULES;
+                + "\nSelf-check: " + role.selfCheck()
+                // A model that is not told how much room it has writes until the limit cuts the answer off.
+                + "\nAnswer size: the whole answer must stay under about " + profile.answerLimit() / 6
+                + " words, because it is cut off at " + profile.answerLimit() + " tokens and any hidden reasoning "
+                + "uses part of them. Be concise: give each field only what the next stage needs, in short items "
+                + "without repetition.\n" + PLATFORM_RULES;
     }
 
     private static String userText(String task, List<PromptInput> inputs, Set<Integer> shortened) {
