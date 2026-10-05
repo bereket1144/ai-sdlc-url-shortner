@@ -104,7 +104,8 @@ public class OllamaModelClient implements ModelClient {
         }
     }
 
-    private static RestClient clientFor(ModelProfile profile) {
+    /** Shared with {@link HostedModelClient}: one place decides timeouts and that redirects are never followed. */
+    static RestClient clientFor(ModelProfile profile) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(profile.callTimeout())
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -135,7 +136,8 @@ public class OllamaModelClient implements ModelClient {
                 tokenCount(profile, response, "eval_count"), duration);
     }
 
-    private static Long tokenCount(ModelProfile profile, Map<String, Object> response, String field) {
+    /** Shared with {@link HostedModelClient}: a reported count is absent or a non-negative whole number. */
+    static Long tokenCount(ModelProfile profile, Map<?, ?> response, String field) {
         Object value = response.get(field);
         if (value == null) {
             return null;
@@ -149,7 +151,8 @@ public class OllamaModelClient implements ModelClient {
         throw new ModelCallException(FailureReason.RESPONSE_UNREADABLE, profile.name());
     }
 
-    private static FailureReason statusFailure(int status) {
+    /** Shared with {@link HostedModelClient}: one place maps an HTTP status to a typed failure. */
+    static FailureReason statusFailure(int status) {
         if (status == 408) {
             return FailureReason.TIMED_OUT;
         }
