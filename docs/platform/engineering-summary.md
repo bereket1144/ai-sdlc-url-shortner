@@ -10,7 +10,7 @@ The baseline is `feat/agent-pipeline` at `91be0a3`. The handoff records a succes
 
 The platform is the principal deliverable. A generated link-shortening service is the demonstration product. A single Java controller keeps the flow, persistence, model boundary and execution policy easy to inspect. LangGraph4j supplies the fixed stage graph and parallel join; PostgreSQL stores lifecycle and artifacts; Flyway owns database changes. Models return structured data and file contents, while plain controller code decides whether outputs are valid and whether verification passed.
 
-The work moved from foundation proofs to a thin full flow before implementing every governance story. This exposed real output-size and hidden-reasoning problems early. Prompts now state answer size and require complete files; truncated-output repair asks for shorter answers. A sparse run clone separates generated working files from the controller checkout. A prebuilt Python container makes product testing possible without network access during execution.
+The work moved from foundation proofs to a thin full flow before implementing every governance story. This exposed real output-size and hidden-reasoning problems early. Prompts now state answer size and require complete files; truncated-output repair asks for shorter answers. A fresh git repository per run separates generated working files and history from the controller checkout. A prebuilt Python container makes product testing possible without network access during execution.
 
 ## Artifacts and ownership
 
