@@ -38,7 +38,7 @@ class RunDispatcherFailureTest {
         when(run.getRequirement()).thenReturn(requirement);
         when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
-        doThrow(workflowError).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD);
+        doThrow(workflowError).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD, null);
 
         assertThatThrownBy(() -> new RunDispatcher(runService, workflowRunner).dispatchNext())
                 .isSameAs(workflowError);
@@ -59,7 +59,7 @@ class RunDispatcherFailureTest {
         when(run.getRequirement()).thenReturn(requirement);
         when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
-        doThrow(workflowFailure).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD);
+        doThrow(workflowFailure).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD, null);
         doThrow(recordingFailure).when(runService).failRun(runId, workflowFailure);
 
         assertThatThrownBy(() -> new RunDispatcher(runService, workflowRunner).dispatchNext())
@@ -80,7 +80,7 @@ class RunDispatcherFailureTest {
         when(run.getRequirement()).thenReturn(requirement);
         when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
-        when(workflowRunner.run(runId, requirement, RunKind.GREENFIELD))
+        when(workflowRunner.run(runId, requirement, RunKind.GREENFIELD, null))
                 .thenReturn(new org.bsc.langgraph4j.state.AgentState(java.util.Map.of()));
         doThrow(recordingFailure).when(runService).succeedRun(runId);
 
@@ -143,7 +143,7 @@ class RunDispatcherFailureTest {
         when(run.getRequirement()).thenReturn(requirement);
         when(run.getKind()).thenReturn(RunKind.GREENFIELD);
         when(runService.claimNextRun()).thenReturn(Optional.of(run));
-        doThrow(workflowFailure).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD);
+        doThrow(workflowFailure).when(workflowRunner).run(runId, requirement, RunKind.GREENFIELD, null);
 
         Logger dispatcherLog = (Logger) LoggerFactory.getLogger(RunDispatcher.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();

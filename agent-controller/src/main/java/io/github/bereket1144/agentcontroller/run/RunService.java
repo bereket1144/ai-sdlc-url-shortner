@@ -29,7 +29,13 @@ public class RunService {
 
     @Transactional
     public Run createRun(String requirement, RunKind kind) {
-        return runRepository.save(new Run(requirement, kind));
+        return createRun(requirement, kind, null);
+    }
+
+    /** Stores the run as it is given; whether the pair of kind and base run is allowed is decided by RunCreation. */
+    @Transactional
+    public Run createRun(String requirement, RunKind kind, UUID baseRunId) {
+        return runRepository.save(new Run(requirement, kind, baseRunId));
     }
 
     /**

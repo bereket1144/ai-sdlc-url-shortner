@@ -125,7 +125,7 @@ class DevelopmentFixAttemptTest {
                 new PromptBuilder(profiles, roles, 3), new OutputValidator(roles, List.of()),
                 mock(ModelCallRecords.class), budget, 2, Duration.ZERO);
         AgentStages stages = new AgentStages(new MockEnvironment().withProperty("agent.stages.development", "agent"),
-                roles, stageInputs, answers, store);
+                roles, stageInputs, answers, store, Optional.empty());
         // The container reads the committed file: the broken one fails its test, the fixed one passes.
         VerificationRunner container = (workspace, commitId) -> {
             boolean fixed = read(workspace.resolve("app.py")).contains("FIXED_VERSION");

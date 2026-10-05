@@ -33,6 +33,20 @@
         <label for="requirement">Requirement</label>
         <textarea id="requirement" name="requirement" rows="4" required
                   placeholder="Describe what should be built, in a few sentences."></textarea>
+        <div class="change-block">
+          <label class="check" for="change-existing">
+            <input id="change-existing" type="checkbox"> Change an existing run
+          </label>
+          <div id="change-fields" class="change-fields" hidden>
+            <label for="base-run-select">A run from this browser</label>
+            <select id="base-run-select" name="base-run-select"></select>
+            <label for="base-run-id">Or paste a run id</label>
+            <input id="base-run-id" name="base-run-id" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="00000000-0000-0000-0000-000000000000">
+            <p class="muted">The run must have finished (SUCCEEDED) and have code. Your requirement then
+              describes the change to make to it.</p>
+          </div>
+        </div>
         <div class="row">
           <button id="start-button" class="btn primary" type="submit">Start run</button>
           <p id="start-message" class="message" role="alert" hidden></p>

@@ -25,6 +25,9 @@ import io.github.bereket1144.agentcontroller.TestcontainersConfiguration;
 import io.github.bereket1144.agentcontroller.model.ModelClient;
 import io.github.bereket1144.agentcontroller.model.ModelClient.FinishReason;
 import io.github.bereket1144.agentcontroller.model.ModelClient.ModelResult;
+import io.github.bereket1144.agentcontroller.run.Run;
+import io.github.bereket1144.agentcontroller.run.RunRepository;
+import io.github.bereket1144.agentcontroller.sandbox.VerificationRecords;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult.Outcome;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRunner;
@@ -53,9 +56,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(properties = {
         "run.dispatch.polling-enabled=true", "run.dispatch.poll-delay-ms=200",
         "agent.model-client.mode=scripted",
-        "agent.stages.requirements=agent", "agent.stages.design=agent", "agent.stages.planning=agent",
-        "agent.stages.development=agent", "agent.stages.qa=agent", "agent.stages.review=agent",
-        "agent.stages.documentation=agent"})
+        "agent.stages.requirements=agent", "agent.stages.impactAnalysis=agent", "agent.stages.design=agent",
+        "agent.stages.planning=agent", "agent.stages.development=agent", "agent.stages.qa=agent",
+        "agent.stages.review=agent", "agent.stages.documentation=agent"})
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, ScriptedEndToEndTest.Stand_ins.class})
 // The scheduler of this context must not outlive the class and claim another test's runs.
@@ -68,6 +71,8 @@ class ScriptedEndToEndTest {
             "requirements", "{\"stories\":[{\"id\":\"S-1\",\"title\":\"Shorten\",\"role\":\"user\",\"want\":\"w\","
                     + "\"benefit\":\"b\",\"acceptanceCriteria\":[{\"id\":\"S-1.1\",\"text\":\"t\"}]}],"
                     + "\"openQuestions\":[],\"assumptions\":[]}",
+            "impactAnalysis", "{\"affectedFiles\":[\"app.py\"],\"affectedBehaviors\":[\"b\"],\"dependencies\":[\"d\"],"
+                    + "\"dataFlows\":[\"f\"],\"risks\":[\"r\"],\"evidence\":[\"e\"]}",
             "design", "{\"components\":[\"c\"],\"interfaces\":[\"i\"],\"dataFlow\":\"d\",\"decisions\":[\"x\"],"
                     + "\"alternatives\":[\"y\"],\"risks\":[\"r\"],\"diagrams\":[\"graph TD\"]}",
             "planning", "{\"tasks\":[\"t1\"]}",
@@ -90,6 +95,10 @@ class ScriptedEndToEndTest {
     private static final AtomicInteger CLARIFICATION_CALLS = new AtomicInteger();
     private static final ConcurrentLinkedQueue<String> DEVELOPMENT_PROMPTS = new ConcurrentLinkedQueue<>();
     private static final ConcurrentLinkedQueue<String> REQUIREMENTS_PROMPTS = new ConcurrentLinkedQueue<>();
+    /** The user text of every model call, in the order of the calls, with the role that was called. */
+    private static final ConcurrentLinkedQueue<Prompt> PROMPTS = new ConcurrentLinkedQueue<>();
+
+    private record Prompt(String role, String text) { }
 
     @DynamicPropertySource
     static void workspace(DynamicPropertyRegistry registry) {
@@ -104,6 +113,7 @@ class ScriptedEndToEndTest {
         ModelClient scriptedModel() {
             return (role, profile, systemText, userText) -> {
                 ROLES_CALLED.add(role);
+                PROMPTS.add(new Prompt(role, userText));
                 String text = ANSWERS.get(role);
                 if (role.equals("requirements")) {
                     REQUIREMENTS_PROMPTS.add(userText);
@@ -144,12 +154,22 @@ class ScriptedEndToEndTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private RunRepository runs;
+
+    @Autowired
+    private VerificationRecords verifications;
+
     @AfterEach
     void deleteWhatTheRunLeft() {
         for (String table : List.of("verification_result", "run_stage", "artifact", "model_call",
-                "model_budget_reservation", "runs")) {
+                "model_budget_reservation")) {
             jdbc.update("delete from " + table);
         }
+        // A run that changes another points at it, so those runs go first.
+        jdbc.update("delete from runs where base_run_id is not null");
+        jdbc.update("delete from runs");
+        PROMPTS.clear();
         ROLES_CALLED.clear();
         DEVELOPMENT_CALLS.set(0);
         BUILD_OUTCOME.set(Outcome.PASSED);
@@ -297,6 +317,93 @@ class ScriptedEndToEndTest {
         // Fix attempts: two in the first attempt, three in the resumed one. The restart writes its code afresh.
         assertThat(DEVELOPMENT_PROMPTS.stream().map(prompt -> prompt.contains("FIX attempt")).toList())
                 .containsExactly(false, true, true, true, true, true, false);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-49.1, 49.2, 49.3, 49.4 a change run on a finished run ends SUCCEEDED: the impact stage ran and "
+            + "the design and planning agents received its artifact, the four agents were shown the existing files before "
+            + "their other inputs and no other agent was, the new repository holds the first run's commits and a new "
+            + "one, and the first run's repository is unchanged")
+    void aChangeRunStartsFromTheEarlierRun() throws Exception {
+        UUID first = postRequirement();
+        awaitEnd(first);
+        mvc.perform(get("/v1/runs/" + first)).andExpect(jsonPath("$.status").value("SUCCEEDED"));
+        List<Prompt> firstRunPrompts = List.copyOf(PROMPTS);
+        Path firstRepository = BASE.resolve(first.toString());
+        List<String> firstCommits = git(firstRepository, "rev-list", "main").lines().toList();
+
+        UUID second = postChange(first, "Add an expiry to links.");
+        awaitEnd(second);
+
+        String body = mvc.perform(get("/v1/runs/" + second)).andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.kind").value("BROWNFIELD"))
+                .andExpect(jsonPath("$.baseRunId").value(first.toString()))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(body, "$.stages[*].state")).containsOnly("FINISHED");
+        // The first run was a greenfield run: no agent of it was shown files, and development was not told to change any.
+        assertThat(firstRunPrompts).noneMatch(prompt -> prompt.text().contains("kind=SELECTED_WORKSPACE_FILES"));
+        assertThat(firstRunPrompts).noneMatch(prompt -> prompt.text().contains("CHANGE attempt"));
+        // The change run: impact analysis ran once, and the four agents read the base's app.py before the requirements.
+        List<Prompt> changePrompts = PROMPTS.stream().skip(firstRunPrompts.size()).toList();
+        for (String role : List.of("impactAnalysis", "design", "planning", "development")) {
+            String text = onlyPromptOf(changePrompts, role);
+            assertThat(text).contains("[FILE path=app.py]\nprint(1)\n");
+            assertThat(text.indexOf("kind=SELECTED_WORKSPACE_FILES")).isLessThan(text.indexOf("kind=REQUIREMENTS_ARTIFACT"));
+        }
+        assertThat(changePrompts.stream().filter(prompt -> List.of("requirements", "qa", "review", "documentation")
+                .contains(prompt.role()))).noneMatch(prompt -> prompt.text().contains("kind=SELECTED_WORKSPACE_FILES"));
+        // The design and planning agents received the impact artifact, which the lineage records as consumed.
+        assertThat(onlyPromptOf(changePrompts, "design")).contains("kind=IMPACT_ANALYSIS_ARTIFACT");
+        assertThat(onlyPromptOf(changePrompts, "planning")).contains("kind=IMPACT_ANALYSIS_ARTIFACT");
+        assertThat((List<String>) JsonPath.read(mvc.perform(get("/v1/runs/" + second + "/lineage")).andReturn()
+                .getResponse().getContentAsString(), "$.artifacts[?(@.kind=='design')].builtFrom[*].kind"))
+                .contains("impactAnalysis");
+        // Development was told to change the files that are there, and rewrote app.py whole.
+        assertThat(onlyPromptOf(changePrompts, "development")).contains("CHANGE attempt");
+        // The second repository holds the first run's commits and the new commit of this run, which rewrote app.py.
+        Path secondRepository = BASE.resolve(second.toString());
+        List<String> secondCommits = git(secondRepository, "rev-list", "main").lines().toList();
+        String commit = JsonPath.read(body, "$.commit");
+        assertThat(secondCommits).containsAll(firstCommits).contains(commit).hasSizeGreaterThan(firstCommits.size());
+        assertThat(firstCommits).doesNotContain(commit);
+        assertThat(git(secondRepository, "show", "main:app.py")).isEqualTo("print(2)");
+        // The first run's repository is as it was.
+        assertThat(git(firstRepository, "rev-list", "main").lines().toList()).isEqualTo(firstCommits);
+        assertThat(git(firstRepository, "show", "main:app.py")).isEqualTo("print(1)");
+        assertThat(git(firstRepository, "status", "--porcelain")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("AC-AGT-50.5 a change run whose base run's workspace no longer exists ends FAILED with UNEXPECTED and "
+            + "leaves no workspace of its own")
+    void aChangeRunWithoutItsBaseWorkspaceFails() throws Exception {
+        Run base = new Run("The earlier run");
+        base.start();
+        base.succeed();
+        UUID baseId = runs.save(base).getId();
+        verifications.record(baseId, new VerificationResult(Outcome.PASSED, 1, 1, 0, List.of(), "", "abc123"));
+
+        UUID id = postChange(baseId, "Add an expiry to links.");
+        awaitEnd(id);
+
+        mvc.perform(get("/v1/runs/" + id))
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.failureReason.code").value("UNEXPECTED"));
+        assertThat(BASE.resolve(id.toString())).doesNotExist();
+    }
+
+    private static String onlyPromptOf(List<Prompt> prompts, String role) {
+        List<String> texts = prompts.stream().filter(prompt -> prompt.role().equals(role)).map(Prompt::text).toList();
+        assertThat(texts).as("calls of " + role).hasSize(1);
+        return texts.get(0);
+    }
+
+    private UUID postChange(UUID base, String requirement) throws Exception {
+        String body = mvc.perform(post("/v1/runs").contentType("application/json")
+                        .content("{\"requirement\":\"" + requirement + "\",\"kind\":\"BROWNFIELD\",\"baseRunId\":\""
+                                + base + "\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return UUID.fromString(JsonPath.read(body, "$.id"));
     }
 
     private static Map<String, Long> callsByRole() {

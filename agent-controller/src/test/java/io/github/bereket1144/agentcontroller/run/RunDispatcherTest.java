@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -61,7 +62,7 @@ class RunDispatcherTest {
 
     @BeforeEach
     void completedWorkflowByDefault() {
-        when(workflowRunner.run(any(UUID.class), anyString(), any(RunKind.class)))
+        when(workflowRunner.run(any(UUID.class), anyString(), any(RunKind.class), isNull()))
                 .thenReturn(new AgentState(Map.of()));
     }
 
@@ -89,11 +90,11 @@ class RunDispatcherTest {
                     "select status from runs where id = ?", String.class, runId));
             assertThat(storedStatus).isEqualTo("RUNNING");
             return new AgentState(Map.of());
-        }).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD));
+        }).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD), isNull());
 
         Boolean dispatched = callerTransaction.execute(status -> runDispatcher.dispatchNext());
         assertThat(dispatched).isTrue();
-        verify(workflowRunner).run(createdId, requirement, RunKind.GREENFIELD);
+        verify(workflowRunner).run(createdId, requirement, RunKind.GREENFIELD, null);
     }
 
     @Test
@@ -111,7 +112,7 @@ class RunDispatcherTest {
     void propagatesWorkflowFailure() {
         createdId = runService.createRun("Build a task tracker").getId();
         IllegalStateException failure = new IllegalStateException("Workflow failed");
-        doThrow(failure).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD));
+        doThrow(failure).when(workflowRunner).run(any(UUID.class), anyString(), eq(RunKind.GREENFIELD), isNull());
 
         assertThatThrownBy(runDispatcher::dispatchNext).isSameAs(failure);
     }
@@ -124,7 +125,7 @@ class RunDispatcherTest {
 
         assertThat(runDispatcher.dispatchNext()).isTrue();
 
-        verify(workflowRunner).run(createdId, requirement, RunKind.BROWNFIELD);
+        verify(workflowRunner).run(createdId, requirement, RunKind.BROWNFIELD, null);
         assertThat(runService.getRun(createdId).getKind()).isEqualTo(RunKind.BROWNFIELD);
     }
 }

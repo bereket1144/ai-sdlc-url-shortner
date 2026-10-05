@@ -28,20 +28,24 @@ public class RunController {
     private static final String PROBLEM_JSON = "application/problem+json";
 
     private final RunService runService;
+    private final RunCreation creation;
     private final RunDetails details;
     private final ClarificationService clarification;
     private final RunRetry retries;
 
-    public RunController(RunService runService, RunDetails details, ClarificationService clarification,
-                         RunRetry retries) {
+    public RunController(RunService runService, RunCreation creation, RunDetails details,
+                         ClarificationService clarification, RunRetry retries) {
         this.runService = runService;
+        this.creation = creation;
         this.details = details;
         this.clarification = clarification;
         this.retries = retries;
     }
 
     // The method returns a ResponseEntity, so the library cannot see the 201 status or the body type on its own.
-    @Operation(summary = "Create a run", description = "Stores a new run for the given requirement text.")
+    @Operation(summary = "Create a run", description = "Stores a new run for the given requirement text. With no kind "
+            + "it is a GREENFIELD run. A BROWNFIELD run changes the result of an earlier run, which baseRunId names: "
+            + "that run must exist, have SUCCEEDED and have a stored commit.")
     @ApiResponse(responseCode = "201", description = "The run was created; its address is in the Location header.",
             headers = @Header(name = "Location", description = "Address of the new run, /v1/runs/{id}.",
                     schema = @Schema(type = "string")),
@@ -49,13 +53,16 @@ public class RunController {
                     schema = @Schema(implementation = RunCreatedResponse.class)))
     @ApiResponse(responseCode = "400",
             description = "The body is missing, is not valid JSON, or fails validation (the problem lists the "
-                    + "offending fields in 'errors').",
+                    + "offending fields in 'errors'); or the kind and the base run do not fit: a kind that is not "
+                    + "GREENFIELD or BROWNFIELD, a baseRunId that is not a UUID, a BROWNFIELD run without a baseRunId, "
+                    + "a GREENFIELD run with one, or a base run that does not exist, has not SUCCEEDED or has no stored "
+                    + "commit. Nothing is stored.",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @ApiResponse(responseCode = "415", description = "The request content type is not application/json.",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemBody.class)))
     @PostMapping
     public ResponseEntity<RunCreatedResponse> createRun(@Valid @RequestBody RunRequest request) {
-        Run run = runService.createRun(request.requirement());
+        Run run = creation.create(request);
         return ResponseEntity.created(URI.create(RUNS_PATH + "/" + run.getId()))
                 .body(new RunCreatedResponse(run.getId()));
     }

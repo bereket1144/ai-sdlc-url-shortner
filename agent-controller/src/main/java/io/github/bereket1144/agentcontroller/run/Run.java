@@ -37,6 +37,11 @@ public class Run {
     @Column(nullable = false, length = 16)
     private RunKind kind;
 
+    // The earlier run that a BROWNFIELD run changes. Null for a GREENFIELD run. The API checks the pair; the database
+    // only keeps the reference to an existing run.
+    @Column(updatable = false)
+    private UUID baseRunId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RunStatus status;
@@ -74,6 +79,11 @@ public class Run {
     }
 
     public Run(String requirement, RunKind kind) {
+        this(requirement, kind, null);
+    }
+
+    /** @param baseRunId the run whose result this run changes; null when it changes none */
+    public Run(String requirement, RunKind kind, UUID baseRunId) {
         if (requirement == null || requirement.isBlank()) {
             throw new IllegalArgumentException("requirement must not be blank");
         }
@@ -82,6 +92,7 @@ public class Run {
         }
         this.requirement = requirement;
         this.kind = kind;
+        this.baseRunId = baseRunId;
         this.status = RunStatus.CREATED;
     }
 

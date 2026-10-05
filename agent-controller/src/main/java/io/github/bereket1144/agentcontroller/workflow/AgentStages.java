@@ -3,6 +3,8 @@ package io.github.bereket1144.agentcontroller.workflow;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
@@ -25,19 +27,22 @@ public class AgentStages {
     private static final Logger log = LoggerFactory.getLogger(AgentStages.class);
     private static final List<String> ROLES = List.of("impactAnalysis", "design", "planning", "development",
             "qa", "review", "documentation");
+    /** The roles that are shown the existing code when a run changes an earlier run. */
+    private static final Set<String> CHANGE_ROLES = Set.of("impactAnalysis", "design", "planning", "development");
 
     private final Map<String, AgentStageNode> nodes;
 
     /** Fails with the name of the setting when its value is neither {@code agent} nor {@code dummy}. */
     public AgentStages(Environment environment, RoleCatalog roles, StageInputs stageInputs,
-                       StructuredAnswerService answers, ArtifactStore artifacts) {
+                       StructuredAnswerService answers, ArtifactStore artifacts, Optional<ExistingFiles> existingFiles) {
         Map<String, AgentStageNode> enabled = new LinkedHashMap<>();
         // Left out when the sandbox needs no hint; then the development agent is given the task text alone.
         String fileLayout = environment.getProperty("sandbox.verify.file-layout", "").strip();
         for (String role : ROLES) {
             String setting = environment.getProperty("agent.stages." + role, "dummy");
             switch (setting) {
-                case "agent" -> enabled.put(role, node(role, fileLayout, roles, stageInputs, answers, artifacts));
+                case "agent" -> enabled.put(role, node(role, fileLayout, roles, stageInputs, answers, artifacts)
+                        .showingExistingFiles(CHANGE_ROLES.contains(role) ? existingFiles : Optional.empty()));
                 case "dummy" -> { }
                 default -> throw new IllegalStateException(
                         "agent.stages." + role + " must be agent or dummy, not " + setting);

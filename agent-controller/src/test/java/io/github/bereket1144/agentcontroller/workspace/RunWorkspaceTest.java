@@ -73,6 +73,39 @@ class RunWorkspaceTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-50.5 the workspace of a run with a base run is a clone of the base's workspace on its branch: it "
+            + "has the base's files and history, a new commit stacks on top, and the base repository is not changed")
+    void aWorkspaceWithABaseIsACloneOfTheBase() throws Exception {
+        UUID baseRunId = UUID.randomUUID();
+        String baseHead = workspace.commit(baseRunId, new ChangeSet(List.of(new FileChange("app.py", "print(1)\n"))));
+        Path baseRoot = base.resolve(baseRunId.toString());
+
+        Path root = workspace.create(runId, baseRunId);
+        String next = workspace.commit(runId, new ChangeSet(List.of(
+                new FileChange("app.py", "print(2)\n"), new FileChange("more.py", "print(3)\n"))));
+
+        assertThat(root).isEqualTo(base.resolve(runId.toString()));
+        assertThat(git(root, "symbolic-ref", "--short", "HEAD")).isEqualTo("main");
+        assertThat(git(root, "rev-list", "main")).isEqualTo(next + "\n" + baseHead);
+        assertThat(root.resolve("app.py")).hasContent("print(2)\n");
+        // The base run's repository is as it was: same commit, same file, nothing new, nothing modified.
+        assertThat(git(baseRoot, "rev-list", "main")).isEqualTo(baseHead);
+        assertThat(baseRoot.resolve("app.py")).hasContent("print(1)\n");
+        assertThat(baseRoot.resolve("more.py")).doesNotExist();
+        assertThat(git(baseRoot, "status", "--porcelain")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("AC-AGT-50.5 when the base run's workspace does not exist the call fails and nothing is written")
+    void aMissingBaseWorkspaceFailsAndWritesNothing() {
+        assertThatThrownBy(() -> workspace.create(runId, UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("The workspace of the base run does not exist");
+
+        assertThat(base).doesNotExist();
+    }
+
+    @Test
     @DisplayName("AC-AGT-62.7 nothing is written outside the base directory")
     void writesNothingOutsideTheBaseDirectory() throws Exception {
         workspace.commit(runId, new ChangeSet(List.of(new FileChange("app.py", "print(1)\n"))));
