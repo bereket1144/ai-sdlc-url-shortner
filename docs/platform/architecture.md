@@ -19,7 +19,7 @@ flowchart LR
     Nodes --> Store[ArtifactStore]
     Store --> DB
     Graph --> Finish[DevelopmentFinish]
-    Finish --> Workspace[RunWorkspace: Git clone and commit]
+    Finish --> Workspace[RunWorkspace: git init and commit]
     Finish --> Verify[VerificationRunner]
     Verify --> Container[Disposable Python test container]
     Finish --> DB
@@ -64,7 +64,7 @@ Development currently runs once for the entire plan. Its validated whole-file ch
 
 ## Execution and data boundaries
 
-Each run gets a separate Git clone outside the controller checkout. Only the product and runs directories are checked out, although Git retains the repository history. Writes are limited to the product folder and that run's own folder. Agents return file contents and cannot directly write files or invoke Docker.
+Each run gets its own fresh git repository (`git init`) outside the controller checkout, with the product at its root and one commit per change set. Writes are limited to paths inside that repository, never under `.git`. Agents return file contents and cannot directly write files or invoke Docker.
 
 The controller uses the Docker CLI through `DockerCommand`. It copies the workspace into a new container, runs as UID/GID `10001`, disables networking, sets CPU, memory, process and time limits, copies out the JUnit report, then removes the container. No host directory is mounted. Plain code parses the report and records the outcome with the commit id.
 

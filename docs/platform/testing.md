@@ -13,7 +13,7 @@ From `agent-controller/`, run `./mvnw verify` with Java 21 and Docker available.
 | Artifacts | `ArtifactStoreTest` proves versions, fingerprints, reads and lineage against persistence |
 | Graph | `WorkflowRunnerTest`, `WorkflowRunnerParallelTest` and `ParallelBranchesJoinTest` exercise routing and joins |
 | Checkpoint feasibility | `ApprovalPauseCheckpointTest` and checkpoint tests prove persistence mechanisms separately from the live graph |
-| Files and Git | `ChangeSetCheckTest` and `RunWorkspaceTest` exercise permitted changes, sparse workspaces and commits |
+| Files and Git | `ChangeSetCheckTest` and `RunWorkspaceTest` exercise permitted changes, fresh per-run repositories and commits |
 | Sandbox commands | `DockerVerificationRunnerTest` uses a fake Docker port to check execution flags, lifecycle and result handling |
 | API-to-artifact-to-commit flow | `ScriptedEndToEndTest` uses a scripted model, real PostgreSQL and Git, and a fake container port; successful and failed verification outcomes are covered |
 

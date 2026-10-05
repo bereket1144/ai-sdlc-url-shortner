@@ -64,26 +64,26 @@ GET /v1/runs/{id}/artifacts/{kind}/{version}
 
 ### Resolve requirements clarification
 
-The requirements agent first returns at most four priority questions and optional product assumptions, before stories. Python, the standard library, SQLite and pytest are fixed execution context. Questions pause the run at `WAITING_FOR_INPUT`; assumptions alone allow processing to continue.
+The requirements agent first returns at most four questions, with no assumptions to confirm, before the stories. Python, the standard library, SQLite and pytest are fixed execution context. When there are questions the run pauses at `WAITING_FOR_INPUT`; a run with no questions goes straight to the stories.
 
-Read `GET /v1/runs/{id}/questions`. Items include unique `Q-*` IDs, artifact versions, a `required` flag, `OPEN`, `ANSWERED` or `ASSUMED` status and saved replies. Submit all current questions together to `POST /v1/runs/{id}/replies`. You may also answer assumptions to confirm or correct them:
+Read `GET /v1/runs/{id}/questions`. Items have unique `Q-*` IDs, the artifact version, `OPEN` or `ANSWERED` status and the saved reply. Submit an answer for every current question together to `POST /v1/runs/{id}/replies`:
 
 ```json
 {
   "answers": [
     {"questionId": "Q-1", "answer": "Reuse the existing code for duplicate URLs."},
-    {"questionId": "Q-2", "answer": "Confirmed."}
+    {"questionId": "Q-2", "answer": "Yes."}
   ]
 }
 ```
 
-Use the actual IDs returned for your run. Assumption answers are optional: omitted proposals become `ASSUMED` and are labelled unconfirmed in the final artifact. Every question still needs an answer. Supplied replies must be nonblank and at most 5,000 characters. An accepted reply returns `202` with `{"runId":"...","message":"Answers submitted."}` and queues processing for the next scheduler poll. Invalid batches return `400` without changing items; a reply to an already answered batch returns `409`. A material ambiguity in a reply may prompt another batch. Otherwise, stories use the saved answers and optional assumptions.
+Use the actual IDs returned for your run. Every question needs one answer; answers must be nonblank and at most 5,000 characters. An accepted reply returns `202` with `{"runId":"...","message":"Answers submitted."}` and queues processing for the next scheduler poll. An invalid batch returns `400` without changing anything; a reply to an already answered batch returns `409`. After the reply the run goes straight to the stories, which carry the agent's own assumptions as plain text.
 
 Waiting batches and answers survive a controller restart. This continuation happens before the downstream graph starts; it does not provide recovery of interrupted development or builds. Answering clarification also does not approve the resulting stories; story approval remains unfinished.
 
 Use the kind and version returned by the run response. Artifact kinds include `requirements`, `design`, `plan`, `development`, `qa`, `review` and `documentation`. The planning stage produces kind `plan`. Unknown artifacts return `404`.
 
-In the live profile, workspaces are created under `../../agentic-sdlc-workspaces/<run-id>`, relative to `agent-controller/`. Each workspace has branch `run/<run-id>` and a sparse checkout of `apps/url-shortener/` and `runs/`. Generated commits remain in that clone; the source checkout is not updated or pushed. Inspect the generated commit there using Git. Agents' other outputs are stored in PostgreSQL and read through the artifact API, not automatically exported as files.
+In the live profile, workspaces are created under `../../agentic-sdlc-workspaces/<run-id>`, relative to `agent-controller/`. Each workspace is its own fresh git repository on branch `main`, with the generated product at its root and one commit per change set; nothing is cloned from or pushed to this repository. Inspect the generated commit there using Git. Agents' other outputs are stored in PostgreSQL and read through the artifact API, not automatically exported as files.
 
 `SUCCEEDED` in a live skeleton run means that the selected stages returned, the generated commit was tested successfully and the graph completed. It does not mean a person approved the work or that review findings were resolved. `impactAnalysis` remains `NOT_STARTED` on the greenfield route.
 

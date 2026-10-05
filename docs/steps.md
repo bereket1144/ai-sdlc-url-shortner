@@ -296,3 +296,6 @@ The record of the work done in this repository, one entry per step, in the order
   Done when: the documentation agent is handed the file paths and rationale of the development artifact and not the file contents, is also handed the plan (and still the design), its role text says to describe the architecture from the design and how it was built from the plan and never to include source code, and `./mvnw verify` passes.
   Criterion update (user decision, 2026-10-05): the documentation role's inputs gain the plan artifact. (main agent, direct)
   Result: documentation is handed the plan and a new input kind `DEVELOPMENT_OUTLINE` (the development artifact with `changes[].content` removed, paths and rationale kept), still gets the design, and its role text forbids source code; QA and review still get the full artifact; tested in `StageInputsTest`. (development-agent)
+- [x] 105. Bring the documents in line with steps 102 to 104.
+  Done when: the README, architecture overview, testing note, engineering summary, ADR 0003 and the walking-skeleton scenario describe the per-run git repository and the question-and-answer flow and no longer mention the sparse checkout, the run branch or the assumption confirmation.
+  Result: those six files were edited for the two changes; the limitations note needed no change. (main agent, direct)

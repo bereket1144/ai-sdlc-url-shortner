@@ -17,5 +17,5 @@ Post this text as the `requirement` of `POST /v1/runs`:
 ## What a run should leave behind
 
 - Artifacts for requirements, design, plan, development, QA, review and documentation.
-- A commit on the branch `run/<run-id>` of the run's own workspace, with the files under `apps/url-shortener/`.
+- A commit on the branch `main` of the run's own git repository, with the product's files at its root.
 - A stored verification result of the build and tests, run in a container.

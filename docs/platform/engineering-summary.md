@@ -21,7 +21,7 @@ The work moved from foundation proofs to a thin full flow before implementing ev
 | Decisions | [ADR directory](../adr/) |
 | AI-assisted development history | [Steps log](../steps.md), repository commits, and coding-agent role files in `.claude/agents/` |
 | Generated role outputs | PostgreSQL artifacts; `GET /v1/runs/{id}/artifacts/{kind}/{version}` |
-| Generated code and tests | The run's separate workspace, branch `run/<run-id>`, under `apps/url-shortener/` |
+| Generated code and tests | The run's own git repository `<base>/<run-id>` on branch `main`, with the product at its root |
 | Run progress, commit and verification counts | `GET /v1/runs/{id}` |
 | Controller test and coverage evidence | Maven Surefire and JaCoCo reports; [testing approach](testing.md) |
 | Feature review and functional coverage | Existing reports under `reports/`; currently stale for recent pipeline work |
