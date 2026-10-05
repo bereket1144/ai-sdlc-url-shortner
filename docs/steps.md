@@ -208,3 +208,6 @@ The record of the work done in this repository, one entry per step, in the order
   Done when: AGENTS.md says that tests are kept light for now (one per acceptance criterion on the basic behaviour, no guards or tests that no criterion asks for), that the 100% target and the named gaps stay, and that a later sweep closes the gaps.
   Criterion update (user decision, 2026-10-04): replaces the "tests with every change" line of "How to work in this repository". (main agent, direct)
   Result: the "tests with every change" line of AGENTS.md now sets light tests (one per criterion, no unrequested guards, no tests only for coverage), keeps the 100% target and the named gaps, and defers the closing of gaps to a later sweep. (main agent, direct)
+- [x] 81. AGT-61 Run the checks in CI.
+  Done when: story AGT-61 in docs/platform/requirements/agent-pipeline.md is coded: every criterion is met by the workflow.
+  Result: `.github/workflows/verify.yml` runs `./mvnw verify` from `agent-controller/` on every push and pull request on a Docker-equipped runner, so a failing test or the JaCoCo gate in `pom.xml` fails the job, and uploads `target/site/jacoco/` as the `jacoco-report` artifact even when the build fails; both criteria are proven by the workflow itself and have no unit test; the workflow was not run here. (development-agent)

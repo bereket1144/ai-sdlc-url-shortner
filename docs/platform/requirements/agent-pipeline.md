@@ -939,7 +939,7 @@ As a reviewer, I want one command to start the controller and its database, so t
 
 ### AGT-61 Run the checks in CI
 
-Status: open
+Status: coded
 
 Depends on: none.
 
