@@ -5,13 +5,11 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import io.github.bereket1144.agentcontroller.workspace.ChangeSet.FileChange;
 import org.slf4j.Logger;
@@ -35,7 +33,6 @@ import org.springframework.stereotype.Service;
 public class RunWorkspace {
 
     private static final Logger log = LoggerFactory.getLogger(RunWorkspace.class);
-    private static final Duration GIT_TIMEOUT = Duration.ofSeconds(60);
     private static final String DEVELOPMENT = "development";
     private static final String BRANCH_PREFIX = "run/";
     private static final String EVIDENCE_FOLDER = "runs";
@@ -140,6 +137,15 @@ public class RunWorkspace {
     /** The id of the commit that the run's branch is on. */
     public String head(UUID runId) {
         return git(create(runId), Map.of(), "rev-parse", "HEAD");
+    }
+
+    /** Delivery uses the same validated repository and product folder as workspace creation. */
+    Path repository() {
+        return repository;
+    }
+
+    String productPath() {
+        return product;
     }
 
     /**
@@ -262,31 +268,6 @@ public class RunWorkspace {
 
     /** Runs one git command and returns what it printed; fails with the exit code and git's own message. */
     private static String git(Path directory, Map<String, String> environment, String... arguments) {
-        List<String> command = new ArrayList<>(List.of("git"));
-        command.addAll(List.of(arguments));
-        ProcessBuilder builder = new ProcessBuilder(command).directory(directory.toFile());
-        // Never wait for a question that nobody can answer.
-        builder.environment().put("GIT_TERMINAL_PROMPT", "0");
-        builder.environment().putAll(environment);
-        try {
-            Process process = builder.start();
-            // The commands are quiet, so their output stays far below the pipe size and can be read afterwards.
-            if (!process.waitFor(GIT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                throw new IllegalStateException("git " + arguments[0] + " did not finish within " + GIT_TIMEOUT);
-            }
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
-            if (process.exitValue() != 0) {
-                String error = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8).strip();
-                throw new IllegalStateException(
-                        "git " + arguments[0] + " failed with exit code " + process.exitValue() + ": " + error);
-            }
-            return output;
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Cannot run git " + arguments[0], exception);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while running git " + arguments[0], exception);
-        }
+        return GitCommands.run(directory, environment, arguments);
     }
 }

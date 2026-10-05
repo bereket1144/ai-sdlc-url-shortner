@@ -25,7 +25,8 @@ class RunFailureReasonTest {
         assertThat(Arrays.stream(RunFailureReason.values()).map(Enum::name)).containsExactly(
                 "OUTPUT_INVALID", "MODEL_UNAVAILABLE", "CONTEXT_TOO_LARGE", "BUDGET_EXHAUSTED",
                 "REPLAY_MISSING", "ACCESS_DENIED", "REJECTED", "ASSEMBLY_CONFLICT",
-                "STOPPED_BY_REVIEWER", "STAGE_TIMEOUT", "RECOVERY_FAILED", "UNEXPECTED", "VERIFICATION_FAILED");
+                "STOPPED_BY_REVIEWER", "STAGE_TIMEOUT", "RECOVERY_FAILED", "UNEXPECTED", "VERIFICATION_FAILED",
+                "DELIVERY_BLOCKED");
         assertThat(RunFailureReason.values()).allSatisfy(reason ->
                 assertThat(reason.message()).isNotBlank().endsWith("."));
     }

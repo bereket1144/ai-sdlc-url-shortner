@@ -7,6 +7,7 @@ import io.github.bereket1144.agentcontroller.model.PromptBuilder.ContextTooLarge
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.ModelUnavailableException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.OutputInvalidException;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationFailedException;
+import io.github.bereket1144.agentcontroller.workspace.DeliveryBlockedException;
 
 /** Stable reviewer-facing failure codes and messages. Exception messages are never exposed by the run API. */
 public enum RunFailureReason {
@@ -22,7 +23,8 @@ public enum RunFailureReason {
     STAGE_TIMEOUT("A stage exceeded its time limit."),
     RECOVERY_FAILED("The run could not be recovered."),
     UNEXPECTED("The run stopped after an unexpected error."),
-    VERIFICATION_FAILED("The build or the tests did not pass.");
+    VERIFICATION_FAILED("The build or the tests did not pass."),
+    DELIVERY_BLOCKED("Generated work was retained but could not be merged. Commit local edits or resolve Git conflicts, then retry.");
 
     private final String message;
 
@@ -56,6 +58,9 @@ public enum RunFailureReason {
             }
             if (cause instanceof VerificationFailedException) {
                 return VERIFICATION_FAILED;
+            }
+            if (cause instanceof DeliveryBlockedException) {
+                return DELIVERY_BLOCKED;
             }
         }
         return UNEXPECTED;

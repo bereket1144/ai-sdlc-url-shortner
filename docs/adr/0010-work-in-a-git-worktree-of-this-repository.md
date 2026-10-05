@@ -4,6 +4,8 @@ Date: 2026-10-05
 
 Status: accepted. Supersedes [0006](0006-give-each-run-its-own-git-repository.md).
 
+Delivery update (2026-10-05): [ADR 0013](0013-automatically-merge-completed-work.md) supersedes the manual-only merge policy when automatic delivery is enabled. The workspace and branch arrangement below remains in effect.
+
 ## Context
 
 ADR 0006 gave each run a new, empty repository made with `git init`, outside this repository. It kept the generated product self-contained, but a reviewer then had two things to read and join: this repository and a folder of separate repositories. Getting a run's work into this repository needed a script (`scripts/deliver.sh`) that fetched the history and copied the files, and a change run needed a second way to make a workspace (a clone of the earlier run's repository). The submission is meant to be one repository that holds the controller, the product and both sets of history (AGENTS.md decision 2).

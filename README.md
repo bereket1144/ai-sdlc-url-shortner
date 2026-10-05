@@ -2,14 +2,14 @@
 
 Describe what you want to build, answer the agents' questions, and review their design and implementation plan. The controller then generates code and tests, verifies them in a Docker sandbox, and produces QA, review and documentation artifacts.
 
-The controller is a Java 21 Spring Boot application. The current generated product uses Python, the standard library, SQLite and pytest. Each run has its own Git branch and workspace, so you can inspect the result before bringing it into your checkout.
+The controller is a Java 21 Spring Boot application. The current generated product uses Python, the standard library, SQLite and pytest. Each run has its own Git branch and workspace. In the live profile, completed work is automatically merged into the clean controller checkout, putting the generated product under `apps/url-shortener/`.
 
 ## 1. Prepare your machine
 
 You need:
 
 - Java 21.
-- Git.
+- Git 2.38 or newer.
 - Docker with Compose, with the Docker daemon running.
 - An OpenRouter API key for real agent runs.
 - Internet access to download Maven dependencies, build the sandbox image and call the model.
@@ -170,7 +170,11 @@ Documents and JSON evidence are exported after the final stages join. A failed r
 
 ## 7. Inspect or take the generated work
 
-Each run is a Git worktree on branch `run/<run-id>`. From the repository root, inspect it without changing your checked-out branch:
+Each run is a Git worktree on branch `run/<run-id>`. The live profile enables `workspace.auto-merge=true`: after verification, QA, review, documentation and document export finish, the controller merges this branch into the currently checked-out branch. A merge commit by `controller` preserves the generated commits and their authors. The product appears at `agentic-sdlc/apps/url-shortener/` and its evidence at `runs/<run-id>/`; the run then becomes SUCCEEDED. Existing design and plan approvals still happen earlier in the flow.
+
+Keep the checkout clean while a run finishes. Tracked, staged or untracked local edits, an active Git operation, or a merge conflict block delivery. The generated branch and workspace are retained, and the run becomes FAILED with `DELIVERY_BLOCKED`. Commit your local work or resolve the conflicting Git changes, then use Retry. The existing first retry reruns the QA, review and documentation group before attempting delivery again. The controller never stashes, resets, pushes, switches branches or deletes worktrees. Git 2.38 or newer is required for the conflict preflight.
+
+From the repository root, inspect a run's history and files:
 
 ```sh
 git log --graph --oneline run/<run-id>
@@ -181,13 +185,13 @@ git show run/<run-id>:apps/url-shortener/README.md
 
 The `development` author identifies generated-code commits; `controller` identifies the document and evidence export. The run response's tested commit can precede the later document-export commit.
 
-When you have reviewed the result and are ready to bring it into your checkout, merge from a clean working tree:
+Set `workspace.auto-merge=false` if you prefer manual delivery. For those runs, merge from a clean working tree after reviewing the result:
 
 ```sh
 git merge --no-ff run/<run-id>
 ```
 
-The product appears under `apps/url-shortener/` and its evidence under `runs/<run-id>/`. Publishing is a separate manual action. The controller does not merge or push branches, or delete run worktrees.
+Pushing is a separate manual action. Automatic delivery applies to runs completing with the setting enabled; it does not backfill previously completed runs.
 
 ### Request a change to an existing result
 

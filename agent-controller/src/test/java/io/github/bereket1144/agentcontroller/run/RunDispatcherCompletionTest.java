@@ -51,7 +51,7 @@ class RunDispatcherCompletionTest {
     }
 
     @Test
-    @DisplayName("AC-EXEC-3.1 a completed workflow leaves the run stored as SUCCEEDED")
+    @DisplayName("AC-EXEC-3.1, AC-AGT-68.5 with automatic delivery disabled, completion records SUCCEEDED")
     void recordsSuccessAfterWorkflowReturns() {
         String requirement = "Build a task tracker";
         createdId = runService.createRun(requirement).getId();

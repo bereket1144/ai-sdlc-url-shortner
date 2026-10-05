@@ -61,7 +61,7 @@ Packages, all under `io.github.bereket1144.agentcontroller`:
 | `model` | The `ModelClient` port; `ModelProfile`, `ModelProperties` and `ModelProfiles`; `PromptBuilder`; `OutputValidator` and the role checks; `StructuredAnswerService`; `ModelCallBudget`; `LiveModelClient`, which sends a call to `OllamaModelClient`, `HostedModelClient` (Anthropic messages API) or `OpenAiCompatibleModelClient` by the profile's API style |
 | `modelcall` | `ModelCallRecords` (one row per attempt), `InputFingerprint`, `Recording` and `ReplayModelClient` |
 | `artifact` | `ArtifactStore` (immutable, versioned outputs), `ArtifactRef` and `StageInputs` (what a role may read) |
-| `workspace` | `RunWorkspace` (`git worktree add` on `run/<run-id>`, sparse checkout, write, commit), `ChangeSet` and `ChangeSetCheck` (path and size rules) |
+| `workspace` | `RunWorkspace` (`git worktree add` on `run/<run-id>`, sparse checkout, write, commit), `ChangeSet` and `ChangeSetCheck` (path and size rules), `WorkspaceMerge` (conflict preflight and merging completed work into a clean checkout) |
 | `sandbox` | The `VerificationRunner` port, `DockerVerificationRunner`, the `DockerCommand` port, `JunitReportParser`, the verification result and its records, `SandboxProperties` |
 | `document` | `MarkdownRenderer` and `RunDocuments` (the README and `docs/` written from artifacts) |
 | `checkpoint` | `CheckpointSaverFactory` for the LangGraph4j PostgreSQL saver. Only tests use it; the running graph has no saver |
@@ -77,6 +77,7 @@ Settings that choose behaviour:
 | `agent.budget.*`, `agent.output.repair-limit`, `agent.models.retry-delay` | The call and token limits, the repair limit and the first retry wait |
 | `workspace.base` | The folder that holds one worktree per run, outside the checkout; required when development is on an agent |
 | `workspace.repository` | The root of this repository, which the worktrees belong to; required when development is on an agent (`..` in the live profile) |
+| `workspace.auto-merge` | Merge completed work into the currently checked-out branch before success; false by default, true in the live profile |
 | `workspace.base-ref` | The commit that a run's branch is cut from; default `HEAD` |
 | `workspace.product-folder` | The product folder, relative to the repository root (`apps/url-shortener`): the agents' files are written there and the sandbox is given only this folder |
 | `sandbox.verify.*` | The image, the test command, the report path and the container limits |
@@ -222,7 +223,7 @@ apps/url-shortener/docs/diagrams/1.mmd ...
 runs/<run-id>/artifacts/<kind>-v<version>.json, runs/<run-id>/lineage.json
 ```
 
-The controller never merges, pushes or deletes the branch. A reviewer reads it with `git log --graph run/<run-id>` and takes it with `git merge --no-ff run/<run-id>` (see the README).
+With `workspace.auto-merge=true`, `RunDelivery` completes the run after the graph and document export. It locks the run row, checks Stop and the passing verification, then calls `WorkspaceMerge`. Git checks that the checkout is clean, that the run changes only product or evidence paths, and that a merge has no conflicts. It merges the inspected commit into the current branch and `RunService` records success in the same database transaction. A blocked delivery retains the work and records DELIVERY_BLOCKED. The live profile enables automatic delivery; disabling it preserves manual delivery. The controller never switches branches, pushes or deletes the branch. See [ADR 0013](../adr/0013-automatically-merge-completed-work.md).
 
 **Failure path.** Any exception in a stage, in the commit, in the build or in the export is caught by `RunDispatcher`. It records `FAILED` in its own transaction with a fixed reason chosen from the cause chain (`OUTPUT_INVALID`, `MODEL_UNAVAILABLE`, `CONTEXT_TOO_LARGE`, `BUDGET_EXHAUSTED`, `ACCESS_DENIED`, `VERIFICATION_FAILED`, otherwise `UNEXPECTED`), then rethrows the original exception. The API shows the fixed code and message and never the exception text. A verification that is not `PASSED` ends the run with `VERIFICATION_FAILED` before QA, review and documentation start, so no documents are written; the failed stage stays `RUNNING`, and the workspace with the first commit stays on disk.
 

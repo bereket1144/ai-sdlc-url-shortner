@@ -319,6 +319,8 @@ As a reviewer, I want to retry a failed run, first from the stage that failed an
 
 Status: coded
 
+Delivery update (user decision, 2026-10-05): AGT-68 supersedes the manual-only delivery part of AC-AGT-67.5 and AC-AGT-67.7 when automatic delivery is enabled. Workspace creation and development commits still leave the controller checkout unchanged. The historical criteria below are retained.
+
 Depends on: AGT-20, AGT-50, AGT-21.
 
 As a reviewer, I want each run's generated product and the agents' commits to be real commits of this repository, so that one repository holds the controller, the product and both sets of history, and a merge puts the product next to the controller.
@@ -330,6 +332,20 @@ As a reviewer, I want each run's generated product and the agents' commits to be
 - AC-AGT-67.5 A run never changes the platform repository's checked-out branch, its index or its working files: a test shows `HEAD` and `git status` of the platform checkout unchanged after a run, and two runs side by side get two worktrees. The controller never merges, pushes or deletes a branch.
 - AC-AGT-67.6 A change run (BROWNFIELD) is cut from the base run's branch `run/<baseRunId>` instead of `workspace.base-ref`, so its history extends the base's, and the base's branch is unchanged. When the base's branch does not exist the run fails with the reason UNEXPECTED and nothing is written. The `baseRunId` validation of AGT-50 is unchanged.
 - AC-AGT-67.7 The documentation says how a reviewer reads and takes the work: `git log --graph run/<run-id>`, merging with `git merge --no-ff run/<run-id>`, and pushing the branches. AGENTS.md decisions 2, 4 and 5 and ADR 0006 describe the arrangement (a new decision record supersedes ADR 0006), and `scripts/deliver.sh` is kept only for runs made before this change.
+
+### AGT-68 Automatically bring completed work into the controller checkout
+
+Status: open
+
+Depends on: AGT-67, AGT-21.
+
+As a requester, I want the controller to merge completed work automatically into the repository checkout, so that I can see and run the generated product under apps/url-shortener/ without a manual Git command.
+
+- AC-AGT-68.1 When `workspace.auto-merge=true`, a run whose development verification passed and whose workflow and document export finished is merged into the currently checked-out branch of `workspace.repository` before it becomes SUCCEEDED. Its product files and evidence appear there; existing design and planning approvals still apply. The live profile enables this setting; the default is false.
+- AC-AGT-68.2 Delivery preserves the run's commits and authors and creates a merge commit by `controller` with the run ID. Repeating delivery of an already merged branch creates no commit. The run branch and its worktree are retained; nothing is pushed.
+- AC-AGT-68.3 A checkout with local tracked or untracked edits, a detached HEAD, or a Git operation already in progress is not changed. Delivery fails with the stable reason DELIVERY_BLOCKED, retains the generated work, and can be attempted again through the existing failed-run retry after the checkout is ready.
+- AC-AGT-68.4 Conflicting changes are refused before the checkout is changed. Only the configured product folder and run evidence may differ on the run branch from its common ancestor with the checkout. Unrelated committed platform changes are retained; a run that changes other paths is refused.
+- AC-AGT-68.5 A failed, stopped or waiting run is not delivered. The completion transaction checks stop requests before delivery and holds the run lock until success is recorded, so a stop cannot be accepted halfway through delivery. With automatic delivery disabled, existing run behavior leaves the controller checkout unchanged.
 
 ### AGT-62 Run the whole pipeline once, from Postman, on a real model
 
@@ -742,6 +758,8 @@ As a reviewer, I want failing checks to go back to the development agent a limit
 - AC-AGT-31.4 The choice is recorded with the approver's name. Accepting a shortfall does not change the configured threshold.
 
 ### AGT-32 Approve the merge of the exact commit
+
+Scope update (user decision, 2026-10-05): AGT-68 enables automatic delivery after the existing pipeline checks and design/plan approvals, without a separate final approval. The historical final-approval criteria below are not requirements of the current automatic delivery policy; a future final-approval feature would require a separate decision.
 
 Status: stale
 

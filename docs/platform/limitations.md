@@ -17,6 +17,7 @@ This prototype demonstrates one live end-to-end skeleton. It is not ready to ope
 | Secrets | The model key comes from the environment and is not deliberately injected into the sandbox. Compose still contains fixed local database credentials. No comprehensive secret scanning or compliance gate is implemented. |
 | Sandbox | No network, non-root execution and resource limits reduce exposure. The trusted controller has Docker daemon access and containers share the host kernel; this is not VM isolation. The container is given only the product folder of the run's worktree, not the repository around it. |
 | Retention | Containers are normally removed after verification, but run branches, worktrees and database artifacts remain; the controller deletes no branch and no worktree. No automated retention policy exists. |
+| Automatic delivery | The live profile merges completed work into a clean controller checkout after verification and document export. Local edits or conflicts block delivery; there is no final merge approval. External Git operations must not run during the brief merge. Git and PostgreSQL do not share a transaction: a successful merge can remain if recording success subsequently fails; repeating delivery is idempotent. Existing retry policy reruns the parallel assessment group after a delivery failure. |
 | Evidence | One small live trial passed. The three required scenarios and failure drill, current feature review and complete functional coverage are still missing. |
 
 ## Deliberate scope reductions

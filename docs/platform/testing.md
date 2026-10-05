@@ -14,6 +14,7 @@ From `agent-controller/`, run `./mvnw verify` with Java 21 and Docker available.
 | Graph | `WorkflowRunnerTest`, `WorkflowRunnerParallelTest` and `ParallelBranchesJoinTest` exercise routing and joins |
 | Checkpoint feasibility | `ApprovalPauseCheckpointTest` and checkpoint tests prove persistence mechanisms separately from the live graph |
 | Files and Git | `ChangeSetCheckTest` and `RunWorkspaceTest` exercise permitted changes, per-run worktrees of a temporary platform repository, and commits |
+| Automatic delivery | `WorkspaceMergeTest` uses temporary Git repositories for merge history, idempotence, local edits, conflicts and path limits; `RunDeliveryCompletionTest` covers completion wiring, the database row lock and failure recording. These new tests have not yet been executed. |
 | Sandbox commands | `DockerVerificationRunnerTest` uses a fake Docker port to check execution flags, lifecycle and result handling |
 | API-to-artifact-to-commit flow | `ScriptedEndToEndTest` uses a scripted model, real PostgreSQL and Git, and a fake container port; successful and failed verification outcomes are covered |
 

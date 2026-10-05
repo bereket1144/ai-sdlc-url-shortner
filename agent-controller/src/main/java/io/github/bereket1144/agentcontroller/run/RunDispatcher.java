@@ -4,8 +4,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import io.github.bereket1144.agentcontroller.workflow.WorkflowRunner;
+import io.github.bereket1144.agentcontroller.workspace.DeliveryBlockedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,10 +18,17 @@ public class RunDispatcher {
 
     private final RunService runService;
     private final WorkflowRunner workflowRunner;
+    private final Optional<RunDelivery> delivery;
 
     public RunDispatcher(RunService runService, WorkflowRunner workflowRunner) {
+        this(runService, workflowRunner, Optional.empty());
+    }
+
+    @Autowired
+    public RunDispatcher(RunService runService, WorkflowRunner workflowRunner, Optional<RunDelivery> delivery) {
         this.runService = runService;
         this.workflowRunner = workflowRunner;
+        this.delivery = delivery;
     }
 
     public boolean dispatchNext() {
@@ -63,9 +72,25 @@ public class RunDispatcher {
             throw workflowFailure;
         }
         try {
-            runService.succeedRun(runId);
+            if (delivery.isPresent()) {
+                delivery.get().complete(runId);
+            } else {
+                runService.succeedRun(runId);
+            }
         } catch (RunStoppedException stopped) {
             return recordStop(runId);
+        } catch (DeliveryBlockedException blocked) {
+            try {
+                runService.failRun(runId, blocked);
+            } catch (RunStoppedException stopped) {
+                return recordStop(runId);
+            } catch (RuntimeException recordingFailure) {
+                blocked.addSuppressed(recordingFailure);
+                log.error("event=run_failure_recording_failed runId={} errorType={}",
+                        runId, recordingFailure.getClass().getName());
+            }
+            log.warn("event=run_dispatch_delivery_blocked runId={}", runId);
+            throw blocked;
         } catch (RuntimeException recordingFailure) {
             // The workflow finished, so the run is not marked FAILED; this line says which run is stuck RUNNING.
             log.error("event=run_success_recording_failed runId={} errorType={}",
