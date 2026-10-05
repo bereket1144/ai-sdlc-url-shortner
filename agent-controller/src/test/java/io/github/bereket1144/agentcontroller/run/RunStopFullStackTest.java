@@ -206,7 +206,8 @@ class RunStopFullStackTest {
         for (RunStatus state : RunStatus.values()) {
             UUID id = newRun();
             // Set each starting status directly; this test concerns only the HTTP transition contract.
-            jdbc.update("update runs set status = ? where id = ?", state.name(), id);
+            jdbc.update("update runs set status = ?, failure_reason = ? where id = ?", state.name(),
+                    state == RunStatus.FAILED ? "UNEXPECTED" : null, id);
             String operation = state == RunStatus.STOPPED || state == RunStatus.SUCCEEDED || state == RunStatus.FAILED
                     ? "stop" : "resume";
             Long version = runs.getRun(id).getVersion();
@@ -245,7 +246,8 @@ class RunStopFullStackTest {
         mvc.perform(post("/v1/runs/" + id + "/stop")).andExpect(status().isAccepted());
         for (RunStatus state : List.of(RunStatus.SUCCEEDED, RunStatus.FAILED)) {
             UUID terminal = newRun();
-            jdbc.update("update runs set status = ? where id = ?", state.name(), terminal);
+            jdbc.update("update runs set status = ?, failure_reason = ? where id = ?", state.name(),
+                    state == RunStatus.FAILED ? "UNEXPECTED" : null, terminal);
         }
 
         mvc.perform(get("/v1/metrics")).andExpect(status().isOk())

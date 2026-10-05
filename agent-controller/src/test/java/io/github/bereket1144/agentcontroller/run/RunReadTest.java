@@ -47,6 +47,9 @@ class RunReadTest {
     @MockitoBean
     private ApprovalService approvals;
 
+    @MockitoBean
+    private RunStop stop;
+
     @Autowired
     private MockMvc mvc;
 
