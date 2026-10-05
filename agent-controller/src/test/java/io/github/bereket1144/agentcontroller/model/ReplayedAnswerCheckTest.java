@@ -1,6 +1,7 @@
 package io.github.bereket1144.agentcontroller.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.net.URI;
@@ -16,6 +17,7 @@ import io.github.bereket1144.agentcontroller.model.ModelClient.FinishReason;
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.Prompt;
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.PromptInput;
 import io.github.bereket1144.agentcontroller.modelcall.InputFingerprint;
+import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords.AttemptKind;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords.Outcome;
 import io.github.bereket1144.agentcontroller.modelcall.ModelCallRecords.StoredAttempt;
@@ -42,8 +44,9 @@ class ReplayedAnswerCheckTest {
     void aRecordedInvalidAnswerIsStillCheckedAndRepaired() throws IOException {
         RoleCatalog roles = new RoleCatalog(new PathMatchingResourcePatternResolver()
                 .getResources("classpath*:/agent-roles/*.properties"));
-        PromptBuilder prompts = new PromptBuilder(new ModelProfiles(new ModelProperties(Map.of("local", profile),
-                "local", null, Map.of(), 10)), roles, 3);
+        ModelProfiles profiles = new ModelProfiles(new ModelProperties(Map.of("local", profile),
+                "local", null, Map.of(), 10));
+        PromptBuilder prompts = new PromptBuilder(profiles, roles, 3);
         OutputValidator validator = new OutputValidator(roles, List.of(new RequirementsStoryIdsCheck()));
         List<PromptInput> inputs = List.of(new PromptInput(InputKind.ORIGINAL_REQUIREMENT, "v1",
                 "Build a task tracker", null, false));
@@ -56,9 +59,10 @@ class ReplayedAnswerCheckTest {
                 recorded(repair, VALID, AttemptKind.REPAIR, Outcome.SUCCESS)));
 
         StructuredAnswerService service = new StructuredAnswerService(new ReplayModelClient(file.toString()),
-                prompts, validator, 2);
-        StructuredAnswerService.AcceptedAnswer accepted = service.call("requirements", profile, "Write stories",
-                inputs);
+                profiles, prompts, validator, mock(ModelCallRecords.class), mock(ModelCallBudget.class), 2,
+                Duration.ZERO);
+        StructuredAnswerService.AcceptedAnswer accepted = service.call(UUID.randomUUID(), "requirements",
+                "Write stories", inputs);
 
         assertThat(accepted.repairAttempts()).isEqualTo(1);
         assertThat(accepted.value().get("stories").get(0).get("id").asString()).isEqualTo("S-1");
