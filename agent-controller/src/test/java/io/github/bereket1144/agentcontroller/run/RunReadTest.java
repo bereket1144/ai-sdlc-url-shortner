@@ -33,6 +33,9 @@ class RunReadTest {
     private RunService runService;
 
     @MockitoBean
+    private RunCreation creation;
+
+    @MockitoBean
     private RunDetails details;
 
     @MockitoBean
@@ -50,7 +53,7 @@ class RunReadTest {
         UUID id = UUID.randomUUID();
         Run saved = mock(Run.class);
         when(saved.getId()).thenReturn(id);
-        when(runService.createRun("Build a task tracker")).thenReturn(saved);
+        when(creation.create(new RunRequest("Build a task tracker", null, null))).thenReturn(saved);
 
         mvc.perform(post("/v1/runs").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"requirement\":\"Build a task tracker\"}"))

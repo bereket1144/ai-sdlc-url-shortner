@@ -22,8 +22,8 @@ As an API client, I want the controller to serve an OpenAPI document of its run 
 
 - AC-SWAG-1.1 `GET /v3/api-docs` returns 200 with a JSON body that declares an OpenAPI version and a title.
 - AC-SWAG-1.2 The document lists `POST /v1/runs` and `GET /v1/runs/{id}`, and no other path.
-- AC-SWAG-1.3 The document describes the request body of `POST /v1/runs` as an object with a required text field `requirement` that has a maximum length of 20,000.
-- AC-SWAG-1.4 The document describes the success bodies: `{id}` for create, and `id`, `requirement`, `status`, `createdAt`, `updatedAt`, `version` for read, with `status` listing the supported run states (`CREATED`, `RUNNING`, `SUCCEEDED`, and `FAILED`).
+- AC-SWAG-1.3 The document describes the request body of `POST /v1/runs` as an object with a required text field `requirement` that has a maximum length of 20,000, and the optional fields `kind` and `baseRunId` (AC-AGT-50.4).
+- AC-SWAG-1.4 The document describes the success bodies: `{id}` for create, and `id`, `requirement`, `kind`, `status`, `createdAt`, `updatedAt`, `version` for read (and `baseRunId` for a run that changes an earlier run), with `status` listing the supported run states (`CREATED`, `RUNNING`, `SUCCEEDED`, and `FAILED`).
 
 ### SWAG-2 Document the responses and errors
 

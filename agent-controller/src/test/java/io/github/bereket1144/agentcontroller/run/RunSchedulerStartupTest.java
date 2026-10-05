@@ -66,7 +66,7 @@ class RunSchedulerStartupTest {
     static WorkflowRunner completedWorkflow() {
         // Polling starts during context startup, before a @BeforeEach method could stub the mock.
         WorkflowRunner runner = mock(WorkflowRunner.class);
-        when(runner.run(SAVED_ID, REQUIREMENT, RunKind.GREENFIELD))
+        when(runner.run(SAVED_ID, REQUIREMENT, RunKind.GREENFIELD, null))
                 .thenReturn(new AgentState(Map.of()));
         return runner;
     }
@@ -99,7 +99,7 @@ class RunSchedulerStartupTest {
     void scheduledPollingStartsRunSavedBeforeStartup() throws InterruptedException {
         awaitStatus(SAVED_ID, RunStatus.SUCCEEDED);
 
-        verify(workflowRunner, times(1)).run(SAVED_ID, REQUIREMENT, RunKind.GREENFIELD);
+        verify(workflowRunner, times(1)).run(SAVED_ID, REQUIREMENT, RunKind.GREENFIELD, null);
     }
 
     private void awaitStatus(UUID runId, RunStatus expected) throws InterruptedException {

@@ -68,15 +68,21 @@ class ApiDocumentTest {
     }
 
     @Test
-    @DisplayName("AC-FLOW-1.6 the create request body still has only the requirement property, so a caller cannot choose a kind")
-    void createRequestBodyHasNoKind() throws Exception {
+    @DisplayName("AC-AGT-50.4, AC-FLOW-1.6 the create request body lists the optional kind and baseRunId next to the requirement, and only the requirement is required")
+    void createRequestBodyListsKindAndBaseRun() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.components.schemas.RunRequest.properties.keys()",
-                        containsInAnyOrder("requirement")));
+                        containsInAnyOrder("requirement", "kind", "baseRunId")))
+                .andExpect(jsonPath("$.components.schemas.RunRequest.properties.kind.enum",
+                        containsInAnyOrder("GREENFIELD", "BROWNFIELD")))
+                .andExpect(jsonPath("$.components.schemas.RunRequest.properties.baseRunId.format").value("uuid"))
+                .andExpect(jsonPath("$.components.schemas.RunRequest.properties.baseRunId.description").isNotEmpty())
+                .andExpect(jsonPath("$.components.schemas.RunRequest.required", not(hasItem("kind"))))
+                .andExpect(jsonPath("$.components.schemas.RunRequest.required", not(hasItem("baseRunId"))));
     }
 
     @Test
-    @DisplayName("AC-SWAG-1.4 the success bodies list their fields and supported run states")
+    @DisplayName("AC-SWAG-1.4, AC-AGT-50.4 the success bodies list their fields, the run kind and the base run, and the supported run states")
     void successBodiesAreDescribed() throws Exception {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/v1/runs'].post.responses['201'].content['application/json'].schema.$ref")
@@ -86,8 +92,12 @@ class ApiDocumentTest {
                 .andExpect(jsonPath("$.paths['/v1/runs/{id}'].get.responses['200'].content['application/json'].schema.$ref")
                         .value("#/components/schemas/RunResponse"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.keys()", containsInAnyOrder(
-                        "id", "requirement", "status", "createdAt", "updatedAt", "version", "attempt", "resumedFrom",
-                        "failureReason", "stages", "artifacts", "commit", "verification", "awaiting")))
+                        "id", "requirement", "kind", "baseRunId", "status", "createdAt", "updatedAt", "version",
+                        "attempt", "resumedFrom", "failureReason", "stages", "artifacts", "commit", "verification",
+                        "awaiting")))
+                .andExpect(jsonPath("$.components.schemas.RunResponse.properties.kind.enum",
+                        containsInAnyOrder("GREENFIELD", "BROWNFIELD")))
+                .andExpect(jsonPath("$.components.schemas.RunResponse.properties.baseRunId.format").value("uuid"))
                 .andExpect(jsonPath("$.components.schemas.RunResponse.properties.status.enum",
                         containsInAnyOrder("CREATED", "RUNNING", "WAITING_FOR_INPUT", "SUCCEEDED", "FAILED")));
     }

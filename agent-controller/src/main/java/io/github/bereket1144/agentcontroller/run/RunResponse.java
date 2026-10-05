@@ -10,7 +10,13 @@ import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /** What a client sees when it reads a run. A separate record so that the entity is never serialised. */
-public record RunResponse(UUID id, String requirement, RunStatus status, Instant createdAt, Instant updatedAt,
+public record RunResponse(UUID id, String requirement,
+        @Schema(description = "GREENFIELD builds from nothing; BROWNFIELD changes the result of the run in baseRunId.")
+        RunKind kind,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @Schema(description = "The earlier run that this run changes. Left out for a GREENFIELD run.")
+        UUID baseRunId,
+        RunStatus status, Instant createdAt, Instant updatedAt,
         Long version,
         @Schema(description = "How many times the run has been queued: 1 until it is retried.")
         int attempt,
@@ -32,8 +38,8 @@ public record RunResponse(UUID id, String requirement, RunStatus status, Instant
 
     static RunResponse from(Run run, List<StageState> stages, List<ArtifactSummary> artifacts,
                             Optional<VerificationResult> verification, ClarificationService.Awaiting awaiting) {
-        return new RunResponse(run.getId(), run.getRequirement(), run.getStatus(), run.getCreatedAt(),
-                run.getUpdatedAt(), run.getVersion(), run.getAttempt(), run.getResumedFrom(),
+        return new RunResponse(run.getId(), run.getRequirement(), run.getKind(), run.getBaseRunId(), run.getStatus(),
+                run.getCreatedAt(), run.getUpdatedAt(), run.getVersion(), run.getAttempt(), run.getResumedFrom(),
                 run.getStatus() == RunStatus.FAILED
                         ? new Failure(run.getFailureReason(), run.getFailureReason().message()) : null,
                 awaiting, stages, artifacts, verification.map(VerificationResult::commitId).orElse(null),

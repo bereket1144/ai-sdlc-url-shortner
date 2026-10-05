@@ -22,9 +22,11 @@ import org.springframework.stereotype.Service;
 
 /**
  * The workspace of one run: a new, empty git repository made with {@code git init} in {@code <base>/<run-id>}, on the
- * branch {@code main}, where a change set is written and committed. It uses the {@code git} command line and runs
- * nothing from the workspace. The controller's own checkout is never read or changed. It exists only when
- * {@code agent.stages.development=agent}, so a run without the development agent needs no workspace setting.
+ * branch {@code main}, where a change set is written and committed. A run that changes an earlier run starts from a
+ * clone of that run's workspace instead, so it has the earlier files and history and its commits stack on top; the
+ * earlier repository is only read. It uses the {@code git} command line and runs nothing from the workspace. The
+ * controller's own checkout is never read or changed. It exists only when {@code agent.stages.development=agent}, so a
+ * run without the development agent needs no workspace setting.
  */
 @Service
 @ConditionalOnProperty(name = "agent.stages.development", havingValue = "agent")
@@ -46,19 +48,52 @@ public class RunWorkspace {
 
     /** The folder of the run's workspace. It is made with {@code git init} on the first call and reused after that. */
     public Path create(UUID runId) {
+        return create(runId, null);
+    }
+
+    /**
+     * As {@link #create(UUID)}, except that a new workspace is a clone of the workspace of the run {@code baseRunId}
+     * when there is one, on the branch that the clone checks out. The only folder cloned from is that run's own folder
+     * under the base folder, found by its id; no other path or address can be given. A workspace that already exists is
+     * reused whatever the base.
+     *
+     * @param baseRunId the run to start from, or null for a new, empty repository
+     * @throws IllegalStateException when the base run's workspace does not exist; nothing is written then
+     */
+    public Path create(UUID runId, UUID baseRunId) {
         Path root = base.resolve(runId.toString());
         if (Files.isDirectory(root.resolve(".git"))) {
             log.info("event=workspace_reused runId={}", runId);
             return root;
         }
-        try {
-            Files.createDirectories(root);
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Cannot create the workspace folder", exception);
+        if (baseRunId != null) {
+            return cloneOfBase(runId, baseRunId, root);
         }
+        createFolder(root);
         git(root, Map.of(), "init", "--quiet", "--initial-branch=main");
         log.info("event=workspace_created runId={} branch=main", runId);
         return root;
+    }
+
+    private Path cloneOfBase(UUID runId, UUID baseRunId, Path root) {
+        Path source = base.resolve(baseRunId.toString());
+        if (!Files.isDirectory(source.resolve(".git"))) {
+            log.warn("event=workspace_base_missing runId={} baseRunId={}", runId, baseRunId);
+            throw new IllegalStateException("The workspace of the base run does not exist");
+        }
+        createFolder(base);
+        // The clone only reads the source repository, which stays as it is.
+        git(base, Map.of(), "clone", "--quiet", "--", source.toString(), root.toString());
+        log.info("event=workspace_cloned runId={} baseRunId={}", runId, baseRunId);
+        return root;
+    }
+
+    private static void createFolder(Path folder) {
+        try {
+            Files.createDirectories(folder);
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Cannot create the workspace folder", exception);
+        }
     }
 
     /** The id of the commit that the run's branch is on; fails when nothing has been committed yet. */

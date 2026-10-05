@@ -28,7 +28,7 @@ As the platform, I want a run to move through the named SDLC nodes while each no
 - AC-FLOW-1.3 Each executed node reads the values contributed by its predecessors and adds its own role-named value (see "State keys") without removing earlier values. At the end, the graph state contains `runId`, `requirement`, `kind`, and one value for every executed node.
 - AC-FLOW-1.4 QA, code review, and documentation start after development and overlap in time: a test holds each branch open until all three have started, so it can only pass if they run at the same time. The graph does not reach its end until all three have finished, and the `qa`, `review`, and `documentation` values are all present whichever finishes first.
 - AC-FLOW-1.5 When the dummy graph reaches its end through live dispatch, the run is persisted as `SUCCEEDED`.
-- AC-FLOW-1.6 A run stores its kind. A run created through `POST /v1/runs`, and every run stored before this story, has kind `GREENFIELD`. A run created through the service as `BROWNFIELD` reads back as `BROWNFIELD`, and live dispatch gives its workflow that kind. The request body and the API document of `POST /v1/runs` are unchanged.
+- AC-FLOW-1.6 A run stores its kind. A run created through `POST /v1/runs` without a kind, and every run stored before this story, has kind `GREENFIELD`. A run created through the service as `BROWNFIELD` reads back as `BROWNFIELD`, and live dispatch gives its workflow that kind. The request body of `POST /v1/runs` may also name a kind and a base run (AC-AGT-50.1).
 
 ### FLOW-2 Show dummy node progress in logs
 

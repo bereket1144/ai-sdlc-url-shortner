@@ -36,8 +36,9 @@ public class RunDispatcher {
         try {
             // A run that was retried says where its attempt starts; a first attempt starts at the beginning.
             var result = run.getResumedFrom() == null
-                    ? workflowRunner.run(runId, run.getRequirement(), run.getKind())
-                    : workflowRunner.retry(runId, run.getRequirement(), run.getKind(), run.getResumedFrom());
+                    ? workflowRunner.run(runId, run.getRequirement(), run.getKind(), run.getBaseRunId())
+                    : workflowRunner.retry(runId, run.getRequirement(), run.getKind(), run.getBaseRunId(),
+                            run.getResumedFrom());
             if (result.<Boolean>value("waitingForInput").orElse(false)) {
                 log.info("event=run_dispatch_waiting runId={} stage=requirements", runId);
                 return true;

@@ -6,13 +6,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog.InputKind;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactRef;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore.StoredArtifact;
-import io.github.bereket1144.agentcontroller.model.PromptBuilder.PromptInput;
+import io.github.bereket1144.agentcontroller.run.RunKind;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationFailedException;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationRecords;
 import io.github.bereket1144.agentcontroller.sandbox.VerificationResult;
@@ -20,7 +19,6 @@ import io.github.bereket1144.agentcontroller.sandbox.VerificationRunner;
 import io.github.bereket1144.agentcontroller.workspace.ChangeSet;
 import io.github.bereket1144.agentcontroller.workspace.RunWorkspace;
 import io.github.bereket1144.agentcontroller.workspace.WorkspaceFiles;
-import io.github.bereket1144.agentcontroller.workspace.WorkspaceFiles.FileText;
 import io.github.bereket1144.agentcontroller.workspace.WorkspaceFiles.Snapshot;
 import org.bsc.langgraph4j.state.AgentState;
 import org.slf4j.Logger;
@@ -41,6 +39,13 @@ public class DevelopmentFinish {
 
     private static final Logger log = LoggerFactory.getLogger(DevelopmentFinish.class);
     private static final String AUTHOR = "development";
+    /** Added to the task of the first attempt of a run that changes an earlier run, whose files the agent is shown. */
+    private static final String CHANGE_TASK = "CHANGE attempt. The repository already holds the code of an earlier run: "
+            + "the input " + InputKind.SELECTED_WORKSPACE_FILES + " holds the current text of its files. Change an "
+            + "existing file by returning it with its complete new text, never a difference, and add the new files that "
+            + "are needed. Return no file that can stay as it is. Keep the layout of the existing files, whatever "
+            + "layout is asked above. The whole test suite runs, tests that are already there included, so the change "
+            + "must keep them passing or update them.";
 
     /** The graph state keys that carry the commit that was built and the outcome of its check to the later stages. */
     static final String COMMIT = "commit";
@@ -82,14 +87,19 @@ public class DevelopmentFinish {
         Optional<VerificationResult> failed = records.latest(runId).filter(result -> !result.passed())
                 .filter(result -> !result.commitId().equals(beforeRestart));
         if (failed.isEmpty()) {
-            return finish(state, node.execute(state));
+            // A run that changes an earlier run is told to change the files that are there; the node shows them.
+            boolean changesExistingCode = state.<RunKind>value("kind").filter(kind -> kind == RunKind.BROWNFIELD)
+                    .isPresent();
+            return finish(state, changesExistingCode ? node.execute(state, CHANGE_TASK, List.of())
+                    : node.execute(state));
         }
         VerificationResult result = failed.get();
         Snapshot snapshot = workspaceFiles.read(workspaces.create(runId));
         log.info("event=development_fix_attempt runId={} commit={} outcome={} failingTests={} files={} omitted={}",
                 runId, result.commitId(), result.outcome(), result.failingTests().size(), snapshot.files().size(),
                 snapshot.omitted());
-        return finish(state, node.execute(state, fixTask(result), List.of(filesInput(result.commitId(), snapshot))));
+        return finish(state, node.execute(state, fixTask(result),
+                List.of(ExistingFiles.input(result.commitId(), snapshot))));
     }
 
     /** The failures as text for the task. The report is data from generated code, so it is fenced as such. */
@@ -103,18 +113,6 @@ public class DevelopmentFinish {
                 + "The input " + InputKind.SELECTED_WORKSPACE_FILES + " holds the current text of the files in the "
                 + "repository. Return a corrected change set: every file that must change, each with its complete new "
                 + "text, and no file that can stay as it is.";
-    }
-
-    /** The files as one input. The short form, used only when the prompt is too large, lists the paths. */
-    private static PromptInput filesInput(String commit, Snapshot snapshot) {
-        String notice = snapshot.omitted() == 0 ? ""
-                : "[" + snapshot.omitted() + " more files are not shown: binary, too large, or over the limit]\n";
-        String full = snapshot.files().stream()
-                .map(file -> "[FILE path=" + file.path() + "]\n" + file.text() + "\n[/FILE]\n")
-                .collect(Collectors.joining()) + notice;
-        String paths = "Files: " + snapshot.files().stream().map(FileText::path).collect(Collectors.joining(", "))
-                + "\n" + notice;
-        return new PromptInput(InputKind.SELECTED_WORKSPACE_FILES, commit, full, paths, true);
     }
 
     /**

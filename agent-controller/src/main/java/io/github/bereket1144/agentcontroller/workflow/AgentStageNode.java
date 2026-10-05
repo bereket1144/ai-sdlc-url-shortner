@@ -3,6 +3,7 @@ package io.github.bereket1144.agentcontroller.workflow;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -54,6 +55,8 @@ public class AgentStageNode {
     private final StructuredAnswerService answers;
     private final ArtifactStore artifacts;
     private final String task;
+    /** Shows a BROWNFIELD run the existing code. Empty for a role that is never shown it. */
+    private final Optional<ExistingFiles> existingFiles;
 
     /** Fails with an unknown-role error when the catalog has no such role, so a wrong setting stops the start. */
     public AgentStageNode(String role, RoleCatalog roles, StageInputs stageInputs, StructuredAnswerService answers,
@@ -70,6 +73,25 @@ public class AgentStageNode {
         this.stageInputs = stageInputs;
         this.answers = answers;
         this.artifacts = artifacts;
+        this.existingFiles = Optional.empty();
+    }
+
+    private AgentStageNode(AgentStageNode plain, Optional<ExistingFiles> existingFiles) {
+        this.task = plain.task;
+        this.role = plain.role;
+        this.definition = plain.definition;
+        this.stageInputs = plain.stageInputs;
+        this.answers = plain.answers;
+        this.artifacts = plain.artifacts;
+        this.existingFiles = existingFiles;
+    }
+
+    /**
+     * The same stage, which also shows a BROWNFIELD run the existing code, before the other inputs. A run of any other
+     * kind is not changed by it.
+     */
+    AgentStageNode showingExistingFiles(Optional<ExistingFiles> files) {
+        return new AgentStageNode(this, files);
     }
 
     Map<String, Object> execute(AgentState state) {
@@ -83,6 +105,10 @@ public class AgentStageNode {
     Map<String, Object> execute(AgentState state, String feedback, List<PromptInput> extraInputs) {
         UUID runId = required(state, "runId");
         List<PromptInput> inputs = new ArrayList<>();
+        // A fix attempt brings the current files itself, so the files are not read twice.
+        if (extraInputs.stream().noneMatch(input -> input.kind() == InputKind.SELECTED_WORKSPACE_FILES)) {
+            existingFiles.flatMap(files -> files.forRun(state)).ifPresent(inputs::add);
+        }
         if (definition.inputs().contains(InputKind.ORIGINAL_REQUIREMENT)) {
             String requirement = required(state, "requirement");
             inputs.add(new PromptInput(InputKind.ORIGINAL_REQUIREMENT, "1", requirement, null, false));

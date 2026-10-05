@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +14,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -166,6 +169,56 @@ class AgentStageNodeTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-49.1 the impact analysis, design, planning and development agents of a change run get the "
+            + "existing files before their other inputs, and QA, review and documentation get none")
+    void theExistingFilesComeFirstForTheFourRolesOnly() {
+        ExistingFiles existing = mock(ExistingFiles.class);
+        when(existing.forRun(any())).thenReturn(Optional.of(
+                new PromptInput(InputKind.SELECTED_WORKSPACE_FILES, "c1", "EXISTING_FILE_TEXT", "short", true)));
+        Map<String, String> prompts = new HashMap<>();
+        ModelClient model = (role, modelProfile, system, user) -> {
+            prompts.put(role, user);
+            return new ModelResult(ANSWERS.get(role), FinishReason.COMPLETE, null, null, null);
+        };
+        Map<String, AgentStageNode> nodes = stages(model, Optional.of(existing), "impactAnalysis", "design", "planning",
+                "development", "qa", "review", "documentation").nodes();
+        AgentState state = new AgentState(Map.of("runId", runId, "requirement", REQUIREMENT,
+                "kind", RunKind.BROWNFIELD));
+
+        for (String role : List.of("impactAnalysis", "design", "planning", "development", "qa", "review",
+                "documentation")) {
+            nodes.get(role).execute(state);
+        }
+
+        // These three roles also read the requirement text, which the files must come before.
+        for (String role : List.of("impactAnalysis", "design", "planning")) {
+            assertThat(prompts.get(role)).contains("EXISTING_FILE_TEXT");
+            assertThat(prompts.get(role).indexOf("kind=SELECTED_WORKSPACE_FILES"))
+                    .isLessThan(prompts.get(role).indexOf("kind=ORIGINAL_REQUIREMENT"));
+        }
+        assertThat(prompts.get("development")).contains("EXISTING_FILE_TEXT");
+        for (String role : List.of("qa", "review", "documentation")) {
+            assertThat(prompts.get(role)).doesNotContain("EXISTING_FILE_TEXT");
+        }
+        verify(existing, times(4)).forRun(state);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-49.1 an attempt that brings the current files itself is not given the existing files twice")
+    void aFixAttemptIsNotGivenTheFilesTwice() {
+        ExistingFiles existing = mock(ExistingFiles.class);
+        ModelClient model = (role, modelProfile, system, user) ->
+                new ModelResult(ANSWERS.get(role), FinishReason.COMPLETE, null, null, null);
+        AgentStageNode node = stages(model, Optional.of(existing), "development").nodes().get("development");
+        PromptInput current = new PromptInput(InputKind.SELECTED_WORKSPACE_FILES, "c2", "CURRENT", "short", true);
+
+        node.execute(new AgentState(Map.of("runId", runId, "requirement", REQUIREMENT, "kind", RunKind.BROWNFIELD)),
+                "FIX attempt", List.of(current));
+
+        verify(existing, never()).forRun(any());
+    }
+
+    @Test
     @DisplayName("AC-AGT-62.4 open questions stay in the artifact, each is also listed as an assumption, and the run goes on")
     void openQuestionsBecomeAssumptionsAndTheRunGoesOn() throws GraphStateException {
         AgentStages stages = stages(scripted(new ArrayList<>()), "impactAnalysis");
@@ -224,11 +277,15 @@ class AgentStageNodeTest {
     }
 
     private AgentStages stages(ModelClient model, String... agentRoles) {
+        return stages(model, Optional.empty(), agentRoles);
+    }
+
+    private AgentStages stages(ModelClient model, Optional<ExistingFiles> existingFiles, String... agentRoles) {
         MockEnvironment environment = new MockEnvironment();
         for (String role : agentRoles) {
             environment.setProperty("agent.stages." + role, "agent");
         }
-        return new AgentStages(environment, roles, stageInputs, service(model), store);
+        return new AgentStages(environment, roles, stageInputs, service(model), store, existingFiles);
     }
 
     private StructuredAnswerService service(ModelClient model) {

@@ -42,6 +42,8 @@ public class WorkflowRunner {
             RunFailureReason.MODEL_UNAVAILABLE, RunFailureReason.VERIFICATION_FAILED, RunFailureReason.UNEXPECTED);
     /** The graph state key that tells the entry edge where an attempt starts; a fresh run has none. */
     static final String START_AT = "startAt";
+    /** The graph state key of the run that a BROWNFIELD run changes; a run that changes none has no such key. */
+    static final String BASE_RUN_ID = "baseRunId";
     private static final String INITIALIZE = "initialize";
     /** A node that starts QA, review and documentation together, for an attempt that resumes at one of them. */
     private static final String RESUME_GROUP = "resumeGroup";
@@ -228,13 +230,23 @@ public class WorkflowRunner {
         }
     }
 
-    /** The first attempt of a run: the whole graph, from the start. */
+    /** The first attempt of a run that changes no earlier run: the whole graph, from the start. */
     public AgentState run(UUID runId, String requirement, RunKind kind) {
+        return run(runId, requirement, kind, null);
+    }
+
+    /**
+     * The first attempt of a run: the whole graph, from the start.
+     *
+     * @param baseRunId the run whose workspace a BROWNFIELD run starts from; null for a run that changes no earlier run
+     */
+    public AgentState run(UUID runId, String requirement, RunKind kind, UUID baseRunId) {
         requireInputs(runId, requirement, kind);
         Map<String, Object> input = new HashMap<>(Map.of(
                 "runId", runId,
                 "requirement", requirement,
                 "kind", kind));
+        withBase(input, baseRunId);
         return execute(runId, kind, input, true);
     }
 
@@ -247,10 +259,16 @@ public class WorkflowRunner {
      * @param startAt {@link RunResume#START} or the stage the attempt starts at, as {@link RunResume#startPoint} chose it
      */
     public AgentState retry(UUID runId, String requirement, RunKind kind, String startAt) {
+        return retry(runId, requirement, kind, null, startAt);
+    }
+
+    /** As above, for a run that changes the earlier run {@code baseRunId}; the base is null when it changes none. */
+    public AgentState retry(UUID runId, String requirement, RunKind kind, UUID baseRunId, String startAt) {
         requireInputs(runId, requirement, kind);
         Objects.requireNonNull(startAt, "startAt must not be null");
         RunResume resumed = resume.orElseThrow(() -> new IllegalStateException("A retry needs the run resume"));
         Map<String, Object> input = new HashMap<>(resumed.input(runId, requirement, kind, startAt));
+        withBase(input, baseRunId);
         boolean fromStart = startAt.equals(RunResume.START);
         if (fromStart) {
             progress.ifPresent(recorder -> recorder.reset(runId));
@@ -259,6 +277,12 @@ public class WorkflowRunner {
         }
         log.info("event=workflow_retry runId={} kind={} startAt={}", runId, kind, startAt);
         return execute(runId, kind, input, fromStart);
+    }
+
+    private static void withBase(Map<String, Object> input, UUID baseRunId) {
+        if (baseRunId != null) {
+            input.put(BASE_RUN_ID, baseRunId);
+        }
     }
 
     private static void requireInputs(UUID runId, String requirement, RunKind kind) {

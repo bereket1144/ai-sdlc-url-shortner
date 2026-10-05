@@ -284,6 +284,8 @@
   const ui = {
     start: $('start'), startForm: $('start-form'), requirement: $('requirement'), startButton: $('start-button'),
     startMessage: $('start-message'), recent: $('recent'), recentList: $('recent-list'),
+    changeExisting: $('change-existing'), changeFields: $('change-fields'),
+    baseRunSelect: $('base-run-select'), baseRunId: $('base-run-id'),
     run: $('run'), runId: $('run-id'), runStatus: $('run-status'), notice: $('notice'),
     failure: $('failure'), failureCode: $('failure-code'), failureMessage: $('failure-message'),
     retryButton: $('retry-button'), retryMessage: $('retry-message'),
@@ -967,17 +969,46 @@ ${field.input.value.trim()}`);
 
   ui.metricsRefresh.addEventListener('click', loadMetrics);
 
-  // ---- Starting a run (AC-UI-1.2) ----------------------------------------------------------------------------
+  // ---- Starting a run (AC-UI-1.2), or changing an existing one (AC-AGT-50.6) --------------------------------------
+
+  ui.changeExisting.addEventListener('change', () => {
+    ui.changeFields.hidden = !ui.changeExisting.checked;
+    setMessage(ui.startMessage, '');
+  });
+
+  // The run to change: the id that was pasted, else the run chosen from the ones this browser remembers; '' for none.
+  function chosenBaseRun() {
+    return ui.baseRunId.value.trim() || ui.baseRunSelect.value;
+  }
+
+  function resetChange() {
+    ui.changeExisting.checked = false;
+    ui.changeFields.hidden = true;
+    ui.baseRunId.value = '';
+    ui.baseRunSelect.value = '';
+  }
 
   ui.startForm.addEventListener('submit', async event => {
     event.preventDefault();
     const requirement = ui.requirement.value;
+    const body = { requirement };
     setMessage(ui.startMessage, '');
+    if (ui.changeExisting.checked) {
+      const baseRunId = chosenBaseRun();
+      if (!RUN_ID.test(baseRunId)) {
+        setMessage(ui.startMessage, baseRunId === '' ? 'Choose the run to change, or paste its id.' : 'That is not a run id.');
+        return;
+      }
+      body.kind = 'BROWNFIELD';
+      body.baseRunId = baseRunId;
+    }
     ui.startButton.disabled = true;
     try {
-      const created = await api('/v1/runs', postJson({ requirement }));
+      // The controller checks that the run to change exists, has finished and has code; its refusal is shown below.
+      const created = await api('/v1/runs', postJson(body));
       remember(created.id, requirement);
       ui.requirement.value = '';
+      resetChange();
       // The id in the address is what a reload or a pasted link follows; the change of address starts the following.
       location.hash = `run=${created.id}`;
     } catch (error) {
@@ -1013,6 +1044,10 @@ ${field.input.value.trim()}`);
 
   function renderRecent() {
     const runs = loadRecent();
+    // The same remembered runs are the choices of "Change an existing run".
+    ui.baseRunSelect.replaceChildren(
+      el('option', { value: '', text: runs.length === 0 ? 'No runs remembered yet' : 'Choose a run' }),
+      ...runs.map(entry => el('option', { value: entry.id, text: `${entry.id.slice(0, 8)}  ${entry.text}` })));
     ui.recent.hidden = runs.length === 0;
     ui.recentList.replaceChildren(...runs.map(entry => el('li', {},
       el('a', { href: `#run=${entry.id}` },
