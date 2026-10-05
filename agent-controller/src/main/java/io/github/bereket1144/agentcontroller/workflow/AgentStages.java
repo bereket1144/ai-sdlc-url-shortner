@@ -8,7 +8,6 @@ import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.artifact.ArtifactStore;
 import io.github.bereket1144.agentcontroller.artifact.StageInputs;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService;
-import io.github.bereket1144.agentcontroller.workspace.ChangeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
@@ -46,14 +45,16 @@ public class AgentStages {
         log.info("event=agent_stages_enabled roles={}", enabled.keySet());
     }
 
-    /** The development role is told where its files may go; every other role gets the plain task text. */
+    /** The development role is told what layout its files take; every other role gets the plain task text. */
     private static AgentStageNode node(String role, RoleCatalog roles, StageInputs stageInputs,
                                        StructuredAnswerService answers, ArtifactStore artifacts) {
         if (!role.equals("development")) {
             return new AgentStageNode(role, roles, stageInputs, answers, artifacts);
         }
-        return new AgentStageNode(role, roles, stageInputs, answers, artifacts, runId -> AgentStageNode.TASK
-                + " Write every file under " + ChangeSet.PRODUCT_FOLDER + " or under runs/" + runId + "/."
+        return new AgentStageNode(role, roles, stageInputs, answers, artifacts, AgentStageNode.TASK
+                + " Use a flat layout: put the modules next to each other in the repository root and all the tests in"
+                + " one tests/ folder. Do not add an extra nested package folder and do not put the files in a folder"
+                + " named after the product."
                 + " The content of each file must be the complete file, ready to run: no placeholders, no ellipses and"
                 + " no comments such as \"rest of the code\". Include the tests as files in the same change set.");
     }
