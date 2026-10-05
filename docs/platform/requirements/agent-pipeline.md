@@ -294,7 +294,7 @@ B. Stage agents
 
 C. File changes and the commit
 
-- AC-AGT-62.6 The development role answers with a change set: a list of files, each with a path and its full new content. A path outside `apps/url-shortener/` and the run's folder `runs/<run-id>/`, an absolute path, a path with `..`, a link, an empty change set, or a file over the size limit makes the answer invalid, and the repair of AGT-5 applies.
+- AC-AGT-62.6 The development role answers with a change set: a list of files, each with a path and its full new content. A path under `.git`, an absolute path, a path with `..`, a link, an empty change set, or a file over the size limit makes the answer invalid, and the repair of AGT-5 applies.
 - AC-AGT-62.7 The controller writes the files into the run's workspace, a new git repository made with `git init` in the folder `<base>/<run-id>` under the configured base directory (nothing is cloned and there is no source setting), and makes one commit on its branch `main` with the development role as author and the run id in the message. Creating the workspace again for the same run reuses it. Nothing is written outside the base directory, and the controller's own checkout is never changed.
 
 D. Sandboxed build and test

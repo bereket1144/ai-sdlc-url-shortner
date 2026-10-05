@@ -89,7 +89,8 @@ public class RunWorkspace {
             write(root.resolve(file.path()), file.content());
             add.add(file.path());
         }
-        git(root, Map.of(), add.toArray(String[]::new));
+        // A path is a literal name, never a pattern: "*.py" must add only a file called "*.py".
+        git(root, Map.of("GIT_LITERAL_PATHSPECS", "1"), add.toArray(String[]::new));
         git(root, AUTHOR, "commit", "--quiet", "--no-gpg-sign", "-m",
                 "development: apply " + files.size() + " file changes for run " + runId);
         String commitId = git(root, Map.of(), "rev-parse", "HEAD");
