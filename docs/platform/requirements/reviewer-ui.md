@@ -31,3 +31,14 @@ As a requester, I want to type a change request under a finished run and watch t
 - AC-UI-2.4 The existing "Change an existing run" choice in the start box keeps working.
 - AC-UI-2.5 Everything is built with `createElement` and `textContent` only. The behaviour is checked by hand.
 
+## UI-3 A chat bar pinned at the bottom, and approvals
+
+Status: open
+
+As a requester, I want a chat bar that is always at the bottom of the page and the approve and reject buttons when the run asks for them, so that I can steer a run from the conversation.
+
+- AC-UI-3.1 While a run is followed, a bar is pinned to the bottom of the viewport with a text area and a Send button. When the run is SUCCEEDED and has a commit, Send posts `{requirement, kind: "BROWNFIELD", baseRunId: <this run>}` and follows the new run (this replaces the "Request a change" card of UI-2.1; the base-link lines of UI-2.3 stay). In every other state the bar is shown disabled with a one-line reason (still running; waiting for your answers; waiting for your approval; failed, use Retry).
+- AC-UI-3.2 The bar never covers the conversation: the page leaves room for it and keeps the reader's scroll position, on a phone width too.
+- AC-UI-3.3 When `GET /v1/runs/{id}` has `approval` (`kind`, `version`, `fingerprint`, `summary`, `rejectionsLeft`), an approval card shows what waits for approval, a link that opens that artifact, a name field (remembered in the browser's storage, optional storage), a comment field, and Approve and Reject buttons. Reject needs a comment. The buttons post to `POST /v1/runs/{id}/decisions` with `{decision, approver, comment}`; a 400 or 409 shows its message in the card and keeps the text; after a 202 the page goes back to following the run.
+- AC-UI-3.4 Everything is built with `createElement` and `textContent` only. The behaviour is checked by hand.
+

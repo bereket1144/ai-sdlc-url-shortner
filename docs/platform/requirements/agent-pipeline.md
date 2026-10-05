@@ -437,20 +437,22 @@ As a requester, I want to answer the agent's questions and have the run carry on
 - AC-AGT-14.4 Resuming never repeats earlier work. The call records of earlier nodes are unchanged and no earlier node runs again.
 - AC-AGT-14.5 Questions and answers are stored together with the time and the artifact version they belong to.
 
-### AGT-15 Approve a stage's result before the next stage
+### AGT-15 Approve the design and the plan before the next stage
 
 Status: open
 
-Depends on: AGT-13, AGT-14.
+Depends on: AGT-12, AGT-64, AGT-66.
 
-As a reviewer, I want to approve or reject the stories before any design is made, so that human oversight comes first and an agent never approves its own work.
+As a reviewer, I want to approve or reject the design and the plan before the run goes on, so that human oversight comes first and an agent never approves its own work. (The stories are not approved in this version.)
 
-- AC-AGT-15.1 When the role definition says a result needs approval and the stage has no open questions, the run waits (WAITING_FOR_INPUT) for an approval of that artifact version. The run read response shows the request: the artifact kind, version and fingerprint, and its summary. Requirements and design need approval.
-- AC-AGT-15.2 The reviewer approves (name, optional note) or rejects (name, required comment). A blank name, or a decision for a version that is no longer the latest, is refused in the RUN-4 format and changes nothing.
-- AC-AGT-15.3 Approval lets the run continue without a manual dispatch call, and later stages read that approved version.
-- AC-AGT-15.4 Rejection calls the role again with the comment and all earlier feedback. The result is the next artifact version, which needs approval again. After the rejection limit (default 3) the run is FAILED with the reason REJECTED.
-- AC-AGT-15.5 Every decision is stored: the approver's name, the decision, the comment, the artifact kind, version and fingerprint, and the time. A decision applies to that version only.
-- AC-AGT-15.6 Approval is possible only through the decision operation. No agent path approves anything.
+- AC-AGT-15.1 When `agent.approval.required-for` lists a stage (a comma separated list of `design` and `planning`; empty by default; the live profile sets `design,planning`), the run stops after that stage has stored its artifact and waits (WAITING_FOR_INPUT) for a decision about that artifact version. A waiting run makes no model call, holds no thread, and is not claimed by the scheduler.
+- AC-AGT-15.2 While it waits, `GET /v1/runs/{id}` shows `approval` with `kind`, `version`, `fingerprint`, `summary` and `rejectionsLeft`. It shows no `approval` at any other time.
+- AC-AGT-15.3 `POST /v1/runs/{id}/decisions` with `{"decision": "APPROVE" | "REJECT", "approver": "...", "comment": "..."}` answers 202 for a run that waits for an approval. `approver` is a non-blank name of at most 100 characters; `comment` is required for REJECT and at most 5,000 characters. An invalid body is a 400, an unknown run a 404, and a run that does not wait for an approval (or a second decision for the same version) a 409, all in the RUN-4 format, and nothing changes on a refusal.
+- AC-AGT-15.4 APPROVE queues the run, and it continues at the next stage with the approved version (it resumes at the earliest unfinished stage, as AC-AGT-66.2).
+- AC-AGT-15.5 REJECT runs the same stage again with the reviewer's comment and all earlier comments for that stage given to the agent, stores the next artifact version and waits for approval again. After `agent.approval.max-rejections` rejections of one stage (default 3) the run ends FAILED with the reason REJECTED.
+- AC-AGT-15.6 Every decision is stored with the approver, the decision, the comment, the artifact kind, version and fingerprint, and the time. A run that waits for an approval is still waiting, with the same request, after a restart of the controller.
+- AC-AGT-15.7 Only the decisions operation can approve or reject. Nothing an agent returns can.
+- AC-AGT-15.8 The API document lists the operation, the `approval` field and the REJECTED reason (this updates AC-SWAG-1.3 and AC-SWAG-1.4 with the user's approval, noted in the steps log). The reviewer page shows the approval request with buttons (UI-3).
 
 ### AGT-35 Run several runs side by side within a limit
 
