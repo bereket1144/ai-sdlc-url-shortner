@@ -1,5 +1,6 @@
 package io.github.bereket1144.agentcontroller.run;
 
+import io.github.bereket1144.agentcontroller.agent.InputAccessDeniedException;
 import io.github.bereket1144.agentcontroller.model.ModelCallBudget.BudgetExhaustedException;
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.ContextTooLargeException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.ModelUnavailableException;
@@ -45,6 +46,9 @@ public enum RunFailureReason {
             }
             if (cause instanceof BudgetExhaustedException) {
                 return BUDGET_EXHAUSTED;
+            }
+            if (cause instanceof InputAccessDeniedException) {
+                return ACCESS_DENIED;
             }
         }
         return UNEXPECTED;

@@ -12,6 +12,7 @@ import java.util.Map;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import io.github.bereket1144.agentcontroller.agent.InputAccessDeniedException;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog.InputKind;
 import org.junit.jupiter.api.DisplayName;
@@ -168,7 +169,7 @@ class PromptBuilderTest {
 
         assertThatThrownBy(() -> builder.build("requirements", profile, "Write stories", List.of(
                 input(InputKind.SELECTED_WORKSPACE_FILES, "v1", "private file", "short", false))))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InputAccessDeniedException.class)
                 .hasMessageContaining("Role requirements cannot read input SELECTED_WORKSPACE_FILES");
     }
 

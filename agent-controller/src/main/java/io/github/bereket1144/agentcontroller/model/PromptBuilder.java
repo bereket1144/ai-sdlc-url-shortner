@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import io.github.bereket1144.agentcontroller.agent.InputAccessDeniedException;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog.InputKind;
 import io.github.bereket1144.agentcontroller.agent.RoleCatalog.RoleDefinition;
@@ -49,7 +50,8 @@ public class PromptBuilder {
         List<PromptInput> inputs = List.copyOf(Objects.requireNonNull(suppliedInputs, "inputs must not be null"));
         for (PromptInput input : inputs) {
             if (!role.inputs().contains(input.kind())) {
-                throw new IllegalArgumentException("Role " + roleId + " cannot read input " + input.kind());
+                log.info("event=input_access_denied role={} kind={}", roleId, input.kind());
+                throw new InputAccessDeniedException(roleId, input.kind());
             }
         }
 

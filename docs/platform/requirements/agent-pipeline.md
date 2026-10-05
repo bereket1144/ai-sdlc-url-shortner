@@ -364,7 +364,7 @@ Shown when: an approved spec becomes an approved design and a valid task plan. N
 
 ### AGT-16 Give each stage only what its role may read
 
-Status: open
+Status: coded
 
 Depends on: AGT-1, AGT-11.
 
