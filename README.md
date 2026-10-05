@@ -83,7 +83,7 @@ Waiting batches and answers survive a controller restart. This continuation happ
 
 Use the kind and version returned by the run response. Artifact kinds include `requirements`, `design`, `plan`, `development`, `qa`, `review` and `documentation`. The planning stage produces kind `plan`. Unknown artifacts return `404`.
 
-In the live profile, workspaces are created under `../../agentic-sdlc-workspaces/<run-id>`, relative to `agent-controller/`. Each workspace is its own fresh git repository on branch `main`, with the generated product at its root and one commit per change set; nothing is cloned from or pushed to this repository. Inspect the generated commit there using Git. Agents' other outputs are stored in PostgreSQL and read through the artifact API, not automatically exported as files.
+In the live profile, workspaces are created under `../../agentic-sdlc-workspaces/<run-id>`, relative to `agent-controller/`. Each workspace is its own fresh git repository on branch `main`, with the generated product at its root and one commit per change set; nothing is pushed anywhere. A change run (`kind` BROWNFIELD with a `baseRunId`) starts as a git clone of the base run's own workspace, so its history extends the base's; the base is never changed. Inspect the generated commit there using Git. Agents' other outputs are stored in PostgreSQL and read through the artifact API, not automatically exported as files.
 
 `SUCCEEDED` in a live skeleton run means that the selected stages returned, the generated commit was tested successfully and the graph completed. It does not mean a person approved the work or that review findings were resolved. `impactAnalysis` remains `NOT_STARTED` on the greenfield route.
 

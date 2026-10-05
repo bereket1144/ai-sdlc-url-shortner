@@ -831,7 +831,7 @@ Shown when: a change to existing code is analysed before design, and a requireme
 
 ### AGT-50 Choose the run kind and name the base run
 
-Status: open
+Status: coded
 
 Depends on: AGT-20.
 
@@ -847,7 +847,7 @@ As a requester, I want to say that a run changes the result of an earlier run, s
 
 ### AGT-49 Understand existing code before changing it
 
-Status: open
+Status: coded
 
 Depends on: AGT-16, AGT-50, AGT-65.
 

@@ -92,7 +92,7 @@ flowchart TD
     Init --> Req["requirements"]
     Req --> Kind{"run kind"}
     Kind -->|"GREENFIELD, the only kind the API creates"| Design["design"]
-    Kind -->|"BROWNFIELD, internal only"| Impact["impactAnalysis"]
+    Kind -->|"BROWNFIELD (baseRunId)"| Impact["impactAnalysis"]
     Impact --> Design
     Design --> Plan["planning"]
     Plan --> Dev["development, then commit and sandbox test"]
@@ -264,7 +264,7 @@ The controls below are required by the project but are not in the code. Do not r
 - **Stop and rollback.** There is no stop operation and no rollback or safe stop (AGT-43). The failure reasons `STOPPED_BY_REVIEWER`, `STAGE_TIMEOUT` and `RECOVERY_FAILED` exist in the fixed list, but nothing produces them. A change set is written file by file before the commit, so a failure in between leaves files in the workspace.
 - **Audit trail.** There is no append-only event trail (AGT-44). The records that exist are the run's status, the model calls, the artifacts with their consumed versions, the verification results, the stage states, the commits and the log lines.
 - **Re-planning.** A changed requirement cannot be applied to a run that is going, and a stale result is not refused. Each run goes through the graph once.
-- **Brownfield.** The graph has the conditional route to impact analysis and the run kind is stored, but the API always creates greenfield runs. There is no way to start from an existing repository, and impact analysis has not been exercised with real code (AGT-49, AGT-50).
+- **Brownfield, partly.** `POST /v1/runs` takes `kind` and `baseRunId`; the run's workspace is a clone of the base run's repository, and the impact analysis, design, planning and development agents are shown its existing files (bounded in size). Impact analysis is not checked against the real files by plain code, and a base run's workspace folder must still exist.
 
 Also not built:
 
@@ -285,7 +285,7 @@ See [limitations and trade-offs](limitations.md) for the consequences and [testi
 | Clarify before writing stories, with questions and answers only | [ADR 0003](../adr/0003-clarify-requirements-before-generating-stories.md), [ADR 0007](../adr/0007-clarify-with-questions-and-answers-only.md) | The assumptions in the stories are confirmed by nobody. The pause is outside the graph |
 | Thin end-to-end skeleton first, governance after | [ADR 0004](../adr/0004-build-a-thin-end-to-end-skeleton-first.md) | Section 6 is the price |
 | One disposable container per build, started with the docker command line | [ADR 0005](../adr/0005-run-builds-and-tests-in-one-disposable-container.md) | The controller holds Docker daemon access, and containers share the host kernel |
-| A fresh git repository per run | [ADR 0006](../adr/0006-give-each-run-its-own-git-repository.md) | The product is outside this repository, and brownfield needs another way to create a workspace |
+| A fresh git repository per run, cloned from the base run for a change | [ADR 0006](../adr/0006-give-each-run-its-own-git-repository.md) | The product is outside this repository; a change run clones the base run's workspace |
 | Light tests, coverage gate at 85% for now | [ADR 0008](../adr/0008-keep-tests-light-and-gate-coverage-at-85-percent-for-now.md) | Coverage is below the 100% target until a sweep |
 
 Decisions without a record of their own:

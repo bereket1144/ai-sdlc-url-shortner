@@ -160,7 +160,7 @@ class AgentStageNodeTest {
         };
         MockEnvironment environment = new MockEnvironment().withProperty("agent.stages.development", "agent")
                 .withProperty("sandbox.verify.file-layout", "Put every file in the src folder: CONFIGURED_LAYOUT_TEXT.");
-        AgentStageNode node = new AgentStages(environment, roles, stageInputs, service(model), store)
+        AgentStageNode node = new AgentStages(environment, roles, stageInputs, service(model), store, Optional.empty())
                 .nodes().get("development");
 
         node.execute(new AgentState(Map.of("runId", runId, "requirement", REQUIREMENT)));
