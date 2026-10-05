@@ -59,7 +59,6 @@ import org.springframework.test.web.servlet.MockMvc;
 class ScriptedEndToEndTest {
 
     private static final Path BASE = temporaryFolder("workspaces");
-    private static final Path SOURCE = sourceRepository();
     private static final AtomicReference<Outcome> BUILD_OUTCOME = new AtomicReference<>(Outcome.PASSED);
     private static final Map<String, String> ANSWERS = Map.of(
             "requirements", "{\"stories\":[{\"id\":\"S-1\",\"title\":\"Shorten\",\"role\":\"user\",\"want\":\"w\","
@@ -68,13 +67,13 @@ class ScriptedEndToEndTest {
             "design", "{\"components\":[\"c\"],\"interfaces\":[\"i\"],\"dataFlow\":\"d\",\"decisions\":[\"x\"],"
                     + "\"alternatives\":[\"y\"],\"risks\":[\"r\"],\"diagrams\":[\"graph TD\"]}",
             "planning", "{\"tasks\":[\"t1\"]}",
-            "development", "{\"changes\":[{\"path\":\"apps/url-shortener/app.py\",\"content\":\"print(1)\\n\"},"
-                    + "{\"path\":\"apps/url-shortener/test_app.py\",\"content\":\"def test_x():\\n    pass\\n\"}],"
+            "development", "{\"changes\":[{\"path\":\"app.py\",\"content\":\"print(1)\\n\"},"
+                    + "{\"path\":\"tests/test_app.py\",\"content\":\"def test_x():\\n    pass\\n\"}],"
                     + "\"rationale\":\"r\",\"affectedCriteria\":[\"S-1.1\"],\"errorHandling\":\"e\","
                     + "\"verificationNotes\":[\"n\"]}",
             "qa", "{\"proposedTests\":[\"t\"],\"criterionMapping\":{\"S-1.1\":\"test_x\"},"
                     + "\"observedEvidence\":[\"e\"],\"coverageGaps\":[]}",
-            "review", "{\"reviewedFiles\":[\"apps/url-shortener/app.py\"],\"findings\":[],\"evidence\":[\"e\"],"
+            "review", "{\"reviewedFiles\":[\"app.py\"],\"findings\":[],\"evidence\":[\"e\"],"
                     + "\"resolutionStatus\":\"none\"}",
             "documentation", "{\"setup\":\"s\",\"usage\":\"u\",\"architecture\":\"a\",\"examples\":[\"e\"],"
                     + "\"knownLimits\":[\"l\"],\"evidenceLinks\":[\"l\"]}");
@@ -83,7 +82,6 @@ class ScriptedEndToEndTest {
     @DynamicPropertySource
     static void workspace(DynamicPropertyRegistry registry) {
         registry.add("workspace.base", BASE::toString);
-        registry.add("workspace.source", SOURCE::toString);
     }
 
     /** The model and the container are the only stand-ins; the primary bean wins over the Docker runner. */
@@ -104,7 +102,7 @@ class ScriptedEndToEndTest {
         @Primary
         VerificationRunner fakeContainer() {
             return (workspace, commitId) -> {
-                boolean filesThere = Files.exists(workspace.resolve("apps/url-shortener/app.py"));
+                boolean filesThere = Files.exists(workspace.resolve("app.py"));
                 Outcome outcome = filesThere ? BUILD_OUTCOME.get() : Outcome.NO_RESULT;
                 return new VerificationResult(outcome, 1, outcome == Outcome.PASSED ? 1 : 0,
                         outcome == Outcome.FAILED ? 1 : 0, outcome == Outcome.FAILED ? List.of("test_x") : List.of(),
@@ -148,13 +146,13 @@ class ScriptedEndToEndTest {
                 "FINISHED", "FINISHED", "FINISHED");
         mvc.perform(get("/v1/runs/" + id + "/artifacts/design/1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.dataFlow").value("d"));
-        // The commit is on the run branch of the run's own workspace and holds the scripted files.
+        // The commit is on main of the run's own new repository and holds the scripted files.
         Path workspace = BASE.resolve(id.toString());
         String commit = JsonPath.read(mvc.perform(get("/v1/runs/" + id)).andReturn().getResponse()
                 .getContentAsString(), "$.commit");
-        assertThat(git(workspace, "rev-parse", "run/" + id)).isEqualTo(commit);
+        assertThat(git(workspace, "rev-parse", "main")).isEqualTo(commit);
         assertThat(git(workspace, "show", "--name-only", "--format=", commit))
-                .contains("apps/url-shortener/app.py", "apps/url-shortener/test_app.py");
+                .contains("app.py", "tests/test_app.py");
         assertThat(ROLES_CALLED).containsExactlyInAnyOrder("requirements", "requirements", "design", "planning", "development", "qa",
                 "review", "documentation");
     }
@@ -195,20 +193,6 @@ class ScriptedEndToEndTest {
         } catch (IOException exception) {
             throw new IllegalStateException(exception);
         }
-    }
-
-    /** A small repository the run workspaces clone from, with one commit on main. */
-    private static Path sourceRepository() {
-        Path source = temporaryFolder("source");
-        try {
-            Files.writeString(source.resolve("README.md"), "source\n");
-            git(source, "init", "-b", "main");
-            git(source, "add", ".");
-            git(source, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-m", "init");
-        } catch (IOException exception) {
-            throw new IllegalStateException(exception);
-        }
-        return source;
     }
 
     private static String git(Path folder, String... arguments) {

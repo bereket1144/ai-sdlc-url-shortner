@@ -20,31 +20,33 @@ class ChangeSetCheckTest {
     private final ChangeSetCheck check = new ChangeSetCheck();
 
     @Test
-    @DisplayName("AC-AGT-62.6 a change set with paths in the product folder and a run folder is accepted")
-    void acceptsAllowedPaths() {
-        assertThat(check.validate(answer(change("apps/url-shortener/app.py", "print(1)"),
-                change("runs/6f9619ff-8b86-d011-b42d-00c04fc964ff/notes.md", "")))).isEmpty();
+    @DisplayName("AC-AGT-62.6 a change set with relative paths anywhere in the workspace is accepted")
+    void acceptsAnyRelativePath() {
+        assertThat(check.validate(answer(change("app.py", "print(1)"), change("tests/test_app.py", ""),
+                change(".gitignore", "__pycache__/")))).isEmpty();
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("refusedAnswers")
-    @DisplayName("AC-AGT-62.6 an unsafe, empty or oversized change set is refused")
+    @DisplayName("AC-AGT-62.6 a path under .git, an absolute path, a path with .., an empty change set or an oversized file is refused")
     void refusesUnsafeChanges(String description, JsonNode answer, String message) {
         assertThat(check.validate(answer)).containsExactly(message);
     }
 
     static Stream<Arguments> refusedAnswers() {
-        String outside = "Change 1 has a path outside apps/url-shortener/ and runs/<run-id>/";
         return Stream.of(
-                Arguments.of("a path outside the allowed folders", answer(change("src/Main.java", "x")), outside),
+                Arguments.of("a path under .git", answer(change(".git/hooks/pre-commit", "x")),
+                        "Change 1 has a path under .git"),
+                Arguments.of("a path under .git in another case", answer(change("src/.GIT/config", "x")),
+                        "Change 1 has a path under .git"),
                 Arguments.of("an absolute path", answer(change("/etc/passwd", "x")),
                         "Change 1 has an absolute path"),
-                Arguments.of("a path with ..", answer(change("apps/url-shortener/../../x", "x")),
+                Arguments.of("a path with ..", answer(change("src/../../x", "x")),
                         "Change 1 has a path with \"..\""),
                 Arguments.of("an empty change set", answer(),
                         "The change set is empty: list at least one file"),
                 Arguments.of("a file over the size limit",
-                        answer(change("apps/url-shortener/big.txt", "x".repeat(ChangeSet.MAX_FILE_BYTES + 1))),
+                        answer(change("big.txt", "x".repeat(ChangeSet.MAX_FILE_BYTES + 1))),
                         "Change 1 is larger than " + ChangeSet.MAX_FILE_BYTES + " bytes"));
     }
 

@@ -20,10 +20,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
- * The workspace of one run: a fresh clone of the configured source in {@code <base>/<run-id>}, with only the product folder and the runs folder checked out, on the branch
- * {@code run/<run-id>}, where a change set is written and committed. It uses the {@code git} command line and runs
- * nothing from the workspace. The controller's own checkout is only read by the clone, never changed. It exists only
- * when {@code agent.stages.development=agent}, so a run without the development agent needs no workspace setting.
+ * The workspace of one run: a new, empty git repository made with {@code git init} in {@code <base>/<run-id>}, on the
+ * branch {@code main}, where a change set is written and committed. It uses the {@code git} command line and runs
+ * nothing from the workspace. The controller's own checkout is never read or changed. It exists only when
+ * {@code agent.stages.development=agent}, so a run without the development agent needs no workspace setting.
  */
 @Service
 @ConditionalOnProperty(name = "agent.stages.development", havingValue = "agent")
@@ -37,24 +37,16 @@ public class RunWorkspace {
             "GIT_COMMITTER_NAME", "development", "GIT_COMMITTER_EMAIL", "development@agent.invalid");
 
     private final Path base;
-    private final String source;
 
-    /**
-     * @param base   the folder that holds one folder per run; created when the first workspace is made
-     * @param source the repository each run clones: a path or a URL that carries no credentials
-     */
-    public RunWorkspace(@Value("${workspace.base}") String base, @Value("${workspace.source}") String source) {
+    /** @param base the folder that holds one folder per run; created when the first workspace is made */
+    public RunWorkspace(@Value("${workspace.base}") String base) {
         if (base.isBlank()) {
             throw new IllegalArgumentException("workspace.base must not be blank");
         }
-        if (source.isBlank()) {
-            throw new IllegalArgumentException("workspace.source must not be blank");
-        }
         this.base = Path.of(base).toAbsolutePath().normalize();
-        this.source = source;
     }
 
-    /** The folder of the run's workspace. It is cloned on the first call and reused on every later call. */
+    /** The folder of the run's workspace. It is made with {@code git init} on the first call and reused after that. */
     public Path create(UUID runId) {
         Path root = base.resolve(runId.toString());
         if (Files.isDirectory(root.resolve(".git"))) {
@@ -62,18 +54,12 @@ public class RunWorkspace {
             return root;
         }
         try {
-            Files.createDirectories(base);
+            Files.createDirectories(root);
         } catch (IOException exception) {
-            throw new UncheckedIOException("Cannot create the workspace base folder", exception);
+            throw new UncheckedIOException("Cannot create the workspace folder", exception);
         }
-        // The clone runs where the controller runs, so a relative source is read from the controller's own folder.
-        git(null, Map.of(), "clone", "--quiet", "--", source, root.toString());
-        // Only the product folder and the runs folder are kept in the working folder: an agent never needs the
-        // platform's own files, and they must not appear in the workspace.
-        git(root, Map.of(), "sparse-checkout", "set", "--no-cone", "/" + ChangeSet.PRODUCT_FOLDER,
-                "/" + ChangeSet.RUN_FOLDERS);
-        git(root, Map.of(), "checkout", "--quiet", "-b", "run/" + runId);
-        log.info("event=workspace_created runId={} branch=run/{}", runId, runId);
+        git(root, Map.of(), "init", "--quiet", "--initial-branch=main");
+        log.info("event=workspace_created runId={} branch=main", runId);
         return root;
     }
 
@@ -89,7 +75,7 @@ public class RunWorkspace {
         List<FileChange> files = changes.files();
         for (int index = 0; index < files.size(); index++) {
             String path = files.get(index).path();
-            String problem = ChangeSet.pathProblem(path, runId);
+            String problem = ChangeSet.pathProblem(path);
             if (problem == null && goesThroughLink(root, path)) {
                 problem = "goes through a link";
             }
@@ -136,10 +122,7 @@ public class RunWorkspace {
     private static String git(Path directory, Map<String, String> environment, String... arguments) {
         List<String> command = new ArrayList<>(List.of("git"));
         command.addAll(List.of(arguments));
-        ProcessBuilder builder = new ProcessBuilder(command);
-        if (directory != null) {
-            builder.directory(directory.toFile());
-        }
+        ProcessBuilder builder = new ProcessBuilder(command).directory(directory.toFile());
         // Never wait for a question that nobody can answer.
         builder.environment().put("GIT_TERMINAL_PROMPT", "0");
         builder.environment().putAll(environment);

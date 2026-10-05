@@ -148,6 +148,24 @@ class AgentStageNodeTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-62.6 the development prompt asks for a flat layout with one tests folder and names no product or run folder")
+    void theDevelopmentPromptAsksForAFlatLayout() {
+        List<String> prompts = Collections.synchronizedList(new ArrayList<>());
+        ModelClient model = (role, modelProfile, system, user) -> {
+            prompts.add(system + "\n" + user);
+            return new ModelResult(ANSWERS.get(role), FinishReason.COMPLETE, null, null, null);
+        };
+        AgentStageNode node = stages(model, "development").nodes().get("development");
+
+        node.execute(new AgentState(Map.of("runId", runId, "requirement", REQUIREMENT)));
+
+        // The task text and the role text are both in the prompt, so one check covers both.
+        assertThat(prompts).singleElement().asString()
+                .contains("flat layout", "tests/")
+                .doesNotContain("url-shortener", "apps/", "runs/");
+    }
+
+    @Test
     @DisplayName("AC-AGT-62.4 open questions stay in the artifact, each is also listed as an assumption, and the run goes on")
     void openQuestionsBecomeAssumptionsAndTheRunGoesOn() throws GraphStateException {
         AgentStages stages = stages(scripted(new ArrayList<>()), "impactAnalysis");

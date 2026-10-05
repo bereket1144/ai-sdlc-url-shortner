@@ -1,9 +1,9 @@
 package io.github.bereket1144.agentcontroller.workspace;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 import tools.jackson.databind.JsonNode;
 
@@ -14,13 +14,7 @@ import tools.jackson.databind.JsonNode;
  */
 public record ChangeSet(List<FileChange> files) {
 
-    /** The product's own folder, the first of the two places a change may write. */
-    public static final String PRODUCT_FOLDER = "apps/url-shortener/";
-    /** The folder that holds one sub-folder per run, the second place; a run may write only to its own. */
-    public static final String RUN_FOLDERS = "runs/";
     static final int MAX_FILE_BYTES = 100_000;
-
-    private static final String OUTSIDE = "has a path outside " + PRODUCT_FOLDER + " and " + RUN_FOLDERS + "<run-id>/";
 
     public ChangeSet {
         files = List.copyOf(files);
@@ -44,8 +38,8 @@ public record ChangeSet(List<FileChange> files) {
     }
 
     /**
-     * Why a path may never be written, as a phrase that follows "Change N", or null when it may. The folder of any one
-     * run is accepted here, because the answer check does not know the run.
+     * Why a path may never be written, as a phrase that follows "Change N", or null when it may. A change may write any
+     * relative path inside the run's workspace except one inside the repository's own {@code .git} folder.
      */
     static String pathProblem(String path) {
         if (path.isBlank()) {
@@ -57,15 +51,10 @@ public record ChangeSet(List<FileChange> files) {
         if (path.contains("..")) {
             return "has a path with \"..\"";
         }
-        return path.startsWith(PRODUCT_FOLDER) || path.matches(RUN_FOLDERS + "[^/]+/.+") ? null : OUTSIDE;
-    }
-
-    /** As {@link #pathProblem(String)}, and a path in a run folder must be in the folder of this run. */
-    static String pathProblem(String path, UUID runId) {
-        String problem = pathProblem(path);
-        if (problem == null && path.startsWith(RUN_FOLDERS) && !path.startsWith(RUN_FOLDERS + runId + "/")) {
-            return OUTSIDE;
+        // Compared without regard to case, because a file system that ignores case would still reach the folder.
+        if (Arrays.stream(path.split("[/\\\\]")).anyMatch(part -> part.equalsIgnoreCase(".git"))) {
+            return "has a path under .git";
         }
-        return problem;
+        return null;
     }
 }
