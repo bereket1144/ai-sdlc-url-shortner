@@ -271,6 +271,38 @@ As the platform, I want every agent output stored as a versioned, fingerprinted 
 - AC-AGT-11.5 The graph state holds only artifact references (kind, version, fingerprint), never content, so checkpoints stay small and nothing sensitive sits in graph state or logs.
 - AC-AGT-11.6 A run's artifacts can be listed with their lineage.
 
+### AGT-65 Retry a failed stage, with fix feedback for a failed build
+
+Status: open
+
+Depends on: AGT-5 to AGT-9, AGT-62.
+
+As the platform owner, I want a stage that fails to be attempted again, and a failed build to send its failures back to the development agent, so that a run that is almost right does not end FAILED.
+
+- AC-AGT-65.1 When a stage fails with OUTPUT_INVALID, MODEL_UNAVAILABLE, VERIFICATION_FAILED or an unexpected error, the stage is attempted again, up to `agent.stage.max-retries` more times (default 2). BUDGET_EXHAUSTED, CONTEXT_TOO_LARGE, ACCESS_DENIED and any other failure are not retried: the run fails at once with its reason.
+- AC-AGT-65.2 Each attempt of an agent stage stores a new artifact version and later stages use the latest. Every attempt's model calls count in the run's budget.
+- AC-AGT-65.3 When the failed stage is development after VERIFICATION_FAILED, the attempt is a fix attempt: the development agent receives the names of the failing tests, the bounded report excerpt and the current text of the workspace's files (bounded in file count and total size), and its change set is committed on top as a new commit and verified again.
+- AC-AGT-65.4 When every attempt fails, the run ends FAILED with the reason of the last failure.
+- AC-AGT-65.5 A stage that fails is recorded with the state FAILED, and one that is attempted again is RUNNING again. The stage list of the run read response, the API document and the reviewer page show FAILED, and the page shows no "Building..." for a failed run. This adds FAILED to the state lists of AC-AGT-62.12 and AC-UI-1.3.
+- AC-AGT-65.6 A test report in which no test passed (every test skipped, or none run) is not a pass.
+- AC-AGT-65.7 A replay call with no recorded answer ends the run with REPLAY_MISSING, not MODEL_UNAVAILABLE.
+- AC-AGT-65.8 Each attempt is logged with the run id, the stage, the attempt number and the failure reason code only.
+
+### AGT-66 Retry a failed run, resuming first and then restarting once
+
+Status: open
+
+Depends on: AGT-65.
+
+As a reviewer, I want to retry a failed run, first from the stage that failed and then, if that fails again, from the beginning, so that a failure does not cost the work that was already done.
+
+- AC-AGT-66.1 `POST /v1/runs/{id}/retry` on a FAILED run that has attempts left (`agent.run.max-attempts`, default 3 per run) queues it again and answers 202. A run that is not FAILED or has no attempts left is refused with 409 in the RUN-4 format, and an unknown run with 404. Nothing changes on a refusal.
+- AC-AGT-66.2 The first retry resumes at the earliest stage that is not FINISHED. The state is rebuilt from what is stored (the requirement, the run kind, the latest version of each artifact, the commit), stages before it do not run again, and the parallel group (QA, review, documentation) resumes as a group.
+- AC-AGT-66.3 If the resumed attempt fails, the run is attempted once more from the beginning, reusing the stored clarification answers without asking again, when attempts are left.
+- AC-AGT-66.4 The run stores its attempt number and where its attempt started. The run read response shows `attempt` and `resumedFrom`. The failure reason is cleared when the run is queued and set again if it fails.
+- AC-AGT-66.5 The run's call budget and the stage retries of AGT-65 apply in every attempt. The attempt cap is checked by plain code.
+- AC-AGT-66.6 The API document lists the operation and the new fields, and the reviewer page shows a Retry button on a FAILED run.
+
 ### AGT-62 Run the whole pipeline once, from Postman, on a real model
 
 Status: open
