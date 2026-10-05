@@ -67,6 +67,18 @@ class RunWorkspaceTest {
     }
 
     @Test
+    @DisplayName("AC-AGT-62.7 only the product folder and the runs folder are checked out in the workspace")
+    void checksOutOnlyTheProductAndRunsFolders() throws Exception {
+        Path root = workspace.create(UUID.randomUUID());
+
+        // The source holds README.md; it is in the clone's history but not in its working folder.
+        assertThat(root.resolve("README.md")).doesNotExist();
+        workspace.commit(UUID.fromString(root.getFileName().toString()), new ChangeSet(List.of(
+                new FileChange("apps/url-shortener/app.py", "x"))));
+        assertThat(git(root, "ls-tree", "-r", "--name-only", "HEAD")).contains("README.md", "apps/url-shortener/app.py");
+    }
+
+    @Test
     @DisplayName("AC-AGT-62.7 nothing is written outside the base directory and the source checkout is unchanged")
     void leavesEverythingElseAlone() throws Exception {
         String headBefore = git(source, "rev-parse", "HEAD");

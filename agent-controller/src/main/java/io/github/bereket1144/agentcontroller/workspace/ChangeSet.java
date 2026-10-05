@@ -17,7 +17,7 @@ public record ChangeSet(List<FileChange> files) {
     /** The product's own folder, the first of the two places a change may write. */
     public static final String PRODUCT_FOLDER = "apps/url-shortener/";
     /** The folder that holds one sub-folder per run, the second place; a run may write only to its own. */
-    static final String RUN_FOLDERS = "runs/";
+    public static final String RUN_FOLDERS = "runs/";
     static final int MAX_FILE_BYTES = 100_000;
 
     private static final String OUTSIDE = "has a path outside " + PRODUCT_FOLDER + " and " + RUN_FOLDERS + "<run-id>/";

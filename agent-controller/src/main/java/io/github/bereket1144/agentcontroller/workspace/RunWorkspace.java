@@ -20,7 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
- * The workspace of one run: a fresh clone of the configured source in {@code <base>/<run-id>} on the branch
+ * The workspace of one run: a fresh clone of the configured source in {@code <base>/<run-id>}, with only the product folder and the runs folder checked out, on the branch
  * {@code run/<run-id>}, where a change set is written and committed. It uses the {@code git} command line and runs
  * nothing from the workspace. The controller's own checkout is only read by the clone, never changed. It exists only
  * when {@code agent.stages.development=agent}, so a run without the development agent needs no workspace setting.
@@ -68,6 +68,10 @@ public class RunWorkspace {
         }
         // The clone runs where the controller runs, so a relative source is read from the controller's own folder.
         git(null, Map.of(), "clone", "--quiet", "--", source, root.toString());
+        // Only the product folder and the runs folder are kept in the working folder: an agent never needs the
+        // platform's own files, and they must not appear in the workspace.
+        git(root, Map.of(), "sparse-checkout", "set", "--no-cone", "/" + ChangeSet.PRODUCT_FOLDER,
+                "/" + ChangeSet.RUN_FOLDERS);
         git(root, Map.of(), "checkout", "--quiet", "-b", "run/" + runId);
         log.info("event=workspace_created runId={} branch=run/{}", runId, runId);
         return root;
