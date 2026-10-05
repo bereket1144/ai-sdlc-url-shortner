@@ -63,6 +63,7 @@
         <div class="run-id">
           <p class="eyebrow">Run</p>
           <p id="run-id" class="mono"></p>
+          <div id="run-links" class="run-links" hidden></div>
         </div>
         <span id="run-status" class="pill" role="status"></span>
         <a class="btn" href="#">New run</a>
@@ -104,6 +105,20 @@
                 <p id="questions-message" class="message" role="alert" hidden></p>
                 <div class="row">
                   <button id="questions-send" class="btn primary" type="submit">Send answers</button>
+                </div>
+              </form>
+            </section>
+            <!-- Moved to the end of the conversation by app.js, after the build result. -->
+            <section id="change-card" class="card" hidden>
+              <p class="eyebrow">You</p>
+              <h2 id="change-title">Request a change</h2>
+              <p class="muted">Describe what should be different. A new run changes this run's code and is followed here.</p>
+              <form id="change-form">
+                <textarea id="change-text" name="change" rows="3" required aria-labelledby="change-title"
+                          placeholder="Describe the change you want"></textarea>
+                <p id="change-message" class="message" role="alert" hidden></p>
+                <div class="row">
+                  <button id="change-send" class="btn primary" type="submit">Send</button>
                 </div>
               </form>
             </section>

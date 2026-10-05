@@ -604,3 +604,13 @@ pre.code { width: 100%; max-width: 100%; }
   .stage { gap: .65rem; }
   .marker { width: 1.6rem; height: 1.6rem; }
 }
+
+/* Asking for a change on a finished run: the card at the end of the conversation, and the links between a change run
+   and the run it changes (shown under the run id). */
+#change-card { padding: 1rem 1.25rem; box-shadow: none; border-color: var(--border-strong); }
+#change-card h2 { font-size: 1rem; }
+#change-card textarea { min-height: 4rem; max-height: 12rem; }
+#change-card .message { margin-top: 0.5rem; overflow-wrap: anywhere; }
+.run-links { margin-top: 0.25rem; color: var(--muted); font-size: 0.8rem; }
+.run-links-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.45rem; margin: 0; }
+.run-links-line a { color: var(--accent); }

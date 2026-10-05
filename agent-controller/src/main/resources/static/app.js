@@ -10,6 +10,8 @@
   const POLL_MS = 2000;
   const MAX_RECENT = 5;
   const RECENT_KEY = 'recentRuns';
+  const CHANGES_KEY = 'changeRuns'; // { baseRunId: [the change runs this page started from it] }
+  const MAX_CHANGES = 20; // per base run
   const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const END_STATUSES = ['SUCCEEDED', 'FAILED'];
 
@@ -286,9 +288,11 @@
     startMessage: $('start-message'), recent: $('recent'), recentList: $('recent-list'),
     changeExisting: $('change-existing'), changeFields: $('change-fields'),
     baseRunSelect: $('base-run-select'), baseRunId: $('base-run-id'),
-    run: $('run'), runId: $('run-id'), runStatus: $('run-status'), notice: $('notice'),
+    run: $('run'), runId: $('run-id'), runLinks: $('run-links'), runStatus: $('run-status'), notice: $('notice'),
     failure: $('failure'), failureCode: $('failure-code'), failureMessage: $('failure-message'),
     retryButton: $('retry-button'), retryMessage: $('retry-message'),
+    changeCard: $('change-card'), changeForm: $('change-form'), changeText: $('change-text'),
+    changeSend: $('change-send'), changeMessage: $('change-message'),
     stages: $('stages'), questionsCard: $('questions-card'), questionsForm: $('questions-form'),
     questionList: $('question-list'), questionsMessage: $('questions-message'), questionsSend: $('questions-send'),
     workspace: $('workspace'), sidebarToggle: $('sidebar-toggle'),
@@ -318,7 +322,8 @@
     return card;
   });
 
-  ui.chat.append(ui.building, ui.verification);
+  // The "Request a change" card is last: the conversation ends with it, after the build result.
+  ui.chat.append(ui.building, ui.verification, ui.changeCard);
   let selectedArtifact = null;
 
   // Switching panes never changes the route or the polling session.
@@ -425,7 +430,7 @@
     current = {
       id, timer: null, busy: false, shown: new Map(), stageItems: new Map(), answered: new Set(),
       questionKey: null, questionFields: [], verificationSignature: null, lineageSignature: null,
-      stageStates: new Map(), lastStatus: null, requirementShown: false
+      stageStates: new Map(), lastStatus: null, requirementShown: false, linksSignature: null
     };
     setText(ui.runId, id);
     ui.start.hidden = true;
@@ -449,6 +454,11 @@
     ui.questionsCard.hidden = true;
     ui.failure.hidden = true;
     ui.notice.hidden = true;
+    ui.changeCard.hidden = true;
+    ui.changeText.value = '';
+    setMessage(ui.changeMessage, '');
+    ui.runLinks.replaceChildren();
+    ui.runLinks.hidden = true;
     ui.lineageCard.hidden = true;
     ui.lineageBody.replaceChildren();
     setMessage(ui.lineageMessage, '');
@@ -486,6 +496,8 @@
       await syncArtifacts(session, run);
       await syncLineage(session, run);
       more = !END_STATUSES.includes(run.status);
+      // AC-UI-2.2: the box appears only once the run is no longer followed, and only for a finished run with code.
+      ui.changeCard.hidden = more || run.status !== 'SUCCEEDED' || !run.commit;
     } catch (error) {
       if (session !== current) {
         return;
@@ -551,7 +563,7 @@
     const development = run.stages.find(stage => stage.stage === 'development');
     ui.building.hidden = !(development && development.state === 'RUNNING') || run.status === 'FAILED';
     showVerification(session, run);
-
+    showRunLinks(session, run);
   }
 
   function buildStepper(session, stages) {
@@ -871,6 +883,67 @@ ${field.input.value.trim()}`);
     }
   });
 
+  // ---- Asking for a change on a finished run (AC-UI-2.1, AC-UI-2.2) ----------------------------------------------
+
+  // The card is shown by poll() only for a finished run with code. A refusal (400) is shown under the box and what was
+  // typed stays; a new run is followed the way the start form does it, by changing the address.
+  ui.changeForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const session = current;
+    if (!session) {
+      return;
+    }
+    const requirement = ui.changeText.value;
+    setMessage(ui.changeMessage, '');
+    ui.changeSend.disabled = true;
+    try {
+      const created = await api('/v1/runs', postJson({ requirement, kind: 'BROWNFIELD', baseRunId: session.id }));
+      remember(created.id, requirement);
+      rememberChange(session.id, created.id);
+      if (session !== current) {
+        return; // the person went to another run meanwhile: the new run is remembered, but not opened over it
+      }
+      ui.changeText.value = '';
+      ui.changeCard.hidden = true;
+      location.hash = `run=${created.id}`;
+    } catch (error) {
+      if (session !== current) {
+        return;
+      }
+      console.error(`event=change_failed runId=${session.id} status=${error.status}`, error);
+      setMessage(ui.changeMessage, error.message);
+    } finally {
+      ui.changeSend.disabled = false;
+    }
+  });
+
+  // ---- The change runs and the run they change (AC-UI-2.3) ---------------------------------------------------------
+
+  function runLink(id) {
+    return el('a', { href: `#run=${id}`, class: 'mono', title: id, text: id.slice(0, 8) });
+  }
+
+  // "Change to run <id>" for a change run; "Changes started from this run" for a run this page changed. Both are left
+  // out when nothing is known. Rebuilt only when what they show has changed, so a link is not replaced under the mouse.
+  function showRunLinks(session, run) {
+    const base = RUN_ID.test(asText(run.baseRunId)) ? run.baseRunId : null;
+    const changes = changesOf(run.id);
+    const signature = JSON.stringify([base, changes]);
+    if (signature === session.linksSignature) {
+      return;
+    }
+    session.linksSignature = signature;
+    const lines = [];
+    if (base) {
+      lines.push(el('p', { class: 'run-links-line' }, 'Change to run', runLink(base)));
+    }
+    if (changes.length > 0) {
+      lines.push(el('p', { class: 'run-links-line' }, 'Changes started from this run:', ...changes.map(runLink)));
+    }
+    ui.runLinks.replaceChildren(...lines);
+    ui.runLinks.hidden = lines.length === 0;
+  }
+
   // ---- Metrics (AC-AGT-46.4) -------------------------------------------------------------------------------------
 
   const NO_DATA = 'No data';
@@ -1007,6 +1080,9 @@ ${field.input.value.trim()}`);
       // The controller checks that the run to change exists, has finished and has code; its refusal is shown below.
       const created = await api('/v1/runs', postJson(body));
       remember(created.id, requirement);
+      if (body.baseRunId) {
+        rememberChange(body.baseRunId, created.id);
+      }
       ui.requirement.value = '';
       resetChange();
       // The id in the address is what a reload or a pasted link follows; the change of address starts the following.
@@ -1039,6 +1115,35 @@ ${field.input.value.trim()}`);
       localStorage.setItem(RECENT_KEY, JSON.stringify(runs.slice(0, MAX_RECENT)));
     } catch (error) {
       console.warn('event=recent_runs_not_saved', error);
+    }
+  }
+
+  // ---- Change runs started from this page (kept in the browser; the page works without them) -----------------------
+
+  function loadChanges() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(CHANGES_KEY) || '{}');
+      return isObject(stored) ? stored : {};
+    } catch (error) {
+      console.warn('event=change_runs_unavailable', error);
+      return {};
+    }
+  }
+
+  // The change runs this page started from the run baseId, oldest first.
+  function changesOf(baseId) {
+    const ids = loadChanges()[asText(baseId).toLowerCase()];
+    return Array.isArray(ids) ? ids.filter(id => typeof id === 'string' && RUN_ID.test(id)) : [];
+  }
+
+  function rememberChange(baseId, id) {
+    try {
+      const key = baseId.toLowerCase();
+      const changes = loadChanges();
+      changes[key] = [...changesOf(key).filter(known => known !== id.toLowerCase()), id.toLowerCase()].slice(-MAX_CHANGES);
+      localStorage.setItem(CHANGES_KEY, JSON.stringify(changes));
+    } catch (error) {
+      console.warn('event=change_runs_not_saved', error);
     }
   }
 
