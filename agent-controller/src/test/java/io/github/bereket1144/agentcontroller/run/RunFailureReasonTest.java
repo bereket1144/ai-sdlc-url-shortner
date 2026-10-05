@@ -2,11 +2,13 @@ package io.github.bereket1144.agentcontroller.run;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.concurrent.CompletionException;
 
 import io.github.bereket1144.agentcontroller.model.ModelCallBudget.BudgetExhaustedException;
+import io.github.bereket1144.agentcontroller.model.ModelClient.FailureReason;
 import io.github.bereket1144.agentcontroller.model.PromptBuilder.ContextTooLargeException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.ModelUnavailableException;
 import io.github.bereket1144.agentcontroller.model.StructuredAnswerService.OutputInvalidException;
@@ -41,6 +43,15 @@ class RunFailureReasonTest {
                 .isEqualTo(RunFailureReason.BUDGET_EXHAUSTED);
         assertThat(RunFailureReason.from(new CompletionException(new VerificationFailedException(Outcome.FAILED))))
                 .isEqualTo(RunFailureReason.VERIFICATION_FAILED);
+    }
+
+    @Test
+    @DisplayName("AC-AGT-65.7 a model failure whose last reason is a missing replay answer maps to REPLAY_MISSING")
+    void aMissingReplayAnswerIsNotModelUnavailable() {
+        ModelUnavailableException missing = mock(ModelUnavailableException.class);
+        when(missing.lastReason()).thenReturn(FailureReason.REPLAY_MISSING);
+
+        assertThat(RunFailureReason.from(new CompletionException(missing))).isEqualTo(RunFailureReason.REPLAY_MISSING);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.github.bereket1144.agentcontroller.run;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
@@ -97,6 +98,7 @@ class ApiDocumentTest {
         mvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.components.schemas.StageState.properties.keys()",
                         containsInAnyOrder("stage", "state")))
+                .andExpect(jsonPath("$.components.schemas.StageState.description", containsString("FAILED")))
                 .andExpect(jsonPath("$.components.schemas.ArtifactSummary.properties.keys()",
                         containsInAnyOrder("kind", "version", "summary")))
                 .andExpect(jsonPath("$.components.schemas.Verification.properties.keys()",

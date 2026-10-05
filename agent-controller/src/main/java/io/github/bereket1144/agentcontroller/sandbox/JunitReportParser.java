@@ -36,8 +36,8 @@ final class JunitReportParser {
     }
 
     /**
-     * A report that is not well-formed XML is {@code NO_RESULT}. A readable report with no test in it is
-     * {@code FAILED}, because nothing was proved.
+     * A report that is not well-formed XML is {@code NO_RESULT}. A readable report in which no test passed, because
+     * none ran or every one was skipped, is {@code FAILED}, because nothing was proved.
      */
     static VerificationResult parse(String report, String commitId) {
         Document document;
@@ -62,7 +62,7 @@ final class JunitReportParser {
             }
         }
         int run = testCases.getLength();
-        Outcome outcome = failing.isEmpty() && run > 0 ? Outcome.PASSED : Outcome.FAILED;
+        Outcome outcome = failing.isEmpty() && passed > 0 ? Outcome.PASSED : Outcome.FAILED;
         String excerpt = report.substring(0, Math.min(report.length(), EXCERPT_LIMIT));
         return new VerificationResult(outcome, run, passed, failing.size(), failing, excerpt, commitId);
     }

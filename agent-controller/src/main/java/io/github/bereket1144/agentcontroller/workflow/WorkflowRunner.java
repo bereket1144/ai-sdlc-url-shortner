@@ -5,15 +5,19 @@ import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 
 import io.github.bereket1144.agentcontroller.document.RunDocuments;
+import io.github.bereket1144.agentcontroller.run.RunFailureReason;
 import io.github.bereket1144.agentcontroller.run.RunKind;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
@@ -24,16 +28,23 @@ import org.bsc.langgraph4j.state.AgentState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class WorkflowRunner {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowRunner.class);
+    /** How many more times a stage is attempted when {@code agent.stage.max-retries} is not set. */
+    static final int DEFAULT_MAX_RETRIES = 2;
+    /** The reasons after which a stage is attempted again; any other failure ends the run at once. */
+    private static final Set<RunFailureReason> RETRYABLE = EnumSet.of(RunFailureReason.OUTPUT_INVALID,
+            RunFailureReason.MODEL_UNAVAILABLE, RunFailureReason.VERIFICATION_FAILED, RunFailureReason.UNEXPECTED);
 
     private final CompiledGraph<AgentState> graph;
     private final Optional<StageProgress> progress;
     private final Optional<RequirementsAgentNode> requirementsAgent;
+    private final int maxRetries;
 
     /** Every stage on its dummy node. */
     public WorkflowRunner(DummySdlcNodes nodes) throws GraphStateException {
@@ -62,26 +73,43 @@ public class WorkflowRunner {
         this(nodes, requirementsAgent, agentStages, developmentFinish, Optional.empty(), Optional.empty());
     }
 
-    /**
-     * With a progress recorder, every stage writes when it starts and when it finishes. With the run documents, a last
-     * step after the join writes them into the run's repository; they exist only when the development agent is on.
-     */
-    @Autowired
+    /** A stage is attempted again the default number of times. */
     public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
                           Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
                           Optional<StageProgress> progress, Optional<RunDocuments> runDocuments)
             throws GraphStateException {
-        Map<String, NodeAction<AgentState>> agents = new HashMap<>();
+        this(nodes, requirementsAgent, agentStages, developmentFinish, progress, runDocuments, DEFAULT_MAX_RETRIES);
+    }
+
+    /**
+     * With a progress recorder, every stage writes when it starts, when it finishes and when it fails for good. A
+     * stage that fails for a reason that can pass on another try is attempted again, up to {@code maxRetries} more
+     * times. With the run documents, a last step after the join writes them into the run's repository; they exist only
+     * when the development agent is on.
+     *
+     * @param maxRetries {@code agent.stage.max-retries}: how many more attempts a failed stage gets; 0 is none
+     */
+    @Autowired
+    public WorkflowRunner(DummySdlcNodes nodes, Optional<RequirementsAgentNode> requirementsAgent,
+                          Optional<AgentStages> agentStages, Optional<DevelopmentFinish> developmentFinish,
+                          Optional<StageProgress> progress, Optional<RunDocuments> runDocuments,
+                          @Value("${agent.stage.max-retries:" + DEFAULT_MAX_RETRIES + "}") int maxRetries)
+            throws GraphStateException {
+        if (maxRetries < 0) {
+            throw new IllegalArgumentException("agent.stage.max-retries must not be negative");
+        }
+        Map<String, Function<AgentState, Map<String, Object>>> agents = new HashMap<>();
         requirementsAgent.ifPresent(node -> agents.put("requirements", node::requirements));
         agentStages.ifPresent(stages -> stages.nodes().forEach((role, node) -> agents.put(role, node::execute)));
         developmentFinish.ifPresent(finish -> {
-            NodeAction<AgentState> development = agents.get("development");
+            AgentStageNode development = agentStages.map(stages -> stages.nodes().get("development")).orElse(null);
             if (development != null) {
-                agents.put("development", state -> finish.finish(state, development.apply(state)));
+                agents.put("development", state -> finish.develop(state, development));
             }
         });
         this.progress = progress;
         this.requirementsAgent = requirementsAgent;
+        this.maxRetries = maxRetries;
         // Compile the fixed stage route once. The run supplies its own state and branch executor.
         StateGraph<AgentState> route = new StateGraph<>(AgentState::new)
                 .addNode("initialize", node_async(nodes::initialize))
@@ -126,26 +154,53 @@ public class WorkflowRunner {
         };
     }
 
-    private NodeAction<AgentState> stage(Map<String, NodeAction<AgentState>> agents, String role,
-                                         NodeAction<AgentState> dummy) {
-        NodeAction<AgentState> agent = agents.get(role);
+    private NodeAction<AgentState> stage(Map<String, Function<AgentState, Map<String, Object>>> agents, String role,
+                                         Function<AgentState, Map<String, Object>> dummy) {
+        Function<AgentState, Map<String, Object>> agent = agents.get(role);
         log.info("event=workflow_stage_selected stage={} node={}", role, agent == null ? "dummy" : "agent");
-        NodeAction<AgentState> action = agent == null ? dummy : agent;
-        if (progress.isEmpty()) {
-            return action;
+        Function<AgentState, Map<String, Object>> action = agent == null ? dummy : agent;
+        if (role.equals("requirements") && agent != null) {
+            // The attempts and the progress of the real requirements stage belong to the persisted clarification
+            // preflight in run(); here the graph only picks up the reference that it left.
+            return action::apply;
         }
-        // The stage records that it is running and, if it returns, that it finished; a failed stage stays running.
         return state -> {
-            if (role.equals("requirements") && agent != null) {
-                // Real requirements progress was recorded during the persisted clarification preflight.
-                return action.apply(state);
-            }
             UUID runId = state.<UUID>value("runId").orElseThrow();
-            progress.get().started(runId, role);
-            Map<String, Object> update = action.apply(state);
-            progress.get().finished(runId, role);
+            Map<String, Object> update = attempts(runId, role, action, state);
+            progress.ifPresent(recorder -> recorder.finished(runId, role));
             return update;
         };
+    }
+
+    /**
+     * Runs a stage until it returns or fails for good, recording RUNNING at the start of every attempt and FAILED when
+     * the stage is given up. A failure is attempted again when its reason is retryable and fewer than
+     * {@code maxRetries} retries have been used. An error, or an interrupted thread, is never attempted again: an
+     * interrupted stage was cancelled, as when a parallel branch failed, and writes nothing more. The last failure is
+     * rethrown as it is, so the run ends with its reason.
+     */
+    private Map<String, Object> attempts(UUID runId, String stage, Function<AgentState, Map<String, Object>> action,
+                                         AgentState state) {
+        for (int attempt = 1; ; attempt++) {
+            progress.ifPresent(recorder -> recorder.started(runId, stage));
+            try {
+                return action.apply(state);
+            } catch (RuntimeException | Error failure) {
+                RunFailureReason reason = RunFailureReason.from(failure);
+                boolean interrupted = Thread.currentThread().isInterrupted();
+                if (attempt <= maxRetries && RETRYABLE.contains(reason) && !(failure instanceof Error)
+                        && !interrupted) {
+                    // The run, the stage, the attempt and the reason code only: never the message of the failure.
+                    log.warn("event=stage_retry runId={} stage={} attempt={} reason={}", runId, stage, attempt, reason);
+                    continue;
+                }
+                log.warn("event=stage_failed runId={} stage={} attempt={} reason={}", runId, stage, attempt, reason);
+                if (!interrupted) {
+                    progress.ifPresent(recorder -> recorder.failed(runId, stage));
+                }
+                throw failure;
+            }
+        }
     }
 
     public AgentState run(UUID runId, String requirement, RunKind kind) {
@@ -159,8 +214,8 @@ public class WorkflowRunner {
                 "kind", kind));
 
         if (requirementsAgent.isPresent()) {
-            progress.ifPresent(recorder -> recorder.started(runId, "requirements"));
-            Map<String, Object> prepared = requirementsAgent.get().prepare(new AgentState(input));
+            Map<String, Object> prepared = attempts(runId, "requirements", requirementsAgent.get()::prepare,
+                    new AgentState(input));
             input.putAll(prepared);
             if (Boolean.TRUE.equals(prepared.get("waitingForInput"))) {
                 log.info("event=workflow_waiting runId={} stage=requirements", runId);

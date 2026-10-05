@@ -30,7 +30,12 @@ public class StageProgress {
         write(runId, stage, "FINISHED");
     }
 
-    /** The state of every stage that has one: RUNNING or FINISHED. A stage that is absent has not started. */
+    /** The stage failed and is not attempted again. A stage that is attempted again is {@link #started} again. */
+    void failed(UUID runId, String stage) {
+        write(runId, stage, "FAILED");
+    }
+
+    /** The state of every stage that has one: RUNNING, FINISHED or FAILED. A stage that is absent has not started. */
     public Map<String, String> forRun(UUID runId) {
         Map<String, String> states = new HashMap<>();
         jdbc.query("select stage, state from run_stage where run_id = ?",

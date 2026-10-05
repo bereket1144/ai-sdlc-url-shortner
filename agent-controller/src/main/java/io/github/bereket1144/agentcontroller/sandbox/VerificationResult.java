@@ -6,7 +6,7 @@ import java.util.List;
  * What one build and test of a workspace found, kept with the commit it was run on. It is the common shape every
  * test tool's report is turned into, so nothing outside this package depends on a tool.
  *
- * @param outcome      {@code PASSED} only when the project built and every test passed
+ * @param outcome      {@code PASSED} only when the project built, no test failed and at least one passed
  * @param testsRun     how many tests ran, skipped ones included
  * @param testsPassed  how many of them passed
  * @param testsFailed  how many of them failed or errored

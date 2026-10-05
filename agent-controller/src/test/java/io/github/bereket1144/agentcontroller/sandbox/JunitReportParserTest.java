@@ -58,4 +58,20 @@ class JunitReportParserTest {
         // A readable report with no test in it proves nothing, so it is not a pass.
         assertThat(JunitReportParser.parse("<testsuite tests=\"0\"/>", "c3").outcome()).isEqualTo(Outcome.FAILED);
     }
+
+    @Test
+    @DisplayName("AC-AGT-65.6 a report in which every test was skipped is not a pass")
+    void aReportWithNoPassingTestIsNotAPass() {
+        VerificationResult skipped = JunitReportParser.parse("""
+                <testsuite tests="2">
+                <testcase classname="tests.test_a" name="test_one"><skipped/></testcase>
+                <testcase classname="tests.test_a" name="test_two"><skipped/></testcase>
+                </testsuite>""", "c4");
+
+        assertThat(skipped)
+                .returns(Outcome.FAILED, VerificationResult::outcome)
+                .returns(2, VerificationResult::testsRun)
+                .returns(0, VerificationResult::testsPassed)
+                .returns(false, VerificationResult::passed);
+    }
 }

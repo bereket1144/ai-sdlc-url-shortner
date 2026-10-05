@@ -34,7 +34,7 @@ public record RunResponse(UUID id, String requirement, RunStatus status, Instant
                         result.testsPassed(), result.testsFailed())).orElse(null));
     }
 
-    @Schema(name = "StageState", description = "One SDLC stage and where it is: NOT_STARTED, RUNNING or FINISHED.")
+    @Schema(name = "StageState", description = "One SDLC stage and where it is: NOT_STARTED, RUNNING, FINISHED or FAILED.")
     public record StageState(String stage, String state) { }
 
     @Schema(name = "ArtifactSummary", description = "One stored artifact: its kind, version and a counts-only summary.")

@@ -17,7 +17,7 @@
     requirements: 'Requirements', impactAnalysis: 'Impact analysis', design: 'Design', planning: 'Planning',
     development: 'Development', qa: 'QA', review: 'Review', documentation: 'Documentation'
   };
-  const STATE_LABELS = { NOT_STARTED: 'Not started', RUNNING: 'Running', FINISHED: 'Finished' };
+  const STATE_LABELS = { NOT_STARTED: 'Not started', RUNNING: 'Running', FINISHED: 'Finished', FAILED: 'Failed' };
   const STATUS_TONES = { CREATED: 'neutral', RUNNING: 'info', WAITING_FOR_INPUT: 'warn', SUCCEEDED: 'good', FAILED: 'bad' };
   const OUTCOME_TONES = { PASSED: 'good', FAILED: 'bad', NO_RESULT: 'neutral' };
   const FIELD_TITLES = { changes: 'Files' };
@@ -451,8 +451,9 @@
     }
 
     // AC-UI-1.7: "Building..." while the development stage runs, and the result of the build once there is one.
+    // A failed run is not building, whatever state its development stage was left in.
     const development = run.stages.find(stage => stage.stage === 'development');
-    ui.building.hidden = !(development && development.state === 'RUNNING');
+    ui.building.hidden = !(development && development.state === 'RUNNING') || run.status === 'FAILED';
     showVerification(session, run);
     if (!ui.building.hidden || run.verification) {
       cards.find(card => card.section.kind === 'development').root.hidden = false;
